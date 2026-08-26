@@ -1,4 +1,4 @@
- // ==================== FIREBASE INITIALIZATION ====================
+// ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
     const firebaseConfig = {
@@ -111,15 +111,16 @@ function syncOfflineQueueToFirebase() {
 
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
-    // STRICT RESTRICTION: Accountants can ONLY view the accountant queue, receipt view, or business settings
+    // Accountants can view the accountant queue, receipt view, business settings, or POS view
     if (currentUserRole === 'Accountant') {
         const allowedAccountantViews = [
             'accountant-view', 'accountant-view-template', 
             'receipt-view', 'receipt-view-template', 
-            'settings-view', 'settings-view-template'
+            'settings-view', 'settings-view-template',
+            'pos-view', 'pos-view-template'
         ];
         if (!allowedAccountantViews.includes(viewId)) {
-            alert("Access Restricted: Accountants are strictly permitted to only accept payments and print receipts.");
+            alert("Access Restricted: Accountants are permitted to accept payments, manage the queue, and print receipts.");
             return;
         }
     }
@@ -181,6 +182,7 @@ function adjustSidebarForRole(role) {
         if (role === 'Accountant') {
             if (
                 action.includes('accountant-view') || 
+                action.includes('pos-view') || 
                 action.includes('logout')
             ) {
                 btn.style.display = 'block';
@@ -734,11 +736,6 @@ function onPosProductChange() {
 }
 
 function addToCart() {
-    if (currentUserRole === 'Accountant') {
-        alert("Access Restricted: Accountants are not permitted to make sales.");
-        return;
-    }
-
     const id = document.getElementById('pos-product-select').value;
     const qty = parseInt(document.getElementById('pos-qty').value) || 1;
     const customPrice = parseFloat(document.getElementById('pos-custom-price').value);
@@ -839,7 +836,7 @@ function decreaseQty(index) {
 
 function submitOrderForAccountant() {
     if (currentUserRole === 'Accountant') {
-        alert("Access Restricted: Accountants cannot submit sales orders.");
+        processDirectPosPayment();
         return;
     }
 
@@ -874,6 +871,35 @@ function submitOrderForAccountant() {
             loadPosInventoryDropdown();
         }
     );
+}
+
+function processDirectPosPayment() {
+    if (currentCart.length === 0) {
+        alert("Cart is empty. Add items before checking out.");
+        return;
+    }
+
+    const txId = 'WD-' + Math.floor(100000 + Math.random() * 900000);
+    const grandTotal = currentCart.reduce((sum, i) => sum + i.total, 0);
+    const activeStaffName = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+
+    const orderData = {
+        txId,
+        items: currentCart,
+        totalAmount: grandTotal,
+        staff: activeStaffName,
+        soldBy: activeStaffName,
+        date: new Date().toISOString(),
+        status: 'Pending Verification'
+    };
+
+    // Temporarily push to pending/active processing so the split checkout can process it directly
+    firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).set(orderData).then(() => {
+        currentCart = [];
+        renderCart();
+        loadPosInventoryDropdown();
+        openSplitModal(txId, grandTotal);
+    });
 }
 
 // ==================== ACCOUNTANT & QUEUE VERIFICATION ====================
