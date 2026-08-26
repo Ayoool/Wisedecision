@@ -111,9 +111,17 @@ function syncOfflineQueueToFirebase() {
 
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
-    if (currentUserRole === 'Accountant' && viewId !== 'accountant-view' && viewId !== 'accountant-view-template' && viewId !== 'staff-view' && viewId !== 'staff-view-template' && viewId !== 'settings-view' && viewId !== 'settings-view-template' && viewId !== 'receipt-view' && viewId !== 'receipt-view-template') {
-        alert("Access Restricted: Accountants are only permitted to verify and accept payments in the queue.");
-        return;
+    // STRICT RESTRICTION: Accountants can ONLY view the accountant queue, receipt view, or business settings
+    if (currentUserRole === 'Accountant') {
+        const allowedAccountantViews = [
+            'accountant-view', 'accountant-view-template', 
+            'receipt-view', 'receipt-view-template', 
+            'settings-view', 'settings-view-template'
+        ];
+        if (!allowedAccountantViews.includes(viewId)) {
+            alert("Access Restricted: Accountants are strictly permitted to only accept payments and print receipts.");
+            return;
+        }
     }
 
     if (currentUserRole === 'Staff' && viewId !== 'pos-view' && viewId !== 'pos-view-template') {
@@ -171,11 +179,9 @@ function adjustSidebarForRole(role) {
         const action = btn.getAttribute('onclick') || '';
         
         if (role === 'Accountant') {
-            // Allow Accountant to access accountant view queue, staff list, business settings, and logout
+            // Lock down sidebar buttons completely except for the payment queue view and logout
             if (
                 action.includes('accountant-view') || 
-                action.includes('staff-view') || 
-                action.includes('settings-view') || 
                 action.includes('logout')
             ) {
                 btn.style.display = 'block';
