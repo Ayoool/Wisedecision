@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wise Decision - POS & Enterprise Suite</title>
+    
+    <!-- Firebase SDKs (Compat Version) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <!-- html2pdf for receipt generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Link your external CSS file -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- ================= VIEW 1: LOGIN ================= -->
+        <div id="login-view" class="view-section active">
+            <div class="auth-wrapper">
+                <div class="auth-card">
+                    <div class="brand-title" style="text-align: center;">WISE DECISION</div>
+                    <div class="subtitle" style="text-align: center;">Cloud Enterprise & POS Portal</div>
+                    
+                    <div class="form-group">
+                        <label>Store ID</label>
+                        <input type="text" id="store-id-input" placeholder="e.g. medstar">
+                    </div>
+                    <div class="form-group">
+                        <label>Staff or Admin PIN</label>
+                        <input type="password" id="staff-pin" placeholder="Enter your PIN">
+                    </div>
+                    
+                    <button class="menu-btn btn-action-primary" onclick="handleStoreLogin()">Login to Store</button>
+                    <button class="menu-btn" style="justify-content: center; background: #f1f5f9; border: 1px solid #cbd5e1;" onclick="switchView('register-view')">Register New Business</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= VIEW 2: BUSINESS REGISTRATION ================= -->
+        <div id="register-view" class="view-section">
+            <div class="auth-wrapper">
+                <div class="auth-card" style="max-height: 90vh; overflow-y: auto;">
+                    <div class="brand-title" style="text-align: center;">REGISTER BUSINESS</div>
+                    <div class="subtitle" style="text-align: center;">Create a New Store on Cloud</div>
+                    
+                    <div class="form-group">
+                        <label>Store ID (No spaces, lowercase)</label>
+                        <input type="text" id="reg-store-id" placeholder="e.g. medstar">
+                    </div>
+                    <div class="form-group">
+                        <label>Store Business Name</label>
+                        <input type="text" id="reg-store-name" placeholder="e.g. Medstar Pharmacy">
+                    </div>
+                    <div class="form-group">
+                        <label>Business Phone Number</label>
+                        <input type="text" id="reg-store-phone" placeholder="e.g. 08012345678">
+                    </div>
+                    <div class="form-group">
+                        <label>Business Address</label>
+                        <input type="text" id="reg-store-address" placeholder="e.g. Plot GRA Moshood Ikere Ekiti">
+                    </div>
+                    <div class="form-group">
+                        <label>Admin Master PIN</label>
+                        <input type="password" id="reg-admin-pin" placeholder="Create secret login PIN">
+                    </div>
+                    
+                    <button class="menu-btn btn-action-primary" onclick="registerBusinessAccount()">Complete Registration</button>
+                    <button class="menu-btn btn-logout" onclick="switchView('login-view')">Cancel & Return</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= VIEW 3: MAIN DASHBOARD WRAPPER ================= -->
+        <div id="dashboard-main-wrapper" class="view-section">
+            <div class="dashboard-layout">
+                <div class="sidebar">
+                    <div class="brand-title" id="dashboard-store-title" style="font-size: 15px;">WISE DECISION</div>
+                    <div style="margin-top: 6px; margin-bottom: 4px;">
+                        <span id="branch-badge" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); color: #166534; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; display: inline-block; border: 1px solid #86efac;">Branch: Main</span>
+                    </div>
+                    <div class="subtitle" id="user-role-label" style="margin-top: 4px; margin-bottom: 15px;">Logged in as Admin</div>
+
+                    <button class="menu-btn btn-dash" onclick="switchView('main-dashboard-view')">📊 Dashboard</button>
+                    <button class="menu-btn btn-pos" onclick="switchView('pos-view')">🛒 POS Sales</button>
+                    <button class="menu-btn btn-inv" onclick="switchView('inventory-view')">📦 Inventory</button>
+                    <button class="menu-btn btn-acc" onclick="switchView('accountant-view')">💳 Accountant Dashboard</button>
+                    <button class="menu-btn btn-rep" onclick="switchView('reports-view')">📈 Reports</button>
+                    <button class="menu-btn btn-exp" onclick="switchView('expenses-view')">💸 Expenses</button>
+                    <button class="menu-btn btn-staff" onclick="switchView('staff-view')">👥 Staff</button>
+                    <button class="menu-btn btn-cust" onclick="switchView('customers-view')">📇 Customers</button>
+                    <button class="menu-btn btn-branch" onclick="switchView('branches-view')">🏢 Branches</button>
+                    <button class="menu-btn btn-sec" onclick="switchView('settings-view')">⚙️ Business Settings</button>
+                    
+                    <button class="menu-btn btn-logout" onclick="logout()">🚪 Logout</button>
+                </div>
+                <div class="main-content-area" id="workspace-content"></div>
+            </div>
+        </div>
+
+        <!-- ================= VIEW 4: STANDALONE SUPER ADMIN CONTAINER ================= -->
+        <div id="super-admin-view" class="view-section">
+            <div style="padding: 30px; background: #0f172a; color: #fff; min-height: 100vh;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #1e293b; padding: 15px 20px; border-radius: 8px; border: 1px solid #334155;">
+                    <div>
+                        <h2 style="margin: 0; color: #fff; font-size: 20px;">👑 Wise Decision Master Control</h2>
+                        <p style="margin: 3px 0 0 0; font-size: 12px; color: #94a3b8;">Manage all registered businesses, subscription statuses, and payment notices.</p>
+                    </div>
+                    <button class="menu-btn btn-logout" style="width: auto; margin: 0; background: #ef4444; color: #fff;" onclick="switchView('login-view')">Logout / Exit</button>
+                </div>
+                
+                <div style="background: #ffffff; color: #0f172a; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0; font-size: 16px; color: #1e293b;">Registered Stores Directory</h3>
+                        <button class="menu-btn btn-dash" style="width: auto; margin: 0; background: #0284c7; color: #fff;" onclick="loadSuperAdminDashboard()">🔄 Refresh List</button>
+                    </div>
+                    
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; color: #475569;">
+                                    <th style="padding: 12px;">Store ID</th>
+                                    <th style="padding: 12px;">Business Name</th>
+                                    <th style="padding: 12px;">Phone</th>
+                                    <th style="padding: 12px;">Status</th>
+                                    <th style="padding: 12px; text-align: center;">Actions (Lock / Unlock / Remind)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="super-admin-stores-body">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; color: #64748b; padding: 30px;">Loading registered businesses...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= TEMPLATES ================= -->
+    <div id="main-dashboard-view-template" style="display: none;">
+        <h2>Store Overview</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-top: 15px;">
+            <div style="background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); border: 1px solid #bbf7d0; padding: 20px; border-radius: var(--radius); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                <div style="font-weight: 600; font-size: 11px; color: #166534; letter-spacing: 0.5px;">TOTAL SALES (TODAY)</div>
+                <div style="font-size: 26px; margin-top: 8px; font-weight: 800; color: #15803d;" id="dash-today-sales">₦0</div>
+                <div style="font-size: 11px; margin-top: 5px; color: #4ade80;">⚡ Real-time update</div>
+            </div>
+        </div>
+
+        <div class="alert-card-box">
+            <h3 style="margin-top: 0; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px;">
+                ⚠️ Inventory Health Alerts (Low Stock & Expiry Warnings)
+            </h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Items running low (Stock &le; 5) or expiring within 30 days.</p>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Product Name</th>
+                            <th>Current Stock</th>
+                            <th>Expiry Date</th>
+                            <th>Alert Warning Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboard-alerts-tbody">
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Checking inventory metrics...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="pos-view-template" style="display: none;">
+        <h2>Point of Sale (POS) Register</h2>
+        
+        <!-- Customer Type Selection Toggle Bar -->
+        <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center;">
+            <span style="font-size: 13px; font-weight: bold; color: var(--text);">Customer Tier:</span>
+            <button id="btn-type-retail" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #0284c7; color: #fff;" onclick="setCustomerType('Retail')">Retail Price</button>
+            <button id="btn-type-wholesale" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #e2e8f0; color: #1e293b;" onclick="setCustomerType('Wholesale')">Wholesale Price</button>
+        </div>
+
+        <div class="pos-grid" style="margin-top: 15px;">
+            <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                
+                <div class="form-group">
+                    <label>Search Product / Drug</label>
+                    <input type="text" id="pos-search-input" oninput="filterPosInventory()" placeholder="Type product name to search...">
+                </div>
+
+                <div class="form-group">
+                    <label>Select Product / Drug</label>
+                    <select id="pos-product-select" onchange="onPosProductChange()">
+                        <option value="">-- Choose Inventory Item --</option>
+                    </select>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" id="pos-qty" value="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Selling Price (₦)</label>
+                        <input type="number" id="pos-custom-price" placeholder="Price">
+                    </div>
+                </div>
+                <button class="menu-btn btn-action-primary btn-pos" style="margin-top: 10px; justify-content: center;" onclick="addToCart()">Add to Cart 🛒</button>
+            </div>
+
+            <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; display: flex; flex-direction: column; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                <h3 style="margin-top:0; font-size: 16px; color: var(--text);">Current Order Cart</h3>
+                <div style="flex: 1; max-height: 220px; overflow-y: auto; margin-bottom: 10px;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Item</th>
+                                <th>Qty</th>
+                                <th>Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cart-body">
+                            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Cart is empty</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="font-size: 18px; font-weight: 800; margin-bottom: 10px; display: flex; justify-content: space-between;">
+                    <span>Grand Total:</span>
+                    <span style="color: var(--accent);">₦<span id="cart-total">0</span></span>
+                </div>
+                <button class="menu-btn btn-action-primary" onclick="submitOrderForAccountant()">Send to Accountant 🧾</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= EXPENSES VIEW TEMPLATE ================= -->
+    <div id="expenses-view-template" style="display: none;">
+        <h2>Store Expenses Management</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Record and track daily operational costs, utility bills, rent, and miscellaneous expenditures.</p>
+        
+        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <h3 style="margin-top:0; font-size: 15px; color: var(--text);">Record New Expense</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label>Expense Category</label>
+                    <select id="expense-category">
+                        <option value="Utilities (Electricity/Water)">Utilities (Electricity/Water)</option>
+                        <option value="Store Rent">Store Rent</option>
+                        <option value="Staff Salary / Wages">Staff Salary / Wages</option>
+                        <option value="Transport & Logistics">Transport & Logistics</option>
+                        <option value="Maintenance & Repairs">Maintenance & Repairs</option>
+                        <option value="Miscellaneous / Others">Miscellaneous / Others</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Amount (₦)</label>
+                    <input type="number" id="expense-amount" placeholder="e.g. 5000">
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="expense-date">
+                </div>
+                <div class="form-group">
+                    <label>Description / Note</label>
+                    <input type="text" id="expense-desc" placeholder="e.g. Generator fuel purchase">
+                </div>
+            </div>
+            <button class="menu-btn btn-action-primary" style="margin-top: 5px; justify-content: center; background: #0284c7; color: #fff;" onclick="saveExpense()">Save Expense Record 💸</button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; font-size: 16px; color: var(--text);">Recorded Expenses History</h3>
+            <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 8px 15px; border-radius: 6px; font-weight: bold; color: #991b1b; font-size: 14px;">
+                Total Expenses: <span id="total-expenses-label">₦0</span>
+            </div>
+        </div>
+
+        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Amount</th>
+                        <th>Recorded By</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="expenses-body">
+                    <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="accountant-view-template" style="display: none;">
+        <h2>Accountant Payment Verification</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Verify customer receipt IDs and collect payments for pending sales generated by staff.</p>
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+            <button class="menu-btn btn-action-primary btn-acc" style="width: auto; margin-bottom:0;" onclick="openManualLookupModal()">🔍 Lookup Receipt ID Manually</button>
+            <button class="menu-btn btn-dash" style="width: auto; margin-bottom:0;" onclick="loadPendingOrdersQueue()">🔄 Refresh Queue</button>
+        </div>
+        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Receipt ID</th>
+                        <th>Staff / Cashier</th>
+                        <th>Total Amount</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="accountant-queue-body">
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="inventory-view-template" style="display: none;">
+        <h2>Inventory Management</h2>
+        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-top: 15px;">
+            <h3 id="inv-form-title" style="margin-top:0; font-size: 15px; color: var(--text);">Add New Product</h3>
+            <input type="hidden" id="edit-product-id" value="">
+            <div class="form-group"><input type="text" id="inv-name" placeholder="Product / Drug Name"></div>
+            
+            <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label>Cost Price (₦)</label>
+                    <input type="number" id="inv-cost-price" placeholder="Cost Price">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label>Retail Selling Price (₦)</label>
+                    <input type="number" id="inv-price" placeholder="Retail Price">
+                </div>
+                <div class="form-group">
+                    <label>Wholesale Price (₦)</label>
+                    <input type="number" id="inv-wholesale-price" placeholder="Wholesale Price">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label>Stock Qty</label>
+                    <input type="number" id="inv-stock" placeholder="Stock Qty">
+                </div>
+                <div class="form-group">
+                    <label>Expiry Date</label>
+                    <input type="date" id="inv-expiry">
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="save-product-btn" class="menu-btn btn-action-primary btn-inv" style="margin-top: 5px; justify-content: center; flex: 1;" onclick="saveProduct()">Save Product to Cloud</button>
+                <button id="cancel-edit-btn" class="menu-btn btn-logout" style="margin-top: 5px; display: none; width: auto;" onclick="resetInventoryForm()">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Inventory Search Bar Section -->
+        <div style="background: #ffffff; padding: 15px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-weight: bold; color: var(--accent);">🔍 Search Inventory</label>
+                <input type="text" id="inventory-search-input" oninput="filterInventoryTable()" placeholder="Type product name to search records...">
+            </div>
+        </div>
+
+        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Product Name</th>
+                        <th>Cost Price</th>
+                        <th>Retail Price</th>
+                        <th>Wholesale Price</th>
+                        <th>Stock</th>
+                        <th>Expiry Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-body">
+                    <tr><td colspan="7" style="text-align: center;">Loading inventory...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="staff-view-template" style="display: none;">
+        <h2>Staff Management</h2>
+        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); margin-top: 15px;">
+            <h3 style="margin-top:0; font-size: 15px; color: var(--text);">Add New Staff Member</h3>
+            <div class="form-group">
+                <label>Staff Name</label>
+                <input type="text" id="staff-name-input" placeholder="Enter staff name">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group">
+                    <label>Login PIN</label>
+                    <input type="password" id="staff-pin-input" placeholder="Enter login PIN">
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="staff-role-input">
+                        <option value="Cashier">Cashier</option>
+                        <option value="Standard Worker">Standard Worker</option>
+                        <option value="Accountant">Accountant</option>
+                    </select>
+                </div>
+            </div>
+            <button class="menu-btn btn-action-primary btn-staff" style="margin-top: 5px; justify-content: center;" onclick="addStaffMember()">Add Staff</button>
+        </div>
+        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="staff-body">
+                    <tr><td colspan="3" style="text-align: center;">Loading staff...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ================= BUSINESS SETTINGS VIEW TEMPLATE ================= -->
+    <div id="settings-view-template" style="display: none;">
+        <h2>Business Settings</h2>
+        <div class="card" style="max-width: 600px; margin: 20px 0; padding: 25px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <h3 style="margin-top: 0; margin-bottom: 20px; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; font-size: 16px;">Business Profile Settings</h3>
+            
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">Business Name</label>
+                <input type="text" id="settings-store-name" placeholder="Enter business name" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">Phone Number</label>
+                <input type="text" id="settings-store-phone" placeholder="Enter phone number" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">Business Address</label>
+                <textarea id="settings-store-address" placeholder="Enter full address" rows="3" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px; resize: vertical;"></textarea>
+            </div>
+
+            <button class="menu-btn btn-action-primary" onclick="updateBusinessProfile()" style="width: 100%; padding: 12px; font-size: 14px; font-weight: bold; background: #0284c7; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Save Profile Changes</button>
+        </div>
+    </div>
+
+    <!-- ================= SALES & FINANCIAL REPORTS VIEW TEMPLATE ================= -->
+    <div id="reports-view-template" style="display: none;">
+        <div style="padding: 20px;">
+            <h2 style="color: var(--primary-dark); margin-bottom: 5px;">Sales & Financial Reports</h2>
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">
+                Detailed transaction logs, revenue breakdown by payment method, and period summaries.
+            </p>
+
+            <!-- Date Filter Section (Added for Daily & Date Lookup) -->
+            <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <label for="sales-date-filter" style="font-size: 13px; font-weight: bold; color: #334155;">Filter Date:</label>
+                <input type="date" id="sales-date-filter" style="padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px;" onchange="filterSalesByDate()">
+                <button onclick="resetSalesDateFilter()" style="padding: 6px 12px; background: #e2e8f0; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: bold; color: #475569;">Show Today</button>
+            </div>
+
+            <!-- Net Profit Summary Card -->
+            <div class="bg-white p-4 rounded-xl border border-emerald-100 shadow-sm mb-4" style="background: #ffffff; border: 1px solid #a7f3d0; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-emerald-600 mb-1" style="font-size: 11px; font-weight: bold; color: #047857; text-transform: uppercase; margin-top: 0; margin-bottom: 4px;">
+                This Month's Net Profit
+              </h3>
+              <p id="net-profit-display" class="text-2xl font-bold text-emerald-700" style="font-size: 24px; font-weight: 800; color: #065f46; margin: 0 0 4px 0;">
+                ₦0
+              </p>
+              <span class="text-xs text-gray-500" style="font-size: 11px; color: #64748b;">
+                Gross Revenue minus COGS & Expenses
+              </span>
+            </div>
+
+            <!-- Revenue Summary Cards (Day, Week, Month) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px;">
+                    <span style="font-size: 11px; color: #166534; font-weight: bold; text-transform: uppercase;">Selected Day Revenue</span>
+                    <h3 id="todays-revenue-card" style="font-size: 20px; color: #15803d; margin-top: 4px;">₦0</h3>
+                </div>
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px;">
+                    <span style="font-size: 11px; color: #1e40af; font-weight: bold; text-transform: uppercase;">This Week's Revenue</span>
+                    <h3 id="total-revenue-week-label" style="font-size: 20px; color: #1d4ed8; margin-top: 4px;">₦0</h3>
+                </div>
+                <div style="background: #faf5ff; border: 1px solid #e9d5ff; padding: 12px; border-radius: 8px;">
+                    <span style="font-size: 11px; color: #6b21a8; font-weight: bold; text-transform: uppercase;">This Month's Revenue</span>
+                    <h3 id="total-revenue-month-label" style="font-size: 20px; color: #7e22ce; margin-top: 4px;">₦0</h3>
+                </div>
+            </div>
+
+            <!-- Payment Method Sub-Breakdowns with Explicit Descriptive IDs -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px;">
+                    <span style="font-size: 11px; color: #166534; font-weight: bold; text-transform: uppercase; display: block;">Total Cash Collected</span>
+                    <h3 id="total-cash-card" style="font-size: 18px; color: #14532d; margin: 4px 0 0 0;">₦0</h3>
+                </div>
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px;">
+                    <span style="font-size: 11px; color: #1e40af; font-weight: bold; text-transform: uppercase; display: block;">Total Transfer / POS Collected</span>
+                    <h3 id="total-pos-card" style="font-size: 18px; color: #1e3a8a; margin: 4px 0 0 0;">₦0</h3>
+                </div>
+            </div>
+
+            <!-- Search Input Bar -->
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="txidSearchInput" onkeyup="filterTransactions()" placeholder="Search receipt by Tx ID (e.g., WD-152733)..." style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            </div>
+
+            <!-- Transaction Logs Table -->
+            <div style="overflow-x: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <table id="transactionTable" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: var(--text-muted);">
+                            <th style="padding: 10px;">Tx ID</th>
+                            <th style="padding: 10px;">Date</th>
+                            <th style="padding: 10px;">Staff / Cashier</th>
+                            <th style="padding: 10px;">Total Amount</th>
+                            <th style="padding: 10px;">Payment Breakdown</th>
+                            <th style="padding: 10px;">Status</th>
+                            <th style="padding: 10px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sales-history-body">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">Loading transaction records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="customers-view-template" style="display: none;">
+        <h2>Customer Management</h2>
+        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-top: 15px;">
+            <p style="color: var(--text-muted); font-size: 14px;">Customer profiles, loyalty points, and purchase history directory.</p>
+        </div>
+    </div>
+
+    <div id="branches-view-template" style="display: none;">
+        <h2>Branch Management</h2>
+        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-top: 15px;">
+            <p style="color: var(--text-muted); font-size: 14px;">Manage multiple store branches (e.g., Main Branch, Ikere Ekiti, Ikirun).</p>
+        </div>
+    </div>
+
+    <div id="security-view-template" style="display: none;">
+        <h2>Security & Access Control</h2>
+        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-top: 15px;">
+            <p style="color: var(--text-muted); font-size: 14px;">Manage store PINs, admin credentials, and audit logs.</p>
+        </div>
+    </div>
+
+    <div id="receipt-view-template" style="display: none;">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <button class="menu-btn btn-action-primary" style="width: auto; justify-content: center;" onclick="window.print()">🖨️ Print Receipt</button>
+            <button class="menu-btn btn-dash" style="width: auto;" onclick="downloadReceiptPDF()">📥 Download PDF</button>
+            <button class="menu-btn btn-logout" style="width: auto;" onclick="switchView('reports-view')">🔙 Back to Reports</button>
+        </div>
+        <div id="printable-receipt-box" style="background: #fff; color: #000; padding: 20px; border-radius: 8px; max-width: 320px; font-family: monospace; margin: 0 auto; border: 1px solid #ccc; position: relative;">
+            
+            <!-- Reprinted Watermark Badge -->
+            <div id="reprintWatermark" style="display: none; text-align: center; color: red; font-weight: bold; font-size: 16px; border: 2px dashed red; margin-bottom: 10px; padding: 4px;">
+                ** REPRINTED **
+            </div>
+
+            <div style="text-align: center; margin-bottom: 8px;">
+                <h3 id="receipt-store-name" style="margin: 0; font-size: 16px;">WISE DECISION</h3>
+                <div id="receipt-store-address" style="font-size: 10px; color: #333; margin-top: 3px;"></div>
+                <div id="receipt-store-phone" style="font-size: 10px; color: #333;"></div>
+            </div>
+            <hr style="border: dashed 1px #ccc;">
+            <div style="font-size: 11px; margin-bottom: 10px;">
+                <div><strong>TxID:</strong> <span id="receipt-tx-id">WD-000000</span></div>
+                <div><strong>Date:</strong> <span id="receipt-date">--</span></div>
+            </div>
+            <table>
+                <thead>
+                    <tr style="border-bottom: 1px solid #000; color: #000; background:none;">
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th style="text-align: right;">Price</th>
+                    </tr>
+                </thead>
+                <tbody id="receipt-items-body" style="color: #000;"></tbody>
+            </table>
+            <hr style="border: dashed 1px #ccc;">
+            <div style="font-size: 13px; font-weight: bold; display: flex; justify-content: space-between;">
+                <span>TOTAL:</span>
+                <span>₦<span id="receipt-grand-total">0</span></span>
+            </div>
+            <div id="receipt-payment-breakdown" style="font-size: 10px; color: #555; margin-top: 5px;"></div>
+        </div>
+    </div>
+
+    <!-- ================= SPLIT PAYMENT MODAL ================= -->
+    <div id="split-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 340px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0; color: var(--text);">Process Payment</h3>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+                Receipt: <strong id="modal-tx-id-label">--</strong>
+            </div>
+            <div style="font-size: 15px; font-weight: bold; margin-bottom: 15px; color: var(--text);">
+                Total Due: ₦<span id="split-modal-total">0</span>
+            </div>
+            <div class="form-group">
+                <label>Cash Amount (₦)</label>
+                <input type="number" id="split-cash" placeholder="0" oninput="calcSplit()">
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label>Transfer / POS Amount (₦)</label>
+                <input type="number" id="split-transfer" placeholder="0" oninput="calcSplit()">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="split-status" readonly style="width: 100%; padding: 8px; border: none; font-weight: bold; text-align: center; background: #e2e8f0; color: #334155; border-radius: 6px;" value="Status: Pending">
+            </div>
+            <div style="display: flex; gap: 10px;" id="split-modal-buttons-container">
+                <button id="dynamic-accept-print-btn" class="menu-btn btn-action-primary btn-pos" style="margin-bottom:0; justify-content: center;" onclick="completeSplitCheckout()">Complete & Print</button>
+                <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeSplitModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MANUAL LOOKUP MODAL ================= -->
+    <div id="manual-lookup-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 340px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0; color: var(--text);">Lookup Receipt ID</h3>
+            <div class="form-group">
+                <label>Enter Receipt / Tx ID</label>
+                <input type="text" id="manual-tx-input" placeholder="e.g. WD-123456">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="menu-btn btn-action-primary btn-dash" style="margin-bottom:0; justify-content: center;" onclick="executeManualLookup()">Search</button>
+                <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeManualLookupModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link your external JavaScript file -->
+    <script src="script.js"></script>
+</body>
+</html>
