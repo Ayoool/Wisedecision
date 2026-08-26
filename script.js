@@ -1,4 +1,4 @@
- // ==================== FIREBASE INITIALIZATION ====================
+// ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
     const firebaseConfig = {
@@ -111,7 +111,7 @@ function syncOfflineQueueToFirebase() {
 
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
-    if (currentUserRole === 'Accountant' && viewId !== 'accountant-view' && viewId !== 'accountant-view-template') {
+    if (currentUserRole === 'Accountant' && viewId !== 'accountant-view' && viewId !== 'accountant-view-template' && viewId !== 'receipt-view' && viewId !== 'receipt-view-template') {
         alert("Access Restricted: Accountants are only permitted to verify and accept payments in the queue.");
         return;
     }
