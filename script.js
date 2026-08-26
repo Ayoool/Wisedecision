@@ -935,39 +935,48 @@ function closeSplitModal() {
 }
 
 function calcSplit() {
-    if (!currentActiveOrder) return;
+    // Get the total due for the current transaction
+    let totalDue = parseFloat(document.getElementById('split-modal-total').innerText.replace(/,/g, '')) || 0;
     
-    const totalDue = parseFloat(currentActiveOrder.totalAmount) || 0;
-    const cash = parseFloat(document.getElementById('split-cash').value) || 0;
-    const transfer = parseFloat(document.getElementById('split-transfer').value) || 0;
-    const totalPaid = cash + transfer;
+    // Get the values entered in the cash and transfer inputs
+    let cashVal = parseFloat(document.getElementById('split-cash').value) || 0;
+    let transferVal = parseFloat(document.getElementById('split-transfer').value) || 0;
     
-    const statusField = document.getElementById('split-status');
-    const confirmBtn = document.getElementById('dynamic-accept-print-btn');
-    
-    if (totalPaid === totalDue) {
-        statusField.value = "Status: Balanced - Ready";
+    // Calculate what has been paid so far
+    let totalPaid = cashVal + transferVal;
+    let statusField = document.getElementById('split-status');
+    let acceptBtn = document.getElementById('dynamic-accept-print-btn');
+
+    // Compare total paid against total due
+    if (totalPaid === totalDue && totalDue > 0) {
+        statusField.value = "Status: Balanced ✅";
         statusField.style.background = "#dcfce7";
         statusField.style.color = "#166534";
-        confirmBtn.removeAttribute('disabled');
-        confirmBtn.style.opacity = '1';
-        confirmBtn.style.cursor = 'pointer';
-    } else if (totalPaid < totalDue) {
-        const deficit = totalDue - totalPaid;
-        statusField.value = `Status: Underpaid by ₦${deficit.toLocaleString()}`;
-        statusField.style.background = "#ffedd5";
-        statusField.style.color = "#9a3412";
-        confirmBtn.setAttribute('disabled', 'true');
-        confirmBtn.style.opacity = '0.6';
-        confirmBtn.style.cursor = 'not-allowed';
+        
+        // Enable the checkout button
+        acceptBtn.disabled = false;
+        acceptBtn.style.opacity = "1";
+        acceptBtn.style.cursor = "pointer";
+    } else if (totalPaid > totalDue) {
+        let excess = totalPaid - totalDue;
+        statusField.value = `Status: Overpaid by ₦${excess.toLocaleString()} ⚠️`;
+        statusField.style.background = "#fef9c3";
+        statusField.style.color = "#854d0e";
+        
+        // Keep disabled if overpaid (or adjust based on your change-giving workflow)
+        acceptBtn.disabled = true;
+        acceptBtn.style.opacity = "0.6";
+        acceptBtn.style.cursor = "not-allowed";
     } else {
-        const change = totalPaid - totalDue;
-        statusField.value = `Status: Change Due ₦${change.toLocaleString()}`;
-        statusField.style.background = "#fef3c7";
-        statusField.style.color = "#92400e";
-        confirmBtn.removeAttribute('disabled');
-        confirmBtn.style.opacity = '1';
-        confirmBtn.style.cursor = 'pointer';
+        let deficit = totalDue - totalPaid;
+        statusField.value = `Status: Balance Remaining ₦${deficit.toLocaleString()}`;
+        statusField.style.background = "#fee2e2";
+        statusField.style.color = "#991b1b";
+        
+        // Keep disabled while underpaid
+        acceptBtn.disabled = true;
+        acceptBtn.style.opacity = "0.6";
+        acceptBtn.style.cursor = "not-allowed";
     }
 }
 
