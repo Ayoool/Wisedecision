@@ -1,4 +1,4 @@
-// ==================== FIREBASE INITIALIZATION ====================
+ // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
     const firebaseConfig = {
@@ -959,6 +959,7 @@ function calcSplit() {
     }
 }
 
+// ==================== UPDATED SPLIT CHECKOUT & INVENTORY DEDUCTION ====================
 function completeSplitCheckout() {
     if (!currentActiveOrder) return;
     
@@ -975,9 +976,44 @@ function completeSplitCheckout() {
             orderData.paymentBreakdown = { cash, transfer };
             orderData.date = new Date().toISOString();
             
+            // 1. Save transaction and remove from pending queue
             firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).set(orderData);
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
+            // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM
+            if (Array.isArray(orderData.items)) {
+                orderData.items.forEach(cartItem => {
+                    const productId = cartItem.id;
+                    const soldQty = Number(cartItem.qty) || 0;
+
+                    if (productId && soldQty > 0) {
+                        const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${productId}`);
+                        
+                        productRef.once('value').then(prodSnap => {
+                            if (prodSnap.exists()) {
+                                const prodData = prodSnap.val();
+                                // Support both 'stock' and 'stockQty' naming conventions
+                                let currentStock = Number(prodData.stock !== undefined ? prodData.stock : (prodData.stockQty || 0));
+                                let newStock = Math.max(0, currentStock - soldQty);
+
+                                // Update Firebase database fields
+                                productRef.update({
+                                    stock: newStock,
+                                    stockQty: newStock
+                                });
+
+                                // Update local inventory cache if present
+                                if (typeof inventoryCache !== 'undefined' && inventoryCache[productId]) {
+                                    inventoryCache[productId].stock = newStock;
+                                    inventoryCache[productId].stockQty = newStock;
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+
+            // 3. Render and print the receipt
             renderReceiptView(orderData, false);
         }
     });
