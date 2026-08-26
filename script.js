@@ -111,7 +111,7 @@ function syncOfflineQueueToFirebase() {
 
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
-    if (currentUserRole === 'Accountant' && viewId !== 'accountant-view' && viewId !== 'accountant-view-template' && viewId !== 'receipt-view' && viewId !== 'receipt-view-template') {
+    if (currentUserRole === 'Accountant' && viewId !== 'accountant-view' && viewId !== 'accountant-view-template' && viewId !== 'staff-view' && viewId !== 'staff-view-template' && viewId !== 'settings-view' && viewId !== 'settings-view-template' && viewId !== 'receipt-view' && viewId !== 'receipt-view-template') {
         alert("Access Restricted: Accountants are only permitted to verify and accept payments in the queue.");
         return;
     }
@@ -171,7 +171,13 @@ function adjustSidebarForRole(role) {
         const action = btn.getAttribute('onclick') || '';
         
         if (role === 'Accountant') {
-            if (action.includes('accountant-view') || action.includes('logout')) {
+            // Allow Accountant to access accountant view queue, staff list, business settings, and logout
+            if (
+                action.includes('accountant-view') || 
+                action.includes('staff-view') || 
+                action.includes('settings-view') || 
+                action.includes('logout')
+            ) {
                 btn.style.display = 'block';
             } else {
                 btn.style.display = 'none';
