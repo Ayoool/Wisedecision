@@ -629,7 +629,8 @@
                 <input type="text" id="split-status" readonly style="width: 100%; padding: 8px; border: none; font-weight: bold; text-align: center; background: #e2e8f0; color: #334155; border-radius: 6px;" value="Status: Pending">
             </div>
             <div style="display: flex; gap: 10px;" id="split-modal-buttons-container">
-                <button id="dynamic-accept-print-btn" class="menu-btn btn-action-primary btn-pos" style="margin-bottom:0; justify-content: center;" onclick="completeSplitCheckout()">Complete & Print</button>
+                <!-- Added 'disabled' attribute below -->
+                <button id="dynamic-accept-print-btn" class="menu-btn btn-action-primary btn-pos" style="margin-bottom:0; justify-content: center;" onclick="completeSplitCheckout()" disabled>Complete & Print</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeSplitModal()">Cancel</button>
             </div>
         </div>
