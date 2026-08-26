@@ -179,7 +179,6 @@ function adjustSidebarForRole(role) {
         const action = btn.getAttribute('onclick') || '';
         
         if (role === 'Accountant') {
-            // Lock down sidebar buttons completely except for the payment queue view and logout
             if (
                 action.includes('accountant-view') || 
                 action.includes('logout')
@@ -852,7 +851,6 @@ function submitOrderForAccountant() {
     const txId = 'WD-' + Math.floor(100000 + Math.random() * 900000);
     const grandTotal = currentCart.reduce((sum, i) => sum + i.total, 0);
     
-    // Capture the exact logged-in staff or admin name for the receipt/sale
     const activeStaffName = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
 
     const orderData = {
@@ -860,7 +858,7 @@ function submitOrderForAccountant() {
         items: currentCart,
         totalAmount: grandTotal,
         staff: activeStaffName,
-        soldBy: activeStaffName, // Guaranteed record of who made the sale
+        soldBy: activeStaffName,
         date: new Date().toISOString(),
         status: 'Pending Verification'
     };
@@ -935,25 +933,19 @@ function closeSplitModal() {
 }
 
 function calcSplit() {
-    // Get the total due for the current transaction
     let totalDue = parseFloat(document.getElementById('split-modal-total').innerText.replace(/,/g, '')) || 0;
-    
-    // Get the values entered in the cash and transfer inputs
     let cashVal = parseFloat(document.getElementById('split-cash').value) || 0;
     let transferVal = parseFloat(document.getElementById('split-transfer').value) || 0;
     
-    // Calculate what has been paid so far
     let totalPaid = cashVal + transferVal;
     let statusField = document.getElementById('split-status');
     let acceptBtn = document.getElementById('dynamic-accept-print-btn');
 
-    // Compare total paid against total due
     if (totalPaid === totalDue && totalDue > 0) {
         statusField.value = "Status: Balanced ✅";
         statusField.style.background = "#dcfce7";
         statusField.style.color = "#166534";
         
-        // Enable the checkout button
         acceptBtn.disabled = false;
         acceptBtn.style.opacity = "1";
         acceptBtn.style.cursor = "pointer";
@@ -963,7 +955,6 @@ function calcSplit() {
         statusField.style.background = "#fef9c3";
         statusField.style.color = "#854d0e";
         
-        // Keep disabled if overpaid (or adjust based on your change-giving workflow)
         acceptBtn.disabled = true;
         acceptBtn.style.opacity = "0.6";
         acceptBtn.style.cursor = "not-allowed";
@@ -973,10 +964,61 @@ function calcSplit() {
         statusField.style.background = "#fee2e2";
         statusField.style.color = "#991b1b";
         
-        // Keep disabled while underpaid
         acceptBtn.disabled = true;
         acceptBtn.style.opacity = "0.6";
         acceptBtn.style.cursor = "not-allowed";
+    }
+}
+
+// ==================== NEW FINALIZATION & METRICS INTEGRATION ====================
+function finalizeCompleteSale() {
+    const cashTendered = parseFloat(document.getElementById('cash-amount').value) || 0;
+    const transferTendered = parseFloat(document.getElementById('transfer-amount').value) || 0;
+    const totalDue = currentActiveOrder ? currentActiveOrder.totalAmount : 0;
+
+    // 1. Validation sanity check
+    if ((cashTendered + transferTendered) < totalDue) {
+        alert("Amount tendered is less than total due!");
+        return;
+    }
+
+    // 2. Build the transaction payload for dashboard and storage sync
+    const receiptNo = document.getElementById('modal-receipt-no') ? document.getElementById('modal-receipt-no').innerText : (currentActiveOrder ? currentActiveOrder.txId : 'WD-000000');
+    const transactionData = {
+        receiptNo,
+        total: totalDue,
+        cash: cashTendered,
+        transfer: transferTendered,
+        timestamp: new Date().toISOString(),
+        cashier: document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : "Accountant"
+    };
+
+    // 3. Save transaction (LocalStorage, Firebase, or Backend API)
+    saveTransactionToDatabase(transactionData);
+
+    // 4. Update Accountant Dashboard metrics immediately
+    updateAccountantDashboardMetrics(transactionData);
+
+    // 5. Close payment modal and trigger receipt print
+    closeSplitModal();
+    if (typeof triggerThermalReceiptPrint === 'function') {
+        triggerThermalReceiptPrint(transactionData);
+    }
+}
+
+function saveTransactionToDatabase(data) {
+    let salesHistory = JSON.parse(localStorage.getItem('wd_sales_history')) || [];
+    salesHistory.push(data);
+    localStorage.setItem('wd_sales_history', JSON.stringify(salesHistory));
+}
+
+function updateAccountantDashboardMetrics(data) {
+    let currentRevenue = parseFloat(localStorage.getItem('wd_total_revenue') || '0');
+    currentRevenue += data.total;
+    localStorage.setItem('wd_total_revenue', currentRevenue);
+    
+    if (typeof refreshDashboardUI === 'function') {
+        refreshDashboardUI();
     }
 }
 
@@ -1013,17 +1055,14 @@ function completeSplitCheckout() {
                         productRef.once('value').then(prodSnap => {
                             if (prodSnap.exists()) {
                                 const prodData = prodSnap.val();
-                                // Support both 'stock' and 'stockQty' naming conventions
                                 let currentStock = Number(prodData.stock !== undefined ? prodData.stock : (prodData.stockQty || 0));
                                 let newStock = Math.max(0, currentStock - soldQty);
 
-                                // Update Firebase database fields
                                 productRef.update({
                                     stock: newStock,
                                     stockQty: newStock
                                 });
 
-                                // Update local inventory cache if present
                                 if (typeof inventoryCache !== 'undefined' && inventoryCache[productId]) {
                                     inventoryCache[productId].stock = newStock;
                                     inventoryCache[productId].stockQty = newStock;
@@ -1083,7 +1122,6 @@ function renderReceiptView(orderData, isReprint = false) {
             reprintWatermark.style.display = isReprint ? 'block' : 'none';
         }
 
-        // Automatically inject Cashier / Sold By info directly into the printable box layout
         const printableBox = workspace.querySelector('#printable-receipt-box');
         if (printableBox) {
             let cashierName = orderData.staff || orderData.soldBy || "Staff";
@@ -1094,7 +1132,6 @@ function renderReceiptView(orderData, isReprint = false) {
                 cashierRow.id = 'receipt-cashier-row';
                 cashierRow.style.cssText = 'font-size: 12px; font-weight: bold; margin-bottom: 5px;';
                 
-                // Insert it right after the Date element or inside the box header
                 const dateElem = printableBox.querySelector('#receipt-date');
                 if (dateElem && dateElem.parentNode) {
                     dateElem.parentNode.insertBefore(cashierRow, dateElem.nextSibling);
