@@ -154,6 +154,14 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     background: #94a3b8 !important;
 }
 
+/* Split Payment Modal Constraints to keep buttons visible */
+#split-modal > div {
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
 @media print {
     body * { display: none !important; }
     #printable-receipt-box, #printable-receipt-box * { display: block !important; visibility: visible !important; }
