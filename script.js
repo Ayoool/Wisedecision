@@ -31,6 +31,11 @@ let currentCart = [];
 let currentActiveOrder = null;
 let currentCustomerType = "Retail"; // Default customer type
 
+// Customer module state
+let customersCache = {};
+let currentSelectedCustomer = null; // { id, name, phone, balance, creditLimit } attached to the active POS sale
+let currentProfileCustomerId = null; // customer currently open in the profile modal
+
 // Initialize application on load
 window.onload = function() {
     console.log("Wise Decision Enterprise Suite Initialized.");
@@ -54,7 +59,7 @@ function showOfflineBanner(isOffline) {
         banner = document.createElement('div');
         banner.id = 'offline-status-banner';
         banner.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; background: #dc2626; color: #fff; text-align: center; font-size: 12px; font-weight: bold; padding: 6px; z-index: 9999; display: none;";
-        banner.innerText = "⚠️ You are currently offline. Sales and changes are saving locally and will sync automatically when reconnected.";
+        banner.innerText = "⚠ You are currently offline. Sales and changes are saving locally and will sync automatically when reconnected.";
         document.body.prepend(banner);
     }
     banner.style.display = isOffline ? 'block' : 'none';
@@ -112,16 +117,19 @@ function syncOfflineQueueToFirebase() {
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
     // Accountants and Cashiers can view the accountant queue, receipt view, business settings,
-    // or POS view — but never staff management, inventory, reports, expenses, or branches.
+    // POS view, and customers (to record debt repayments) — but never staff management,
+    // inventory, reports, expenses, or branches.
     if (currentUserRole === 'Accountant' || currentUserRole === 'Cashier') {
         const allowedAccountantViews = [
             'accountant-view', 'accountant-view-template', 
             'receipt-view', 'receipt-view-template', 
             'settings-view', 'settings-view-template',
-            'pos-view', 'pos-view-template'
+            'pos-view', 'pos-view-template',
+            'customers-view', 'customers-view-template',
+            'debt-receipt-view', 'debt-receipt-view-template'
         ];
         if (!allowedAccountantViews.includes(viewId)) {
-            alert(`Access Restricted: ${currentUserRole}s are permitted to accept payments, manage the queue, and print receipts.`);
+            alert(`Access Restricted: ${currentUserRole}s are permitted to accept payments, manage the queue, print receipts, and manage customers.`);
             return;
         }
     }
@@ -153,7 +161,10 @@ function switchView(viewId) {
                 loadDashboardMetrics();
                 loadProfitAndLossModule();
             }
-            if (viewId === 'pos-view') loadPosInventoryDropdown();
+            if (viewId === 'pos-view') {
+                loadPosInventoryDropdown();
+                updatePosCustomerBadge();
+            }
             if (viewId === 'inventory-view') loadInventoryTable();            
             if (viewId === 'accountant-view') loadPendingOrdersQueue();
             if (viewId === 'staff-view') loadStaffTable();
@@ -165,6 +176,10 @@ function switchView(viewId) {
             if (viewId === 'expenses-view') {
                 loadExpensesTable();
                 loadProfitAndLossModule();
+            }
+            if (viewId === 'customers-view') {
+                renderCustomersTable(customersCache);
+                updateCustomerStatsUI();
             }
         } else {
             const fullView = document.getElementById(viewId);
@@ -195,6 +210,7 @@ function adjustSidebarForRole(role) {
             if (
                 action.includes('accountant-view') || 
                 action.includes('pos-view') || 
+                action.includes('customers-view') ||
                 action.includes('logout')
             ) {
                 btn.style.display = 'block';
@@ -265,6 +281,7 @@ function handleStoreLogin() {
             adjustSidebarForRole("Admin");
             switchView('main-dashboard-view');
             syncOfflineQueueToFirebase();
+            subscribeCustomersCache();
             return;
         }
 
@@ -281,6 +298,7 @@ function handleStoreLogin() {
                     adjustSidebarForRole(staff.role);
                     switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view');
                     syncOfflineQueueToFirebase();
+                    subscribeCustomersCache();
                 }
             });
         }
@@ -339,6 +357,9 @@ function logout() {
     currentStoreId = null;
     currentUserRole = "Admin";
     currentCart = [];
+    currentSelectedCustomer = null;
+    currentProfileCustomerId = null;
+    customersCache = {};
     adjustSidebarForRole("Admin");
     switchView('login-view');
 }
@@ -368,7 +389,7 @@ function loadSuperAdminDashboard() {
                         </button>
                         <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto; background: #0284c7; color: #fff;" onclick="promptChangeStorePassword('${storeId}')">🔑 PIN</button>
                         <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto; background: #d97706; color: #fff;" onclick="sendMaintenanceNotice('${storeId}', '${data.phone}')">📢 Notice</button>
-                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="deleteBusinessAccount('${storeId}')">🗑️ Delete</button>
+                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="deleteBusinessAccount('${storeId}')">🗑 Delete</button>
                     </td>
                 </tr>
             `;
@@ -410,7 +431,7 @@ function sendMaintenanceNotice(storeId, phone) {
 }
 
 function deleteBusinessAccount(storeId) {
-    if (confirm(`⚠️ DANGER: Are you absolutely sure you want to completely delete store ID "${storeId}" and all its associated data (inventory, transactions, staff, expenses)? This action cannot be undone!`)) {
+    if (confirm(`⚠ DANGER: Are you absolutely sure you want to completely delete store ID "${storeId}" and all its associated data (inventory, transactions, staff, expenses)? This action cannot be undone!`)) {
         const confirmationCode = prompt(`Type the exact store ID "${storeId}" to confirm permanent deletion:`);
         if (confirmationCode === storeId) {
             firebase.database().ref(`stores/${storeId}`).remove().then(() => {
@@ -869,7 +890,9 @@ function submitOrderForAccountant() {
         staff: activeStaffName,
         soldBy: activeStaffName,
         date: new Date().toISOString(),
-        status: 'Pending Verification'
+        status: 'Pending Verification',
+        customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
+        customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
     };
 
     saveRecordLocallyOrCloud(
@@ -881,6 +904,7 @@ function submitOrderForAccountant() {
             currentCart = [];
             renderCart();
             loadPosInventoryDropdown();
+            clearPosCustomer();
         }
     );
 }
@@ -902,7 +926,9 @@ function processDirectPosPayment() {
         staff: activeStaffName,
         soldBy: activeStaffName,
         date: new Date().toISOString(),
-        status: 'Pending Verification'
+        status: 'Pending Verification',
+        customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
+        customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
     };
 
     // Temporarily push to pending/active processing so the split checkout can process it directly
@@ -911,6 +937,7 @@ function processDirectPosPayment() {
         renderCart();
         loadPosInventoryDropdown();
         openSplitModal(txId, grandTotal);
+        clearPosCustomer();
     });
 }
 
@@ -933,7 +960,7 @@ function loadPendingOrdersQueue() {
             if (order.status === 'Pending Verification') {
                 tbody.innerHTML += `
                     <tr>
-                        <td><strong>${order.txId}</strong></td>
+                        <td><strong>${order.txId}</strong>${order.customerName && order.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${order.customerName}</small>` : ''}</td>
                         <td>${order.staff || order.soldBy || 'Staff'}</td>
                         <td>₦${Number(order.totalAmount || 0).toLocaleString()}</td>
                         <td><span style="color: #d97706; font-weight: bold;">Pending Payment</span></td>
@@ -956,15 +983,39 @@ function loadPendingOrdersQueue() {
 // ==================== SPLIT PAYMENT & RECEIPT LOGIC ====================
 function openSplitModal(txId, totalAmount) {
     const numericTotal = Number(totalAmount) || 0;
-    currentActiveOrder = { txId, totalAmount: numericTotal };
+    currentActiveOrder = { txId, totalAmount: numericTotal, customerId: null, customerName: 'Walk-In Customer' };
     
     document.getElementById('modal-tx-id-label').textContent = txId;
     document.getElementById('split-modal-total').textContent = numericTotal.toLocaleString();
     document.getElementById('split-cash').value = numericTotal;
     document.getElementById('split-transfer').value = 0;
-    
-    document.getElementById('split-modal').style.display = 'flex';
-    calcSplit();
+    const creditInput = document.getElementById('split-credit');
+    if (creditInput) creditInput.value = 0;
+
+    const creditContainer = document.getElementById('split-credit-container');
+    const custInfo = document.getElementById('split-modal-customer-info');
+
+    // Look up the full pending order so we know whether a registered customer is attached
+    firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
+        if (snapshot.exists()) {
+            const order = snapshot.val();
+            currentActiveOrder.customerId = order.customerId || null;
+            currentActiveOrder.customerName = order.customerName || 'Walk-In Customer';
+        }
+
+        if (currentActiveOrder.customerId && customersCache[currentActiveOrder.customerId]) {
+            const c = customersCache[currentActiveOrder.customerId];
+            const available = Math.max(0, (Number(c.creditLimit) || 0) - (Number(c.balance) || 0));
+            if (custInfo) custInfo.innerHTML = `Customer: <strong>${c.name}</strong> &nbsp;|&nbsp; Current Balance: ₦${(Number(c.balance) || 0).toLocaleString()} &nbsp;|&nbsp; Credit Available: ₦${available.toLocaleString()}`;
+            if (creditContainer) creditContainer.style.display = 'block';
+        } else {
+            if (custInfo) custInfo.innerHTML = `Customer: <strong>${currentActiveOrder.customerName}</strong>`;
+            if (creditContainer) creditContainer.style.display = 'none';
+        }
+
+        document.getElementById('split-modal').style.display = 'flex';
+        calcSplit();
+    });
 }
 
 function closeSplitModal() {
@@ -976,10 +1027,29 @@ function calcSplit() {
     let totalDue = parseFloat(document.getElementById('split-modal-total').innerText.replace(/,/g, '')) || 0;
     let cashVal = parseFloat(document.getElementById('split-cash').value) || 0;
     let transferVal = parseFloat(document.getElementById('split-transfer').value) || 0;
-    
-    let totalPaid = cashVal + transferVal;
+
+    const creditContainer = document.getElementById('split-credit-container');
+    const creditVisible = creditContainer && creditContainer.style.display !== 'none';
+    let creditVal = creditVisible ? (parseFloat(document.getElementById('split-credit').value) || 0) : 0;
+
+    let totalPaid = cashVal + transferVal + creditVal;
     let statusField = document.getElementById('split-status');
     let acceptBtn = document.getElementById('dynamic-accept-print-btn');
+
+    // Enforce the customer's credit limit before allowing the credit portion through
+    if (creditVal > 0 && currentActiveOrder && currentActiveOrder.customerId && customersCache[currentActiveOrder.customerId]) {
+        const c = customersCache[currentActiveOrder.customerId];
+        const available = Math.max(0, (Number(c.creditLimit) || 0) - (Number(c.balance) || 0));
+        if (creditVal > available) {
+            statusField.value = `Status: Credit exceeds available limit (₦${available.toLocaleString()}) ⚠`;
+            statusField.style.background = "#fef9c3";
+            statusField.style.color = "#854d0e";
+            acceptBtn.disabled = true;
+            acceptBtn.style.opacity = "0.6";
+            acceptBtn.style.cursor = "not-allowed";
+            return;
+        }
+    }
 
     if (totalPaid === totalDue && totalDue > 0) {
         statusField.value = "Status: Balanced ✅";
@@ -991,7 +1061,7 @@ function calcSplit() {
         acceptBtn.style.cursor = "pointer";
     } else if (totalPaid > totalDue) {
         let excess = totalPaid - totalDue;
-        statusField.value = `Status: Overpaid by ₦${excess.toLocaleString()} ⚠️`;
+        statusField.value = `Status: Overpaid by ₦${excess.toLocaleString()} ⚠`;
         statusField.style.background = "#fef9c3";
         statusField.style.color = "#854d0e";
         
@@ -1068,7 +1138,13 @@ function completeSplitCheckout() {
     
     const cash = parseFloat(document.getElementById('split-cash').value) || 0;
     const transfer = parseFloat(document.getElementById('split-transfer').value) || 0;
+    const creditContainer = document.getElementById('split-credit-container');
+    const creditVisible = creditContainer && creditContainer.style.display !== 'none';
+    const credit = creditVisible ? (parseFloat(document.getElementById('split-credit').value) || 0) : 0;
+
     const txId = currentActiveOrder.txId;
+    const customerId = currentActiveOrder.customerId;
+    const customerName = currentActiveOrder.customerName;
     
     closeSplitModal();
     
@@ -1076,8 +1152,10 @@ function completeSplitCheckout() {
         if (snapshot.exists()) {
             const orderData = snapshot.val();
             orderData.status = 'Completed';
-            orderData.paymentBreakdown = { cash, transfer };
+            orderData.paymentBreakdown = { cash, transfer, credit };
             orderData.date = new Date().toISOString();
+            orderData.customerId = customerId;
+            orderData.customerName = customerName;
             
             // 1. Save transaction and remove from pending queue
             firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).set(orderData);
@@ -1113,7 +1191,39 @@ function completeSplitCheckout() {
                 });
             }
 
-            // 3. Render and print the receipt
+            // 3. CUSTOMER LEDGER, CREDIT BALANCE & LIFETIME VALUE UPDATE
+            if (customerId) {
+                const custRef = firebase.database().ref(`stores/${currentStoreId}/customers/${customerId}`);
+                custRef.once('value').then(custSnap => {
+                    if (custSnap.exists()) {
+                        const c = custSnap.val();
+                        const balanceBefore = Number(c.balance) || 0;
+                        const balanceAfter = balanceBefore + credit;
+
+                        custRef.update({
+                            balance: balanceAfter,
+                            totalSpent: (Number(c.totalSpent) || 0) + (Number(orderData.totalAmount) || 0),
+                            visitCount: (Number(c.visitCount) || 0) + 1,
+                            lastVisit: orderData.date
+                        });
+
+                        if (credit > 0) {
+                            firebase.database().ref(`stores/${currentStoreId}/customers/${customerId}/ledger`).push({
+                                type: 'credit_sale',
+                                amount: credit,
+                                balanceBefore,
+                                balanceAfter,
+                                date: orderData.date,
+                                txId,
+                                recordedBy: orderData.staff || orderData.soldBy || 'Staff',
+                                note: `Credit portion of sale ${txId}`
+                            });
+                        }
+                    }
+                });
+            }
+
+            // 4. Render and print the receipt
             renderReceiptView(orderData, false);
         }
     }).catch(error => {
@@ -1156,8 +1266,11 @@ function renderReceiptView(orderData, isReprint = false) {
         
         const cash = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.cash) || 0 : (!isNaN(numericTotal) ? numericTotal : 0);
         const transfer = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.transfer) || 0 : 0;
+        const credit = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.credit) || 0 : 0;
         if (breakdownEl) {
-            breakdownEl.textContent = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: ₦${transfer.toLocaleString()}`;
+            let breakdownText = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: ₦${transfer.toLocaleString()}`;
+            if (credit > 0) breakdownText += ` | Credit: ₦${credit.toLocaleString()}`;
+            breakdownEl.textContent = breakdownText;
         }
 
         const reprintWatermark = workspace.querySelector('#reprintWatermark');
@@ -1166,9 +1279,10 @@ function renderReceiptView(orderData, isReprint = false) {
         }
 
         const printableBox = workspace.querySelector('#printable-receipt-box');
+        let cashierRow = null;
         if (printableBox) {
             let cashierName = orderData.staff || orderData.soldBy || "Staff";
-            let cashierRow = printableBox.querySelector('#receipt-cashier-row');
+            cashierRow = printableBox.querySelector('#receipt-cashier-row');
             
             if (!cashierRow) {
                 cashierRow = document.createElement('div');
@@ -1183,6 +1297,21 @@ function renderReceiptView(orderData, isReprint = false) {
                 }
             }
             cashierRow.innerHTML = `Cashier: ${cashierName}`;
+
+            // Insert customer name row right after the cashier row when a registered
+            // customer (not Walk-In) is attached to this sale
+            let custRow = printableBox.querySelector('#receipt-customer-row');
+            if (orderData.customerId && orderData.customerName) {
+                if (!custRow) {
+                    custRow = document.createElement('div');
+                    custRow.id = 'receipt-customer-row';
+                    custRow.style.cssText = 'font-size: 11px; color: #333; margin-bottom: 5px;';
+                    cashierRow.parentNode.insertBefore(custRow, cashierRow.nextSibling);
+                }
+                custRow.innerHTML = `Customer: ${orderData.customerName}`;
+            } else if (custRow) {
+                custRow.remove();
+            }
         }
 
         const receiptItemsContainer = workspace.querySelector('#receipt-items-body');
@@ -1377,10 +1506,11 @@ function loadPastSalesHistory(selectedDateString = null) {
             const dateStr = txDate ? txDate.toLocaleString() : 'N/A';
             const transactionId = tx.txId || child.key;
             const sellerName = tx.staff || tx.soldBy || 'Staff';
+            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
 
             tbody.innerHTML += `
                 <tr>
-                    <td><strong>${transactionId}</strong></td>
+                    <td><strong>${transactionId}</strong>${customerTag}</td>
                     <td>${dateStr}</td>
                     <td>${sellerName}</td>
                     <td>₦${txTotal.toLocaleString()}</td>
@@ -1735,4 +1865,549 @@ function loadProfitAndLossModule() {
             netProfitDisplay.style.color = monthNet >= 0 ? '#065f46' : '#dc2626';
         }
     });
+}
+
+// ==================== CUSTOMER MANAGEMENT MODULE ====================
+// Data model (Firebase):
+//   stores/{storeId}/customers/{customerId} = {
+//     name, phone, email, address, creditLimit, balance,
+//     totalSpent, visitCount, createdAt, lastVisit
+//   }
+//   stores/{storeId}/customers/{customerId}/ledger/{entryId} = {
+//     type: 'credit_sale' | 'payment' | 'adjustment',
+//     amount, balanceBefore, balanceAfter, date, txId, recordedBy, note
+//   }
+// Purchase history is derived by filtering stores/{storeId}/transactions by customerId
+// rather than duplicating sale data under each customer record.
+
+// Subscribes once per session (called right after login) so the customer directory,
+// POS autocomplete, and any open profile modal all stay live-updated together.
+function subscribeCustomersCache() {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/customers`).on('value', snapshot => {
+        customersCache = {};
+        snapshot.forEach(child => {
+            customersCache[child.key] = child.val();
+        });
+
+        if (document.getElementById('customers-body')) {
+            renderCustomersTable(customersCache);
+            updateCustomerStatsUI();
+        }
+
+        // Keep an attached POS customer's live balance/limit in sync
+        if (currentSelectedCustomer && customersCache[currentSelectedCustomer.id]) {
+            const c = customersCache[currentSelectedCustomer.id];
+            currentSelectedCustomer.balance = Number(c.balance) || 0;
+            currentSelectedCustomer.creditLimit = Number(c.creditLimit) || 0;
+            updatePosCustomerBadge();
+        }
+
+        // Refresh an open profile modal if it's showing this customer
+        if (currentProfileCustomerId && customersCache[currentProfileCustomerId] && document.getElementById('customer-profile-modal') && document.getElementById('customer-profile-modal').style.display === 'flex') {
+            refreshCustomerProfileSummary(currentProfileCustomerId);
+        }
+    }, error => {
+        console.error("subscribeCustomersCache error:", error);
+    });
+}
+
+function updateCustomerStatsUI() {
+    let totalDebt = 0, owingCount = 0;
+    Object.keys(customersCache).forEach(id => {
+        const bal = Number(customersCache[id].balance) || 0;
+        if (bal > 0) { totalDebt += bal; owingCount++; }
+    });
+
+    const countEl = document.getElementById('cust-total-count');
+    const debtEl = document.getElementById('cust-total-debt');
+    const owingEl = document.getElementById('cust-owing-count');
+    if (countEl) countEl.textContent = Object.keys(customersCache).length;
+    if (debtEl) debtEl.textContent = '₦' + totalDebt.toLocaleString();
+    if (owingEl) owingEl.textContent = owingCount;
+}
+
+function renderCustomersTable(dataset) {
+    const tbody = document.getElementById('customers-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    const ids = Object.keys(dataset || {});
+
+    ids.forEach(id => {
+        const c = dataset[id];
+        const balance = Number(c.balance) || 0;
+        const limit = Number(c.creditLimit) || 0;
+        const spent = Number(c.totalSpent) || 0;
+        const visits = Number(c.visitCount) || 0;
+        const balanceColor = balance > 0 ? '#b91c1c' : '#166534';
+
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${c.name || 'Unnamed'}</strong></td>
+                <td>${c.phone || 'N/A'}</td>
+                <td style="color:${balanceColor}; font-weight:bold;">₦${balance.toLocaleString()}</td>
+                <td>₦${limit.toLocaleString()}</td>
+                <td>₦${spent.toLocaleString()}</td>
+                <td>${visits}</td>
+                <td>
+                    <button class="menu-btn btn-dash" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="openCustomerProfile('${id}')">View</button>
+                    <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="openAddCustomerModal('${id}')">Edit</button>
+                    <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteCustomer('${id}')">Delete</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    if (ids.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No customers registered yet. Click "Add New Customer" to get started.</td></tr>`;
+    }
+}
+
+function filterCustomersTable() {
+    const query = (document.getElementById('customer-search-input')?.value || '').toLowerCase().trim();
+    if (!query) {
+        renderCustomersTable(customersCache);
+        return;
+    }
+
+    const filtered = {};
+    Object.keys(customersCache).forEach(id => {
+        const c = customersCache[id];
+        if ((c.name || '').toLowerCase().includes(query) || (c.phone || '').includes(query)) {
+            filtered[id] = c;
+        }
+    });
+    renderCustomersTable(filtered);
+}
+
+function openAddCustomerModal(editId = null) {
+    document.getElementById('edit-customer-id').value = editId || '';
+
+    if (editId && customersCache[editId]) {
+        const c = customersCache[editId];
+        document.getElementById('cust-name').value = c.name || '';
+        document.getElementById('cust-phone').value = c.phone || '';
+        document.getElementById('cust-email').value = c.email || '';
+        document.getElementById('cust-address').value = c.address || '';
+        document.getElementById('cust-credit-limit').value = c.creditLimit || '';
+        document.getElementById('customer-form-title').textContent = 'Edit Customer';
+    } else {
+        ['cust-name', 'cust-phone', 'cust-email', 'cust-address', 'cust-credit-limit'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        document.getElementById('customer-form-title').textContent = 'Add New Customer';
+    }
+
+    document.getElementById('customer-form-modal').style.display = 'flex';
+}
+
+function closeAddCustomerModal() {
+    document.getElementById('customer-form-modal').style.display = 'none';
+}
+
+function saveCustomer() {
+    if (!currentStoreId) return;
+
+    const editId = document.getElementById('edit-customer-id').value;
+    const name = document.getElementById('cust-name').value.trim();
+    const phone = document.getElementById('cust-phone').value.trim();
+    const email = document.getElementById('cust-email').value.trim();
+    const address = document.getElementById('cust-address').value.trim();
+    const creditLimit = parseFloat(document.getElementById('cust-credit-limit').value) || 0;
+
+    if (!name || !phone) {
+        alert("Customer name and phone number are required.");
+        return;
+    }
+
+    const custRef = firebase.database().ref(`stores/${currentStoreId}/customers`);
+
+    if (editId) {
+        custRef.child(editId).update({ name, phone, email, address, creditLimit }).then(() => {
+            alert("Customer updated successfully!");
+            closeAddCustomerModal();
+        }).catch(err => alert("Failed to update customer: " + err.message));
+    } else {
+        const newRef = custRef.push();
+        newRef.set({
+            name,
+            phone,
+            email,
+            address,
+            creditLimit,
+            balance: 0,
+            totalSpent: 0,
+            visitCount: 0,
+            createdAt: new Date().toISOString()
+        }).then(() => {
+            alert("Customer added successfully!");
+            closeAddCustomerModal();
+        }).catch(err => alert("Failed to save customer: " + err.message));
+    }
+}
+
+function deleteCustomer(id) {
+    const c = customersCache[id];
+    if (!c) return;
+
+    if (Number(c.balance) > 0) {
+        if (!confirm(`Warning: ${c.name} has an outstanding balance of ₦${Number(c.balance).toLocaleString()}. Delete this customer anyway?`)) return;
+    } else if (!confirm(`Are you sure you want to delete ${c.name}?`)) {
+        return;
+    }
+
+    firebase.database().ref(`stores/${currentStoreId}/customers/${id}`).remove();
+}
+
+// ---------- Customer Profile (ledger + purchase history + lifetime value) ----------
+function openCustomerProfile(id) {
+    const c = customersCache[id];
+    if (!c) return;
+
+    currentProfileCustomerId = id;
+    refreshCustomerProfileSummary(id);
+    loadCustomerLedger(id);
+    loadCustomerPurchaseHistory(id);
+
+    document.getElementById('customer-profile-modal').style.display = 'flex';
+}
+
+function refreshCustomerProfileSummary(id) {
+    const c = customersCache[id];
+    if (!c) return;
+
+    const setText = (elId, val) => { const el = document.getElementById(elId); if (el) el.textContent = val; };
+
+    setText('profile-cust-name', c.name || 'Unnamed');
+    setText('profile-cust-phone', c.phone || 'N/A');
+    setText('profile-cust-email', c.email || 'N/A');
+    setText('profile-cust-address', c.address || 'N/A');
+    setText('profile-cust-balance', '₦' + (Number(c.balance) || 0).toLocaleString());
+    setText('profile-cust-limit', '₦' + (Number(c.creditLimit) || 0).toLocaleString());
+    setText('profile-cust-spent', '₦' + (Number(c.totalSpent) || 0).toLocaleString());
+    setText('profile-cust-visits', Number(c.visitCount) || 0);
+
+    const payBtn = document.getElementById('profile-record-payment-btn');
+    if (payBtn) payBtn.style.display = (Number(c.balance) > 0) ? 'inline-block' : 'none';
+}
+
+function closeCustomerProfileModal() {
+    document.getElementById('customer-profile-modal').style.display = 'none';
+    currentProfileCustomerId = null;
+}
+
+function loadCustomerLedger(id) {
+    const tbody = document.getElementById('profile-ledger-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading ledger...</td></tr>';
+
+    firebase.database().ref(`stores/${currentStoreId}/customers/${id}/ledger`).once('value').then(snapshot => {
+        const entries = [];
+        snapshot.forEach(child => entries.push(child.val()));
+        entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        tbody.innerHTML = '';
+        entries.forEach(entry => {
+            const isPayment = entry.type === 'payment';
+            const typeLabel = isPayment ? '💵 Payment' : (entry.type === 'credit_sale' ? '🛒 Credit Sale' : '✏ Adjustment');
+            const amtColor = isPayment ? '#166534' : '#b91c1c';
+            const amtSign = isPayment ? '-' : '+';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${entry.date ? new Date(entry.date).toLocaleString() : 'N/A'}</td>
+                    <td>${typeLabel}</td>
+                    <td style="color:${amtColor}; font-weight:bold;">${amtSign}₦${Number(entry.amount || 0).toLocaleString()}</td>
+                    <td>₦${Number(entry.balanceAfter || 0).toLocaleString()}</td>
+                    <td>${entry.note || ''}</td>
+                </tr>
+            `;
+        });
+
+        if (entries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:15px;">No ledger activity yet.</td></tr>';
+        }
+    });
+}
+
+function loadCustomerPurchaseHistory(id) {
+    const tbody = document.getElementById('profile-purchases-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading purchase history...</td></tr>';
+
+    firebase.database().ref(`stores/${currentStoreId}/transactions`).once('value').then(snapshot => {
+        const purchases = [];
+        snapshot.forEach(child => {
+            const tx = child.val();
+            if (tx.customerId === id) purchases.push(tx);
+        });
+        purchases.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        tbody.innerHTML = '';
+        purchases.forEach(tx => {
+            const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            tbody.innerHTML += `
+                <tr>
+                    <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
+                    <td><strong>${tx.txId || ''}</strong></td>
+                    <td style="max-width:220px;">${itemsSummary}</td>
+                    <td>₦${Number(tx.totalAmount || 0).toLocaleString()}</td>
+                </tr>
+            `;
+        });
+
+        if (purchases.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">No purchase history yet.</td></tr>';
+        }
+    });
+}
+
+function startSaleForCustomer() {
+    const id = currentProfileCustomerId;
+    if (!id || !customersCache[id]) return;
+    selectPosCustomer(id);
+    closeCustomerProfileModal();
+    switchView('pos-view');
+}
+
+// ---------- Debt Repayment (full or partial) & Receipt ----------
+function openDebtPaymentModal() {
+    const id = currentProfileCustomerId;
+    const c = customersCache[id];
+    if (!c) return;
+
+    document.getElementById('debt-payment-customer-id').value = id;
+    document.getElementById('debt-payment-cust-name').textContent = c.name || 'Customer';
+    document.getElementById('debt-payment-current-balance').textContent = '₦' + (Number(c.balance) || 0).toLocaleString();
+    document.getElementById('debt-payment-amount').value = Number(c.balance) || 0;
+    document.getElementById('debt-payment-method').value = 'Cash';
+
+    updateDebtPaymentPreview();
+    document.getElementById('debt-payment-modal').style.display = 'flex';
+}
+
+function closeDebtPaymentModal() {
+    document.getElementById('debt-payment-modal').style.display = 'none';
+}
+
+function updateDebtPaymentPreview() {
+    const id = document.getElementById('debt-payment-customer-id').value;
+    const c = customersCache[id];
+    if (!c) return;
+
+    const balance = Number(c.balance) || 0;
+    const amount = parseFloat(document.getElementById('debt-payment-amount').value) || 0;
+    const remaining = Math.max(0, balance - amount);
+
+    const preview = document.getElementById('debt-payment-remaining-preview');
+    if (preview) preview.textContent = '₦' + remaining.toLocaleString();
+
+    const warn = document.getElementById('debt-payment-warning');
+    const confirmBtn = document.getElementById('debt-payment-confirm-btn');
+    if (warn) {
+        if (amount <= 0) {
+            warn.style.display = 'block';
+            warn.textContent = 'Enter a payment amount greater than zero.';
+            if (confirmBtn) confirmBtn.disabled = true;
+        } else if (amount > balance) {
+            warn.style.display = 'block';
+            warn.textContent = `Amount exceeds the outstanding balance by ₦${(amount - balance).toLocaleString()}.`;
+            if (confirmBtn) confirmBtn.disabled = true;
+        } else {
+            warn.style.display = 'none';
+            if (confirmBtn) confirmBtn.disabled = false;
+        }
+    }
+}
+
+function processDebtPayment() {
+    const id = document.getElementById('debt-payment-customer-id').value;
+    const c = customersCache[id];
+    if (!c) return;
+
+    const amount = parseFloat(document.getElementById('debt-payment-amount').value) || 0;
+    const method = document.getElementById('debt-payment-method').value;
+
+    if (amount <= 0) {
+        alert("Please enter a valid payment amount.");
+        return;
+    }
+
+    const balanceBefore = Number(c.balance) || 0;
+    if (amount > balanceBefore) {
+        alert("Payment amount cannot exceed the outstanding balance.");
+        return;
+    }
+
+    const balanceAfter = Math.max(0, balanceBefore - amount);
+    const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    const nowIso = new Date().toISOString();
+
+    const ledgerEntry = {
+        type: 'payment',
+        amount,
+        method,
+        balanceBefore,
+        balanceAfter,
+        date: nowIso,
+        recordedBy,
+        note: `Debt repayment via ${method}`
+    };
+
+    const custRef = firebase.database().ref(`stores/${currentStoreId}/customers/${id}`);
+    custRef.update({ balance: balanceAfter }).then(() => {
+        return firebase.database().ref(`stores/${currentStoreId}/customers/${id}/ledger`).push(ledgerEntry);
+    }).then(() => {
+        closeDebtPaymentModal();
+        closeCustomerProfileModal();
+
+        renderDebtReceiptView({
+            customerName: c.name,
+            balanceBefore,
+            amountPaid: amount,
+            balanceAfter,
+            method,
+            date: nowIso,
+            recordedBy
+        });
+    }).catch(err => {
+        alert("Failed to record payment: " + err.message);
+    });
+}
+
+// ---------- Debt Repayment Receipt (thermal-compatible) ----------
+function renderDebtReceiptView(paymentData) {
+    const mainWrapper = document.getElementById('dashboard-main-wrapper');
+    if (mainWrapper) {
+        mainWrapper.classList.add('active');
+        mainWrapper.style.display = 'block';
+    }
+
+    const workspace = document.getElementById('workspace-content');
+    const template = document.getElementById('debt-receipt-view-template');
+    if (!workspace || !template) return;
+
+    workspace.innerHTML = template.innerHTML;
+
+    setTimeout(() => {
+        const setText = (sel, val) => {
+            const el = workspace.querySelector(sel);
+            if (el) el.textContent = val;
+        };
+
+        const paymentReceiptId = 'PMT-' + Math.floor(100000 + Math.random() * 900000);
+
+        setText('#debt-receipt-tx-id', paymentReceiptId);
+        setText('#debt-receipt-date', new Date(paymentData.date).toLocaleString());
+        setText('#debt-receipt-customer-name', paymentData.customerName || 'Customer');
+        setText('#debt-receipt-cashier', paymentData.recordedBy || '');
+        setText('#debt-receipt-prev-balance', Number(paymentData.balanceBefore).toLocaleString());
+        setText('#debt-receipt-amount-paid', Number(paymentData.amountPaid).toLocaleString());
+        setText('#debt-receipt-remaining-balance', Number(paymentData.balanceAfter).toLocaleString());
+        setText('#debt-receipt-method', paymentData.method || 'Cash');
+
+        const printableBox = workspace.querySelector('#printable-debt-receipt-box');
+
+        if (currentStoreId && printableBox) {
+            firebase.database().ref(`stores/${currentStoreId}`).once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    const storeData = snapshot.val();
+                    setText('#debt-receipt-store-name', storeData.businessName || "");
+                    setText('#debt-receipt-store-address', storeData.address || "");
+                    setText('#debt-receipt-store-phone', storeData.phone ? `Tel: ${storeData.phone}` : "");
+                }
+                triggerThermalPrint(printableBox.innerHTML);
+            }).catch(() => triggerThermalPrint(printableBox.innerHTML));
+        }
+    }, 150);
+}
+
+function downloadDebtReceiptPDF() {
+    const element = document.getElementById('printable-debt-receipt-box');
+    if (!element) return;
+    const opt = {
+        margin: 5,
+        filename: 'Payment-' + (document.getElementById('debt-receipt-tx-id')?.textContent || 'receipt') + '.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a6', orientation: 'portrait' }
+    };
+    html2pdf().from(element).set(opt).save();
+}
+
+// ---------- POS Customer Selection & Autocomplete (defaults to Walk-In) ----------
+function filterPosCustomerSearch() {
+    const query = (document.getElementById('pos-customer-search')?.value || '').toLowerCase().trim();
+    const resultsBox = document.getElementById('pos-customer-results');
+    if (!resultsBox) return;
+
+    if (!query) {
+        resultsBox.style.display = 'none';
+        resultsBox.innerHTML = '';
+        return;
+    }
+
+    const matches = Object.keys(customersCache).filter(id => {
+        const c = customersCache[id];
+        return (c.name || '').toLowerCase().includes(query) || (c.phone || '').includes(query);
+    }).slice(0, 8);
+
+    if (matches.length === 0) {
+        resultsBox.innerHTML = '<div style="padding:10px; font-size:12px; color:var(--text-muted);">No matching customers found.</div>';
+        resultsBox.style.display = 'block';
+        return;
+    }
+
+    resultsBox.innerHTML = matches.map(id => {
+        const c = customersCache[id];
+        const bal = Number(c.balance) || 0;
+        return `
+            <div style="padding:10px; font-size:13px; cursor:pointer; border-bottom:1px solid #f1f5f9;" onclick="selectPosCustomer('${id}')">
+                <strong>${c.name}</strong> — ${c.phone || ''}${bal > 0 ? ` <span style="color:#b91c1c;">(Owes ₦${bal.toLocaleString()})</span>` : ''}
+            </div>
+        `;
+    }).join('');
+    resultsBox.style.display = 'block';
+}
+
+function selectPosCustomer(id) {
+    const c = customersCache[id];
+    if (!c) return;
+
+    currentSelectedCustomer = {
+        id,
+        name: c.name,
+        phone: c.phone,
+        balance: Number(c.balance) || 0,
+        creditLimit: Number(c.creditLimit) || 0
+    };
+
+    const searchInput = document.getElementById('pos-customer-search');
+    const resultsBox = document.getElementById('pos-customer-results');
+    if (searchInput) searchInput.value = '';
+    if (resultsBox) { resultsBox.style.display = 'none'; resultsBox.innerHTML = ''; }
+
+    updatePosCustomerBadge();
+}
+
+function clearPosCustomer() {
+    currentSelectedCustomer = null;
+    updatePosCustomerBadge();
+}
+
+function updatePosCustomerBadge() {
+    const badge = document.getElementById('pos-selected-customer-badge');
+    if (!badge) return;
+
+    if (currentSelectedCustomer) {
+        const owesText = currentSelectedCustomer.balance > 0
+            ? ` <span style="color:#b91c1c;">(Owes ₦${currentSelectedCustomer.balance.toLocaleString()})</span>`
+            : '';
+        badge.innerHTML = `Selling to: <strong>${currentSelectedCustomer.name}</strong>${owesText} <button class="menu-btn" style="display:inline-block; width:auto; padding:2px 8px; font-size:10px; margin-left:8px; margin-bottom:0;" onclick="clearPosCustomer()">Clear</button>`;
+    } else {
+        badge.textContent = 'Selling to: Walk-In Customer';
+    }
 }
