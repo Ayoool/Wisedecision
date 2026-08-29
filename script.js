@@ -111,8 +111,9 @@ function syncOfflineQueueToFirebase() {
 
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
-    // Accountants can view the accountant queue, receipt view, business settings, or POS view
-    if (currentUserRole === 'Accountant') {
+    // Accountants and Cashiers can view the accountant queue, receipt view, business settings,
+    // or POS view — but never staff management, inventory, reports, expenses, or branches.
+    if (currentUserRole === 'Accountant' || currentUserRole === 'Cashier') {
         const allowedAccountantViews = [
             'accountant-view', 'accountant-view-template', 
             'receipt-view', 'receipt-view-template', 
@@ -120,12 +121,16 @@ function switchView(viewId) {
             'pos-view', 'pos-view-template'
         ];
         if (!allowedAccountantViews.includes(viewId)) {
-            alert("Access Restricted: Accountants are permitted to accept payments, manage the queue, and print receipts.");
+            alert(`Access Restricted: ${currentUserRole}s are permitted to accept payments, manage the queue, and print receipts.`);
             return;
         }
     }
 
-    if (currentUserRole === 'Staff' && viewId !== 'pos-view' && viewId !== 'pos-view-template') {
+    // Standard Workers are restricted to making sales only (POS view).
+    // NOTE: the role value stored for these staff is "Standard Worker" (matches the
+    // staff-role-input dropdown), not "Staff" — the old check here never matched
+    // anything real, which is why standard workers previously saw the full sidebar.
+    if (currentUserRole === 'Standard Worker' && viewId !== 'pos-view' && viewId !== 'pos-view-template') {
         alert("Access Restricted: Standard workers are only permitted to make sales.");
         return;
     }
@@ -174,12 +179,19 @@ function switchView(viewId) {
 
 // ==================== SIDEBAR ROLE RESTRICTIONS ====================
 function adjustSidebarForRole(role) {
-    const menuButtons = document.querySelectorAll('.dashboard-sidebar button, .menu-btn, [onclick*="switchView"], [onclick*="logout"]');
+    // FIX: scoped to the actual sidebar element only (class="sidebar" in the HTML).
+    // The old selector included the bare `.menu-btn` class, which also matches
+    // buttons OUTSIDE the sidebar (e.g. the "Accept Payment & Print Receipt" and
+    // "Cancel" buttons inside the split payment modal). Because those buttons'
+    // onclick attributes don't contain "accountant-view", "pos-view", or "logout",
+    // they were being hidden for Accountant and Staff roles — which is why the
+    // Accountant couldn't see the Accept Payment / Print button.
+    const menuButtons = document.querySelectorAll('.sidebar button');
     
     menuButtons.forEach(btn => {
         const action = btn.getAttribute('onclick') || '';
         
-        if (role === 'Accountant') {
+        if (role === 'Accountant' || role === 'Cashier') {
             if (
                 action.includes('accountant-view') || 
                 action.includes('pos-view') || 
@@ -189,7 +201,7 @@ function adjustSidebarForRole(role) {
             } else {
                 btn.style.display = 'none';
             }
-        } else if (role === 'Staff') {
+        } else if (role === 'Standard Worker') {
             if (action.includes('pos-view') || action.includes('logout')) {
                 btn.style.display = 'block';
             } else {
@@ -906,7 +918,7 @@ function processDirectPosPayment() {
 function loadPendingOrdersQueue() {
     if (!currentStoreId) return;
 
-    if (currentUserRole !== 'Accountant' && currentUserRole !== 'Admin') {
+    if (currentUserRole !== 'Accountant' && currentUserRole !== 'Cashier' && currentUserRole !== 'Admin') {
         return;
     }
 
@@ -936,6 +948,8 @@ function loadPendingOrdersQueue() {
         if (tbody.innerHTML === '') {
             tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue.</td></tr>`;
         }
+    }, error => {
+        console.error("loadPendingOrdersQueue error:", error);
     });
 }
 
@@ -1102,6 +1116,9 @@ function completeSplitCheckout() {
             // 3. Render and print the receipt
             renderReceiptView(orderData, false);
         }
+    }).catch(error => {
+        console.error("completeSplitCheckout error:", error);
+        alert("Failed to complete checkout: " + error.message);
     });
 }
 
@@ -1497,6 +1514,11 @@ function loadStaffTable() {
 }
 
 function addStaffMember() {
+    if (currentUserRole !== 'Admin') {
+        alert("Access Restricted: Only the Admin can add staff members.");
+        return;
+    }
+
     const name = document.getElementById('staff-name-input').value.trim();
     const pin = document.getElementById('staff-pin-input').value.trim();
     const role = document.getElementById('staff-role-input').value;
@@ -1514,6 +1536,11 @@ function addStaffMember() {
 }
 
 function deleteStaff(id) {
+    if (currentUserRole !== 'Admin') {
+        alert("Access Restricted: Only the Admin can remove staff members.");
+        return;
+    }
+
     if (confirm("Remove this staff member?")) {
         firebase.database().ref(`stores/${currentStoreId}/staff/${id}`).remove();
     }
