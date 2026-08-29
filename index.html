@@ -92,7 +92,7 @@
                     <button class="menu-btn btn-staff" onclick="switchView('staff-view')">👥 Staff</button>
                     <button class="menu-btn btn-cust" onclick="switchView('customers-view')">📇 Customers</button>
                     <button class="menu-btn btn-branch" onclick="switchView('branches-view')">🏢 Branches</button>
-                    <button class="menu-btn btn-sec" onclick="switchView('settings-view')">⚙️ Business Settings</button>
+                    <button class="menu-btn btn-sec" onclick="switchView('settings-view')">⚙ Business Settings</button>
                     
                     <button class="menu-btn btn-logout" onclick="logout()">🚪 Logout</button>
                 </div>
@@ -153,7 +153,7 @@
 
         <div class="alert-card-box">
             <h3 style="margin-top: 0; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px;">
-                ⚠️ Inventory Health Alerts (Low Stock & Expiry Warnings)
+                ⚠ Inventory Health Alerts (Low Stock & Expiry Warnings)
             </h3>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Items running low (Stock &le; 5) or expiring within 30 days.</p>
             <div style="overflow-x: auto;">
@@ -182,6 +182,16 @@
             <span style="font-size: 13px; font-weight: bold; color: var(--text);">Customer Tier:</span>
             <button id="btn-type-retail" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #0284c7; color: #fff;" onclick="setCustomerType('Retail')">Retail Price</button>
             <button id="btn-type-wholesale" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #e2e8f0; color: #1e293b;" onclick="setCustomerType('Wholesale')">Wholesale Price</button>
+        </div>
+
+        <!-- Customer Selection (Autocomplete, defaults to Walk-In Customer) -->
+        <div style="background: #ffffff; padding: 15px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <label style="display:block; font-size: 12px; font-weight: bold; color: var(--text-muted); margin-bottom: 5px;">👤 Customer</label>
+            <div style="position: relative;">
+                <input type="text" id="pos-customer-search" oninput="filterPosCustomerSearch()" onfocus="filterPosCustomerSearch()" placeholder="Search registered customer by name or phone (leave blank for Walk-In)">
+                <div id="pos-customer-results" style="display:none; position:absolute; z-index:50; background:#fff; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; width:100%; box-shadow:0 6px 15px rgba(0,0,0,0.12); margin-top:2px;"></div>
+            </div>
+            <div id="pos-selected-customer-badge" style="margin-top: 8px; font-size: 12px; font-weight: bold; color: #166534;">Selling to: Walk-In Customer</div>
         </div>
 
         <div class="pos-grid" style="margin-top: 15px;">
@@ -544,10 +554,50 @@
         </div>
     </div>
 
+    <!-- ================= CUSTOMERS VIEW TEMPLATE ================= -->
     <div id="customers-view-template" style="display: none;">
-        <h2>Customer Management</h2>
-        <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-top: 15px;">
-            <p style="color: var(--text-muted); font-size: 14px;">Customer profiles, loyalty points, and purchase history directory.</p>
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <h2 style="margin:0;">Customer Management</h2>
+            <button class="menu-btn btn-action-primary btn-cust" style="width:auto; margin:0;" onclick="openAddCustomerModal()">+ Add New Customer</button>
+        </div>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 15px 0;">Customer profiles, store credit / debt ledger, and itemized purchase history.</p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px;">
+            <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 12px; border-radius: 8px;">
+                <span style="font-size: 11px; color: #6d28d9; font-weight: bold; text-transform: uppercase;">Total Customers</span>
+                <h3 id="cust-total-count" style="font-size: 20px; color: #5b21b6; margin-top: 4px;">0</h3>
+            </div>
+            <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 8px;">
+                <span style="font-size: 11px; color: #991b1b; font-weight: bold; text-transform: uppercase;">Total Outstanding Debt</span>
+                <h3 id="cust-total-debt" style="font-size: 20px; color: #b91c1c; margin-top: 4px;">₦0</h3>
+            </div>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px;">
+                <span style="font-size: 11px; color: #166534; font-weight: bold; text-transform: uppercase;">Customers Owing</span>
+                <h3 id="cust-owing-count" style="font-size: 20px; color: #15803d; margin-top: 4px;">0</h3>
+            </div>
+        </div>
+
+        <div style="background: #ffffff; padding: 15px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <input type="text" id="customer-search-input" oninput="filterCustomersTable()" placeholder="🔍 Search customers by name or phone...">
+        </div>
+
+        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Balance Owed</th>
+                        <th>Credit Limit</th>
+                        <th>Lifetime Spend</th>
+                        <th>Visits</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="customers-body">
+                    <tr><td colspan="7" style="text-align: center;">Loading customers...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -567,7 +617,7 @@
 
     <div id="receipt-view-template" style="display: none;">
         <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-            <button class="menu-btn btn-action-primary" style="width: auto; justify-content: center;" onclick="window.print()">🖨️ Print Receipt</button>
+            <button class="menu-btn btn-action-primary" style="width: auto; justify-content: center;" onclick="window.print()">🖨 Print Receipt</button>
             <button class="menu-btn btn-dash" style="width: auto;" onclick="downloadReceiptPDF()">📥 Download PDF</button>
             <button class="menu-btn btn-logout" style="width: auto;" onclick="switchView('reports-view')">🔙 Back to Reports</button>
         </div>
@@ -607,6 +657,50 @@
         </div>
     </div>
 
+    <!-- ================= DEBT REPAYMENT RECEIPT VIEW TEMPLATE ================= -->
+    <div id="debt-receipt-view-template" style="display: none;">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <button class="menu-btn btn-action-primary" style="width: auto; justify-content: center;" onclick="window.print()">🖨 Print Receipt</button>
+            <button class="menu-btn btn-dash" style="width: auto;" onclick="downloadDebtReceiptPDF()">📥 Download PDF</button>
+            <button class="menu-btn btn-logout" style="width: auto;" onclick="switchView('customers-view')">🔙 Back to Customers</button>
+        </div>
+        <div id="printable-debt-receipt-box" style="background: #fff; color: #000; padding: 20px; border-radius: 8px; max-width: 320px; font-family: monospace; margin: 0 auto; border: 1px solid #ccc; position: relative;">
+            <div style="text-align: center; margin-bottom: 8px;">
+                <h3 id="debt-receipt-store-name" style="margin: 0; font-size: 16px;">WISE DECISION</h3>
+                <div id="debt-receipt-store-address" style="font-size: 10px; color: #333; margin-top: 3px;"></div>
+                <div id="debt-receipt-store-phone" style="font-size: 10px; color: #333;"></div>
+            </div>
+            <hr style="border: dashed 1px #ccc;">
+            <div style="text-align:center; font-weight:bold; font-size:12px; margin: 6px 0;">DEBT REPAYMENT RECEIPT</div>
+            <div style="font-size: 11px; margin-bottom: 10px;">
+                <div><strong>PmtID:</strong> <span id="debt-receipt-tx-id">PMT-000000</span></div>
+                <div><strong>Date:</strong> <span id="debt-receipt-date">--</span></div>
+                <div><strong>Customer:</strong> <span id="debt-receipt-customer-name">--</span></div>
+                <div><strong>Cashier:</strong> <span id="debt-receipt-cashier">--</span></div>
+                <div><strong>Method:</strong> <span id="debt-receipt-method">Cash</span></div>
+            </div>
+            <hr style="border: dashed 1px #ccc;">
+            <table>
+                <tbody style="color:#000;">
+                    <tr>
+                        <td style="padding:4px 2px;">Previous Balance</td>
+                        <td style="padding:4px 2px; text-align:right;">₦<span id="debt-receipt-prev-balance">0</span></td>
+                    </tr>
+                    <tr>
+                        <td style="padding:4px 2px;">Amount Paid</td>
+                        <td style="padding:4px 2px; text-align:right;">₦<span id="debt-receipt-amount-paid">0</span></td>
+                    </tr>
+                    <tr style="border-top: 1px solid #000;">
+                        <td style="padding:4px 2px; font-weight:bold;">Remaining Balance</td>
+                        <td style="padding:4px 2px; text-align:right; font-weight:bold;">₦<span id="debt-receipt-remaining-balance">0</span></td>
+                    </tr>
+                </tbody>
+            </table>
+            <hr style="border: dashed 1px #ccc;">
+            <div style="text-align: center; margin-top: 10px; font-size: 11px; font-weight: bold;">Thank you for your payment!</div>
+        </div>
+    </div>
+
     <!-- ================= SPLIT PAYMENT MODAL ================= -->
     <div id="split-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 340px; max-height: 90vh; overflow-y: auto; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
@@ -614,6 +708,7 @@
             <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
                 Receipt: <strong id="modal-tx-id-label">--</strong>
             </div>
+            <div id="split-modal-customer-info" style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0;"></div>
             <div style="font-size: 15px; font-weight: bold; margin-bottom: 15px; color: var(--text);">
                 Total Due: ₦<span id="split-modal-total">0</span>
             </div>
@@ -621,16 +716,20 @@
                 <label>Cash Amount (₦)</label>
                 <input type="number" id="split-cash" placeholder="0" oninput="calcSplit()">
             </div>
-            <div class="form-group" style="margin-bottom: 15px;">
+            <div class="form-group">
                 <label>Transfer / POS Amount (₦)</label>
                 <input type="number" id="split-transfer" placeholder="0" oninput="calcSplit()">
+            </div>
+            <div class="form-group" id="split-credit-container" style="display:none;">
+                <label>Credit (Add to Customer Balance) (₦)</label>
+                <input type="number" id="split-credit" placeholder="0" oninput="calcSplit()">
             </div>
             <div style="margin-bottom: 15px;">
                 <input type="text" id="split-status" readonly style="width: 100%; padding: 8px; border: none; font-weight: bold; text-align: center; background: #e2e8f0; color: #334155; border-radius: 6px;" value="Status: Pending">
             </div>
             <div style="display: flex; gap: 10px;" id="split-modal-buttons-container">
                 <!-- Updated button to invoke completeSplitCheckout() with corrected ID and label -->
-                <button id="dynamic-accept-print-btn" class="menu-btn btn-action-primary btn-pos" style="margin-bottom:0; justify-content: center;" onclick="completeSplitCheckout()" disabled>Accept Payment & Print Receipt 🖨️</button>
+                <button id="dynamic-accept-print-btn" class="menu-btn btn-action-primary btn-pos" style="margin-bottom:0; justify-content: center;" onclick="completeSplitCheckout()" disabled>Accept Payment & Print Receipt 🖨</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeSplitModal()">Cancel</button>
             </div>
         </div>
@@ -647,6 +746,146 @@
             <div style="display: flex; gap: 10px;">
                 <button class="menu-btn btn-action-primary btn-dash" style="margin-bottom:0; justify-content: center;" onclick="executeManualLookup()">Search</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeManualLookupModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= ADD / EDIT CUSTOMER MODAL ================= -->
+    <div id="customer-form-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 380px; max-height: 90vh; overflow-y: auto; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h3 id="customer-form-title" style="margin-top:0; color: var(--text);">Add New Customer</h3>
+            <input type="hidden" id="edit-customer-id" value="">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="cust-name" placeholder="Customer name">
+            </div>
+            <div class="form-group">
+                <label>Phone Number</label>
+                <input type="text" id="cust-phone" placeholder="e.g. 08012345678">
+            </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="text" id="cust-email" placeholder="e.g. name@email.com">
+            </div>
+            <div class="form-group">
+                <label>Physical Address</label>
+                <textarea id="cust-address" rows="2" placeholder="Customer's address"></textarea>
+            </div>
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label>Credit Limit (₦)</label>
+                <input type="number" id="cust-credit-limit" placeholder="0">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="menu-btn btn-action-primary btn-cust" style="margin-bottom:0; justify-content: center;" onclick="saveCustomer()">Save Customer</button>
+                <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeAddCustomerModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= CUSTOMER PROFILE MODAL ================= -->
+    <div id="customer-profile-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 620px; max-height: 92vh; overflow-y: auto; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 10px;">
+                <h3 id="profile-cust-name" style="margin:0; color: var(--text); font-size: 18px;">Customer Name</h3>
+                <button class="menu-btn btn-logout" style="width:auto; margin:0; padding: 6px 12px;" onclick="closeCustomerProfileModal()">✕ Close</button>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 15px; line-height:1.6;">
+                📞 <span id="profile-cust-phone">N/A</span> &nbsp;|&nbsp;
+                ✉ <span id="profile-cust-email">N/A</span><br>
+                📍 <span id="profile-cust-address">N/A</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: #991b1b; font-weight: bold; text-transform: uppercase;">Balance Owed</span>
+                    <h4 id="profile-cust-balance" style="font-size: 16px; color: #b91c1c; margin: 4px 0 0 0;">₦0</h4>
+                </div>
+                <div style="background: #eff6ff; border: 1px solid #bfdbfe; padding: 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: #1e40af; font-weight: bold; text-transform: uppercase;">Credit Limit</span>
+                    <h4 id="profile-cust-limit" style="font-size: 16px; color: #1d4ed8; margin: 4px 0 0 0;">₦0</h4>
+                </div>
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: #166534; font-weight: bold; text-transform: uppercase;">Lifetime Spend</span>
+                    <h4 id="profile-cust-spent" style="font-size: 16px; color: #15803d; margin: 4px 0 0 0;">₦0</h4>
+                </div>
+                <div style="background: #f5f3ff; border: 1px solid #ddd6fe; padding: 10px; border-radius: 8px;">
+                    <span style="font-size: 10px; color: #6d28d9; font-weight: bold; text-transform: uppercase;">Visits</span>
+                    <h4 id="profile-cust-visits" style="font-size: 16px; color: #5b21b6; margin: 4px 0 0 0;">0</h4>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button id="profile-record-payment-btn" class="menu-btn btn-action-primary" style="display:none; width:auto; margin:0; background:#16a34a;" onclick="openDebtPaymentModal()">💵 Record Debt Payment</button>
+                <button class="menu-btn btn-pos" style="width:auto; margin:0;" onclick="startSaleForCustomer()">🛒 New Sale for this Customer</button>
+            </div>
+
+            <h4 style="font-size: 14px; color: var(--text); margin-bottom: 8px;">💳 Credit / Debt Ledger</h4>
+            <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow-x: auto; margin-bottom: 20px; max-height: 220px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Balance After</th>
+                            <th>Note</th>
+                        </tr>
+                    </thead>
+                    <tbody id="profile-ledger-body">
+                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading ledger...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 style="font-size: 14px; color: var(--text); margin-bottom: 8px;">🧾 Purchase History Timeline</h4>
+            <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow-x: auto; max-height: 220px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Receipt ID</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="profile-purchases-body">
+                        <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading purchase history...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= DEBT PAYMENT MODAL ================= -->
+    <div id="debt-payment-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1100; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 340px; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0; color: var(--text);">Record Debt Payment</h3>
+            <input type="hidden" id="debt-payment-customer-id" value="">
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
+                Customer: <strong id="debt-payment-cust-name">--</strong>
+            </div>
+            <div style="font-size: 14px; font-weight: bold; margin-bottom: 15px; color: var(--text);">
+                Current Balance: <span id="debt-payment-current-balance">₦0</span>
+            </div>
+            <div class="form-group">
+                <label>Payment Amount (₦)</label>
+                <input type="number" id="debt-payment-amount" placeholder="0" oninput="updateDebtPaymentPreview()">
+            </div>
+            <div class="form-group">
+                <label>Payment Method</label>
+                <select id="debt-payment-method">
+                    <option value="Cash">Cash</option>
+                    <option value="Transfer">Transfer / POS</option>
+                </select>
+            </div>
+            <div style="font-size: 13px; margin-bottom: 10px; color: var(--text);">
+                Remaining Balance After Payment: <strong id="debt-payment-remaining-preview">₦0</strong>
+            </div>
+            <div id="debt-payment-warning" style="display:none; font-size: 12px; color: #b91c1c; background:#fef2f2; border:1px solid #fecaca; padding:8px; border-radius:6px; margin-bottom: 10px;"></div>
+            <div style="display: flex; gap: 10px;">
+                <button id="debt-payment-confirm-btn" class="menu-btn btn-action-primary" style="margin-bottom:0; justify-content: center; background:#16a34a;" onclick="processDebtPayment()">Confirm & Print Receipt 🖨</button>
+                <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeDebtPaymentModal()">Cancel</button>
             </div>
         </div>
     </div>
