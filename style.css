@@ -48,7 +48,6 @@ body {
 .btn-logout { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; border-left: 4px solid #dc2626; justify-content: center; }
 .btn-logout:hover { background: #fecaca; color: #b91c1c; }
 
-/* Added Complete Sale Button Styles */
 .btn-complete-sale {
     width: 100%;
     background-color: #16a34a;
@@ -154,7 +153,6 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     background: #94a3b8 !important;
 }
 
-/* Split Payment Modal Constraints to keep buttons visible */
 #split-modal > div {
     max-height: 85vh;
     display: flex;
@@ -166,12 +164,9 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     body * { display: none !important; }
     #printable-receipt-box, #printable-receipt-box * { display: block !important; visibility: visible !important; }
     
-    #printable-receipt-box div, #printable-receipt-box table, #printable-receipt-box tr, #printable-receipt-box td, #printable-receipt-box th {
-        display: block !important;
-        width: 100% !important;
-    }
-    #printable-receipt-box tr { display: flex !important; justify-content: space-between; }
-    #printable-receipt-box td, #printable-receipt-box th { display: inline-block !important; width: auto !important; }
+    #printable-receipt-box table { display: table !important; width: 100% !important; }
+    #printable-receipt-box tr { display: table-row !important; }
+    #printable-receipt-box th, #printable-receipt-box td { display: table-cell !important; }
 
     #printable-receipt-box {
         position: absolute; 
