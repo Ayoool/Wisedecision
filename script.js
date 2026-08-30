@@ -24,12 +24,18 @@ try {
 
 // ==================== GLOBAL APP STATE ====================
 let currentStoreId = null;
-let currentBranch = "Main";
+let currentBranch = "main";           // Branch ID the logged-in user is currently operating in
 let currentUserRole = "Admin";
-let inventoryCache = {};
+let inventoryCache = {};              // { branchId: { productId: item } }  (nested, per-branch)
 let currentCart = [];
 let currentActiveOrder = null;
 let currentCustomerType = "Retail"; // Default customer type
+
+// ==================== BRANCH MODULE STATE ====================
+let branchesCache = {};               // { branchId: { name, phone, address, isMain, createdAt } }
+let currentInventoryBranchFilter = "main"; // "all" (Admin aggregate view) or a specific branchId
+let currentReportBranchFilter = "all";     // "all" or a specific branchId, Admin-only reports scope
+let currentActiveTransfer = null;
 
 // Customer module state
 let customersCache = {};
@@ -98,7 +104,7 @@ function syncOfflineQueueToFirebase() {
         if (queue.length > 0) {
             let targetPath = key === 'offline_pending_orders' ? 
                 `stores/${currentStoreId}/pendingOrders` : 
-                `stores/${currentStoreId}/inventory`;
+                `stores/${currentStoreId}/inventory/${currentBranch}`;
             
             queue.forEach(item => {
                 let pushRef = key === 'offline_pending_orders' ? 
@@ -118,7 +124,7 @@ function syncOfflineQueueToFirebase() {
 function switchView(viewId) {
     // Accountants and Cashiers can view the accountant queue, receipt view, business settings,
     // POS view, and customers (to record debt repayments) — but never staff management,
-    // inventory, reports, expenses, or branches.
+    // inventory, reports, expenses, transfers, or branches.
     if (currentUserRole === 'Accountant' || currentUserRole === 'Cashier') {
         const allowedAccountantViews = [
             'accountant-view', 'accountant-view-template', 
@@ -129,7 +135,7 @@ function switchView(viewId) {
             'debt-receipt-view', 'debt-receipt-view-template'
         ];
         if (!allowedAccountantViews.includes(viewId)) {
-            alert(`Access Restricted: ${currentUserRole}s are permitted to accept payments, manage the queue, print receipts, and manage customers.`);
+            alert(`Access Restricted: ${currentUserRole}s are permitted to accept payments, manage the queue, print receipts, and manage customers for their assigned branch.`);
             return;
         }
     }
@@ -139,7 +145,7 @@ function switchView(viewId) {
     // staff-role-input dropdown), not "Staff" — the old check here never matched
     // anything real, which is why standard workers previously saw the full sidebar.
     if (currentUserRole === 'Standard Worker' && viewId !== 'pos-view' && viewId !== 'pos-view-template') {
-        alert("Access Restricted: Standard workers are only permitted to make sales.");
+        alert("Access Restricted: Standard workers are only permitted to make sales for their assigned branch.");
         return;
     }
 
@@ -164,22 +170,43 @@ function switchView(viewId) {
             if (viewId === 'pos-view') {
                 loadPosInventoryDropdown();
                 updatePosCustomerBadge();
+                const posBranchLabel = document.getElementById('pos-branch-label');
+                if (posBranchLabel) posBranchLabel.textContent = branchNameOf(currentBranch);
             }
-            if (viewId === 'inventory-view') loadInventoryTable();            
-            if (viewId === 'accountant-view') loadPendingOrdersQueue();
-            if (viewId === 'staff-view') loadStaffTable();
+            if (viewId === 'inventory-view') {
+                populateInventoryBranchFilter();
+                loadInventoryTable();
+            }
+            if (viewId === 'accountant-view') {
+                loadPendingOrdersQueue();
+                const accBranchLabel = document.getElementById('accountant-branch-label');
+                if (accBranchLabel) accBranchLabel.textContent = branchNameOf(currentBranch);
+            }
+            if (viewId === 'staff-view') {
+                populateStaffBranchDropdown();
+                loadStaffTable();
+            }
             if (viewId === 'reports-view' || viewId === 'sales-history-view') {
+                populateReportsBranchFilter();
                 loadPastSalesHistory();
                 loadProfitAndLossModule();
             }
             if (viewId === 'settings-view') loadBusinessSettings();
             if (viewId === 'expenses-view') {
+                const expBranchLabel = document.getElementById('expenses-branch-label');
+                if (expBranchLabel) expBranchLabel.textContent = branchNameOf(currentBranch);
                 loadExpensesTable();
                 loadProfitAndLossModule();
             }
             if (viewId === 'customers-view') {
                 renderCustomersTable(customersCache);
                 updateCustomerStatsUI();
+            }
+            if (viewId === 'branches-view') {
+                loadBranchesTable();
+            }
+            if (viewId === 'transfers-view') {
+                loadTransfersView();
             }
         } else {
             const fullView = document.getElementById(viewId);
@@ -229,6 +256,92 @@ function adjustSidebarForRole(role) {
     });
 }
 
+// ==================== BRANCH HELPERS ====================
+function branchNameOf(branchId) {
+    if (!branchId) return "Main";
+    if (branchesCache[branchId]) return branchesCache[branchId].name || branchId;
+    return branchId === 'main' ? 'Main' : branchId;
+}
+
+// Loads all branches for the current store, seeds a default "Main" branch if none
+// exist yet (covers stores registered before this module existed), and refreshes
+// every branch-aware UI element currently on screen.
+function loadBranchesCache(afterLoadCallback) {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/branches`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            const seedBranch = { name: "Main", phone: "", address: "", isMain: true, createdAt: new Date().toISOString() };
+            firebase.database().ref(`stores/${currentStoreId}/branches/main`).set(seedBranch).then(() => {
+                branchesCache = { main: seedBranch };
+                finishBranchLoad(afterLoadCallback);
+            });
+            return;
+        }
+
+        branchesCache = {};
+        snapshot.forEach(child => { branchesCache[child.key] = child.val(); });
+        finishBranchLoad(afterLoadCallback);
+    });
+}
+
+function finishBranchLoad(afterLoadCallback) {
+    updateBranchBadge();
+    if (afterLoadCallback) afterLoadCallback();
+
+    // Keep it live so Admins adding/renaming branches reflect instantly across the app
+    firebase.database().ref(`stores/${currentStoreId}/branches`).on('value', snapshot => {
+        branchesCache = {};
+        snapshot.forEach(child => { branchesCache[child.key] = child.val(); });
+        updateBranchBadge();
+        populateInventoryBranchFilter();
+        populateReportsBranchFilter();
+        populateStaffBranchDropdown();
+    });
+}
+
+// Renders the sidebar branch indicator. Admin gets a live switcher (to change which
+// branch's POS/Inventory/Dashboard they are currently operating in); branch-locked
+// staff just see a read-only badge for their assigned branch.
+function updateBranchBadge() {
+    const container = document.getElementById('branch-badge-container');
+    if (!container) return;
+
+    if (currentUserRole === 'Admin' && Object.keys(branchesCache).length > 1) {
+        let options = Object.keys(branchesCache).map(id =>
+            `<option value="${id}" ${id === currentBranch ? 'selected' : ''}>${branchesCache[id].name}</option>`
+        ).join('');
+        container.innerHTML = `
+            <label style="font-size:10px; font-weight:bold; color:#166534; display:block; margin-bottom:2px;">Operating Branch</label>
+            <select id="branch-badge-select" onchange="switchCurrentBranch(this.value)" style="font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; border: 1px solid #86efac; background:#dcfce7; color:#166534;">
+                ${options}
+            </select>
+        `;
+    } else {
+        container.innerHTML = `<span id="branch-badge" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); color: #166534; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; display: inline-block; border: 1px solid #86efac;">Branch: ${branchNameOf(currentBranch)}</span>`;
+    }
+}
+
+// Admin switches which branch they're currently "standing in" — affects POS, live
+// Inventory default scope, Dashboard metrics, and the Accountant queue.
+function switchCurrentBranch(branchId) {
+    currentBranch = branchId;
+    currentInventoryBranchFilter = branchId;
+    currentCart = [];
+    clearPosCustomer();
+    updateBranchBadge();
+    // Re-render whichever workspace view is currently open so it reflects the new branch
+    const workspace = document.getElementById('workspace-content');
+    if (workspace && workspace.innerHTML.trim() !== '') {
+        // Detect current view by a distinctive element and re-run its loader
+        if (document.getElementById('pos-product-select')) switchView('pos-view');
+        else if (document.getElementById('inventory-body')) switchView('inventory-view');
+        else if (document.getElementById('dashboard-alerts-tbody')) switchView('main-dashboard-view');
+        else if (document.getElementById('accountant-queue-body')) switchView('accountant-view');
+        else if (document.getElementById('expenses-body')) switchView('expenses-view');
+    }
+}
+
 // ==================== AUTHENTICATION & REGISTRATION ====================
 function handleStoreLogin() {
     const storeId = document.getElementById('store-id-input').value.trim().toLowerCase();
@@ -276,10 +389,12 @@ function handleStoreLogin() {
         if (pin === storeData.adminPin) {
             currentStoreId = storeId;
             currentUserRole = "Admin";
+            currentBranch = "main";
+            currentInventoryBranchFilter = "main";
             document.getElementById('dashboard-store-title').textContent = storeData.businessName || "";
             document.getElementById('user-role-label').textContent = "Admin (Owner)";
             adjustSidebarForRole("Admin");
-            switchView('main-dashboard-view');
+            loadBranchesCache(() => switchView('main-dashboard-view'));
             syncOfflineQueueToFirebase();
             subscribeCustomersCache();
             return;
@@ -293,10 +408,12 @@ function handleStoreLogin() {
                     foundStaff = true;
                     currentStoreId = storeId;
                     currentUserRole = staff.role;
+                    currentBranch = staff.branchId || "main";
+                    currentInventoryBranchFilter = currentBranch;
                     document.getElementById('dashboard-store-title').textContent = storeData.businessName || "";
                     document.getElementById('user-role-label').textContent = `${staff.name} (${staff.role})`;
                     adjustSidebarForRole(staff.role);
-                    switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view');
+                    loadBranchesCache(() => switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view'));
                     syncOfflineQueueToFirebase();
                     subscribeCustomersCache();
                 }
@@ -347,6 +464,15 @@ function registerBusinessAccount() {
             status: "active",
             createdAt: new Date().toISOString()
         }).then(() => {
+            // Seed the default "Main" branch so inventory/POS/reports have somewhere to live from day one
+            return firebase.database().ref(`stores/${storeId}/branches/main`).set({
+                name: "Main",
+                phone,
+                address,
+                isMain: true,
+                createdAt: new Date().toISOString()
+            });
+        }).then(() => {
             alert("Business registered successfully! You can now log in.");
             switchView('login-view');
         });
@@ -354,12 +480,19 @@ function registerBusinessAccount() {
 }
 
 function logout() {
+    if (currentStoreId) {
+        firebase.database().ref(`stores/${currentStoreId}/branches`).off();
+    }
     currentStoreId = null;
     currentUserRole = "Admin";
+    currentBranch = "main";
+    currentInventoryBranchFilter = "main";
+    currentReportBranchFilter = "all";
     currentCart = [];
     currentSelectedCustomer = null;
     currentProfileCustomerId = null;
     customersCache = {};
+    branchesCache = {};
     adjustSidebarForRole("Admin");
     switchView('login-view');
 }
@@ -446,8 +579,13 @@ function deleteBusinessAccount(storeId) {
 }
 
 // ==================== DASHBOARD METRICS & ALERTS ====================
+// Scoped to currentBranch — the branch the logged-in user (or Admin, via the sidebar
+// switcher) is currently operating in.
 function loadDashboardMetrics() {
     if (!currentStoreId) return;
+
+    const branchLabelEl = document.getElementById('dash-branch-label');
+    if (branchLabelEl) branchLabelEl.textContent = branchNameOf(currentBranch);
     
     firebase.database().ref(`stores/${currentStoreId}/transactions`).once('value').then(snapshot => {
         let todaySales = 0;
@@ -455,7 +593,7 @@ function loadDashboardMetrics() {
         
         snapshot.forEach(child => {
             const tx = child.val();
-            if (new Date(tx.date).toDateString() === todayStr) {
+            if ((tx.branchId || 'main') === currentBranch && new Date(tx.date).toDateString() === todayStr) {
                 todaySales += (Number(tx.totalAmount) || 0);
             }
         });
@@ -464,7 +602,7 @@ function loadDashboardMetrics() {
         if (salesEl) salesEl.textContent = '₦' + todaySales.toLocaleString();
     });
 
-    firebase.database().ref(`stores/${currentStoreId}/inventory`).once('value').then(snapshot => {
+    firebase.database().ref(`stores/${currentStoreId}/inventory/${currentBranch}`).once('value').then(snapshot => {
         const tbody = document.getElementById('dashboard-alerts-tbody');
         if (!tbody) return;
         
@@ -504,72 +642,196 @@ function loadDashboardMetrics() {
     });
 }
 
-// ==================== BULLETPROOF INVENTORY LOADER ====================
+// ==================== BULLETPROOF INVENTORY LOADER (branch-aware) ====================
+// inventoryCache is nested: { branchId: { productId: item } }. We always listen to the
+// whole /inventory node (all branches) so an Admin can flip between "All Branches"
+// (aggregated, read-only) and any single branch (full CRUD) without re-subscribing.
 function loadInventoryTable() {
     if (!currentStoreId) return;
     
     firebase.database().ref(`stores/${currentStoreId}/inventory`).on('value', snapshot => {
-        const tbody = document.getElementById('inventory-body');
-        if (!tbody) return;
-        
-        tbody.innerHTML = '';
         inventoryCache = {};
+        snapshot.forEach(branchChild => {
+            const branchId = branchChild.key;
+            inventoryCache[branchId] = {};
+            branchChild.forEach(prodChild => {
+                const item = prodChild.val();
+                if (item && typeof item === 'object') {
+                    inventoryCache[branchId][prodChild.key] = item;
+                }
+            });
+        });
+        renderInventoryTable();
+    });
+}
 
-        snapshot.forEach(child => {
-            const id = child.key;
-            const item = child.val();
-            if (!item || typeof item !== 'object') return;
-            
-            inventoryCache[id] = item;
+function populateInventoryBranchFilter() {
+    const select = document.getElementById('inventory-branch-filter');
+    if (!select) return;
 
-            const pName = item.name || item.productName || item.title || item.itemName || 'Unnamed Item';
-            const cPrice = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
-            const rPrice = item.price !== undefined ? item.price : (item.retailPrice || 0);
-            const wPrice = item.wholesalePrice !== undefined ? item.wholesalePrice : 0;
-            const pStock = item.stock !== undefined ? item.stock : (item.stockQty !== undefined ? item.stockQty : 0);
-            const pExpiry = item.expiry || item.expiryDate || 'N/A';
+    let options = '';
+    if (currentUserRole === 'Admin') {
+        options += `<option value="all" ${currentInventoryBranchFilter === 'all' ? 'selected' : ''}>🌐 All Branches (combined, view-only)</option>`;
+        Object.keys(branchesCache).forEach(id => {
+            options += `<option value="${id}" ${currentInventoryBranchFilter === id ? 'selected' : ''}>${branchesCache[id].name}</option>`;
+        });
+        select.disabled = false;
+    } else {
+        // Non-admin staff are locked to their assigned branch
+        options = `<option value="${currentBranch}" selected>${branchNameOf(currentBranch)}</option>`;
+        select.disabled = true;
+        currentInventoryBranchFilter = currentBranch;
+    }
+    select.innerHTML = options;
+}
 
+function onInventoryBranchFilterChange() {
+    const select = document.getElementById('inventory-branch-filter');
+    if (!select) return;
+    currentInventoryBranchFilter = select.value;
+    resetInventoryForm();
+    renderInventoryTable();
+}
+
+function renderInventoryTable() {
+    const tbody = document.getElementById('inventory-body');
+    if (!tbody) return;
+
+    const modeNote = document.getElementById('inventory-mode-note');
+    const formCard = document.getElementById('inventory-form-card');
+    const isAggregate = currentInventoryBranchFilter === 'all';
+
+    if (modeNote) modeNote.style.display = isAggregate ? 'inline-block' : 'none';
+    if (formCard) formCard.style.display = isAggregate ? 'none' : 'block';
+
+    tbody.innerHTML = '';
+
+    if (isAggregate) {
+        // Combined enterprise view: sum stock for matching product names across all branches
+        const combined = {}; // name -> { costPrice, price, wholesalePrice, stock, expiry, branches: {branchName: stock} }
+        Object.keys(inventoryCache).forEach(branchId => {
+            const branchName = branchNameOf(branchId);
+            Object.values(inventoryCache[branchId] || {}).forEach(item => {
+                const name = item.name || item.productName || 'Unnamed Item';
+                const key = name.toLowerCase().trim();
+                if (!combined[key]) {
+                    combined[key] = { name, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                }
+                const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
+                combined[key].stock += Number(stock) || 0;
+                combined[key].branches[branchName] = (combined[key].branches[branchName] || 0) + (Number(stock) || 0);
+            });
+        });
+
+        const keys = Object.keys(combined);
+        keys.forEach(key => {
+            const item = combined[key];
+            const branchBreakdown = Object.keys(item.branches).map(bn => `${bn}: ${item.branches[bn]}`).join(', ');
             tbody.innerHTML += `
                 <tr>
-                    <td>${pName}</td>
-                    <td>₦${Number(cPrice).toLocaleString()}</td>
-                    <td>₦${Number(rPrice).toLocaleString()}</td>
-                    <td>₦${Number(wPrice).toLocaleString()}</td>
-                    <td>${pStock}</td>
-                    <td>${pExpiry}</td>
-                    <td>
-                        <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${id}')">Edit</button>
-                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${id}')">Delete</button>
-                    </td>
+                    <td>${item.name}</td>
+                    <td>₦${Number(item.costPrice).toLocaleString()}</td>
+                    <td>₦${Number(item.price).toLocaleString()}</td>
+                    <td>₦${Number(item.wholesalePrice).toLocaleString()}</td>
+                    <td>${item.stock} <br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
+                    <td>${item.expiry}</td>
+                    <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                 </tr>
             `;
         });
 
-        if (snapshot.numChildren() === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in inventory. Add your first item above!</td></tr>`;
+        if (keys.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in any branch yet.</td></tr>`;
         }
+        return;
+    }
+
+    const branchId = currentInventoryBranchFilter;
+    const branchItems = inventoryCache[branchId] || {};
+    const ids = Object.keys(branchItems);
+
+    ids.forEach(id => {
+        const item = branchItems[id];
+        const pName = item.name || item.productName || item.title || item.itemName || 'Unnamed Item';
+        const cPrice = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
+        const rPrice = item.price !== undefined ? item.price : (item.retailPrice || 0);
+        const wPrice = item.wholesalePrice !== undefined ? item.wholesalePrice : 0;
+        const pStock = item.stock !== undefined ? item.stock : (item.stockQty !== undefined ? item.stockQty : 0);
+        const pExpiry = item.expiry || item.expiryDate || 'N/A';
+
+        tbody.innerHTML += `
+            <tr>
+                <td>${pName}</td>
+                <td>₦${Number(cPrice).toLocaleString()}</td>
+                <td>₦${Number(rPrice).toLocaleString()}</td>
+                <td>₦${Number(wPrice).toLocaleString()}</td>
+                <td>${pStock}</td>
+                <td>${pExpiry}</td>
+                <td>
+                    <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
+                    <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${branchId}','${id}')">Delete</button>
+                </td>
+            </tr>
+        `;
     });
+
+    if (ids.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in ${branchNameOf(branchId)}. Add your first item above!</td></tr>`;
+    }
 }
 
 function filterInventoryTable() {
     const query = (document.getElementById('inventory-search-input')?.value || '').toLowerCase().trim();
+    if (!query) {
+        renderInventoryTable();
+        return;
+    }
+
     const tbody = document.getElementById('inventory-body');
     if (!tbody) return;
-
     tbody.innerHTML = '';
+
+    const isAggregate = currentInventoryBranchFilter === 'all';
     let matchCount = 0;
 
-    Object.keys(inventoryCache).forEach(id => {
-        const item = inventoryCache[id];
-        const pName = item.name || item.productName || 'Unnamed Item';
-        const cPrice = item.costPrice || 0;
-        const rPrice = item.price || item.retailPrice || 0;
-        const wPrice = item.wholesalePrice || 0;
-        const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
-        const pExpiry = item.expiry || item.expiryDate || 'N/A';
-
-        if (pName.toLowerCase().includes(query)) {
+    if (isAggregate) {
+        Object.keys(inventoryCache).forEach(branchId => {
+            const branchName = branchNameOf(branchId);
+            Object.values(inventoryCache[branchId] || {}).forEach(item => {
+                const pName = item.name || item.productName || 'Unnamed Item';
+                if (!pName.toLowerCase().includes(query)) return;
+                matchCount++;
+                const cPrice = item.costPrice || 0;
+                const rPrice = item.price || item.retailPrice || 0;
+                const wPrice = item.wholesalePrice || 0;
+                const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
+                const pExpiry = item.expiry || item.expiryDate || 'N/A';
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${pName} <br><small style="color:var(--text-muted);">${branchName}</small></td>
+                        <td>₦${Number(cPrice).toLocaleString()}</td>
+                        <td>₦${Number(rPrice).toLocaleString()}</td>
+                        <td>₦${Number(wPrice).toLocaleString()}</td>
+                        <td>${pStock}</td>
+                        <td>${pExpiry}</td>
+                        <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
+                    </tr>
+                `;
+            });
+        });
+    } else {
+        const branchId = currentInventoryBranchFilter;
+        const branchItems = inventoryCache[branchId] || {};
+        Object.keys(branchItems).forEach(id => {
+            const item = branchItems[id];
+            const pName = item.name || item.productName || 'Unnamed Item';
+            if (!pName.toLowerCase().includes(query)) return;
             matchCount++;
+            const cPrice = item.costPrice || 0;
+            const rPrice = item.price || item.retailPrice || 0;
+            const wPrice = item.wholesalePrice || 0;
+            const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
+            const pExpiry = item.expiry || item.expiryDate || 'N/A';
             tbody.innerHTML += `
                 <tr>
                     <td>${pName}</td>
@@ -579,27 +841,34 @@ function filterInventoryTable() {
                     <td>${pStock}</td>
                     <td>${pExpiry}</td>
                     <td>
-                        <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${id}')">Edit</button>
-                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${id}')">Delete</button>
+                        <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
+                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${branchId}','${id}')">Delete</button>
                     </td>
                 </tr>
             `;
-        }
-    });
+        });
+    }
 
     if (matchCount === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`;
     }
 }
 
-// ==================== BULLETPROOF PRODUCT SAVER ====================
+// ==================== BULLETPROOF PRODUCT SAVER (branch-scoped) ====================
 function saveProduct() {
     if (!currentStoreId) {
         alert("Error: No active Store ID found. Please log out and log back in.");
         return;
     }
 
+    if (currentInventoryBranchFilter === 'all') {
+        alert("Please select a specific branch before adding or editing products — stock is tracked per branch.");
+        return;
+    }
+
+    const targetBranch = currentInventoryBranchFilter;
     const editId = document.getElementById('edit-product-id').value;
+    const editBranch = document.getElementById('edit-product-branch').value || targetBranch;
     const name = document.getElementById('inv-name').value.trim();
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
@@ -622,39 +891,38 @@ function saveProduct() {
         stock, 
         stockQty: stock,
         expiry,
-        expiryDate: expiry
+        expiryDate: expiry,
+        branchId: editId ? editBranch : targetBranch
     };
 
-    const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory`);
+    const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${editId ? editBranch : targetBranch}`);
 
     if (editId) {
         invRef.child(editId).update(prodData).then(() => {
             alert("Product updated successfully!");
             resetInventoryForm();
-            loadInventoryTable();
         }).catch(err => {
             alert("Failed to update product: " + err.message);
         });
     } else {
         const newRef = invRef.push();
         newRef.set(prodData).then(() => {
-            alert("Product saved successfully to cloud!");
+            alert(`Product saved successfully to ${branchNameOf(targetBranch)}!`);
             resetInventoryForm();
-            loadInventoryTable();
         }).catch(err => {
-            saveRecordLocallyOrCloud('offline_inventory_queue', prodData, `stores/${currentStoreId}/inventory`, () => {
+            saveRecordLocallyOrCloud('offline_inventory_queue', prodData, `stores/${currentStoreId}/inventory/${targetBranch}`, () => {
                 resetInventoryForm();
-                loadInventoryTable();
             });
         });
     }
 }
 
-function editProduct(id) {
-    const item = inventoryCache[id];
+function editProduct(branchId, id) {
+    const item = inventoryCache[branchId] && inventoryCache[branchId][id];
     if (!item) return;
 
     document.getElementById('edit-product-id').value = id;
+    document.getElementById('edit-product-branch').value = branchId;
     document.getElementById('inv-name').value = item.name || item.productName || '';
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
@@ -662,13 +930,14 @@ function editProduct(id) {
     document.getElementById('inv-stock').value = item.stock !== undefined ? item.stock : (item.stockQty || '');
     document.getElementById('inv-expiry').value = item.expiry || item.expiryDate || '';
     
-    document.getElementById('inv-form-title').textContent = "Edit Product";
+    document.getElementById('inv-form-title').textContent = `Edit Product (${branchNameOf(branchId)})`;
     document.getElementById('save-product-btn').textContent = "Update Product";
     document.getElementById('cancel-edit-btn').style.display = 'block';
 }
 
 function resetInventoryForm() {
     document.getElementById('edit-product-id').value = '';
+    document.getElementById('edit-product-branch').value = '';
     document.getElementById('inv-name').value = '';
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
@@ -681,13 +950,13 @@ function resetInventoryForm() {
     document.getElementById('cancel-edit-btn').style.display = 'none';
 }
 
-function deleteProduct(id) {
+function deleteProduct(branchId, id) {
     if (confirm("Are you sure you want to delete this product?")) {
-        firebase.database().ref(`stores/${currentStoreId}/inventory/${id}`).remove();
+        firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}/${id}`).remove();
     }
 }
 
-// ==================== POS & CART REGISTER ====================
+// ==================== POS & CART REGISTER (branch-scoped) ====================
 function setCustomerType(type) {
     currentCustomerType = type;
     const retailBtn = document.getElementById('btn-type-retail');
@@ -709,20 +978,22 @@ function setCustomerType(type) {
     onPosProductChange();
 }
 
+// POS always sells from the logged-in user's active branch (currentBranch) — never
+// the aggregate "All Branches" view, since a sale must draw down one physical location's stock.
 function loadPosInventoryDropdown() {
     if (!currentStoreId) return;
     
-    firebase.database().ref(`stores/${currentStoreId}/inventory`).once('value').then(snapshot => {
+    firebase.database().ref(`stores/${currentStoreId}/inventory/${currentBranch}`).once('value').then(snapshot => {
         const select = document.getElementById('pos-product-select');
         if (!select) return;
         
         select.innerHTML = '<option value="">-- Choose Inventory Item --</option>';
-        inventoryCache = {};
+        if (!inventoryCache[currentBranch]) inventoryCache[currentBranch] = {};
 
         snapshot.forEach(child => {
             const id = child.key;
             const item = child.val();
-            inventoryCache[id] = item;
+            inventoryCache[currentBranch][id] = item;
             
             const pName = item.name || item.productName || 'Unnamed Item';
             const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
@@ -740,9 +1011,10 @@ function filterPosInventory() {
     if (!select) return;
 
     select.innerHTML = '<option value="">-- Choose Inventory Item --</option>';
+    const branchItems = inventoryCache[currentBranch] || {};
     
-    Object.keys(inventoryCache).forEach(id => {
-        const item = inventoryCache[id];
+    Object.keys(branchItems).forEach(id => {
+        const item = branchItems[id];
         const pName = item.name || item.productName || 'Unnamed Item';
         const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
         const rPrice = item.price || item.retailPrice || 0;
@@ -757,8 +1029,9 @@ function filterPosInventory() {
 function onPosProductChange() {
     const id = document.getElementById('pos-product-select').value;
     const priceInput = document.getElementById('pos-custom-price');
-    if (id && inventoryCache[id]) {
-        const item = inventoryCache[id];
+    const branchItems = inventoryCache[currentBranch] || {};
+    if (id && branchItems[id]) {
+        const item = branchItems[id];
         const rPrice = item.price || item.retailPrice || 0;
         const wPrice = item.wholesalePrice || rPrice;
 
@@ -772,13 +1045,14 @@ function addToCart() {
     const id = document.getElementById('pos-product-select').value;
     const qty = parseInt(document.getElementById('pos-qty').value) || 1;
     const customPrice = parseFloat(document.getElementById('pos-custom-price').value);
+    const branchItems = inventoryCache[currentBranch] || {};
 
-    if (!id || !inventoryCache[id]) {
+    if (!id || !branchItems[id]) {
         alert("Please select a valid product.");
         return;
     }
 
-    const item = inventoryCache[id];
+    const item = branchItems[id];
     const pName = item.name || item.productName || 'Unnamed Item';
     const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     const rPrice = item.price || item.retailPrice || 0;
@@ -842,7 +1116,8 @@ function renderCart() {
 
 function increaseQty(index) {
     const item = currentCart[index];
-    const stockItem = inventoryCache[item.id];
+    const branchItems = inventoryCache[currentBranch] || {};
+    const stockItem = branchItems[item.id];
     const pStock = stockItem ? (stockItem.stock !== undefined ? stockItem.stock : (stockItem.stockQty || 0)) : 0;
 
     if (stockItem && item.qty + 1 > pStock) {
@@ -891,6 +1166,7 @@ function submitOrderForAccountant() {
         soldBy: activeStaffName,
         date: new Date().toISOString(),
         status: 'Pending Verification',
+        branchId: currentBranch,
         customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
         customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
     };
@@ -927,6 +1203,7 @@ function processDirectPosPayment() {
         soldBy: activeStaffName,
         date: new Date().toISOString(),
         status: 'Pending Verification',
+        branchId: currentBranch,
         customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
         customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
     };
@@ -941,7 +1218,7 @@ function processDirectPosPayment() {
     });
 }
 
-// ==================== ACCOUNTANT & QUEUE VERIFICATION ====================
+// ==================== ACCOUNTANT & QUEUE VERIFICATION (branch-scoped) ====================
 function loadPendingOrdersQueue() {
     if (!currentStoreId) return;
 
@@ -957,6 +1234,10 @@ function loadPendingOrdersQueue() {
 
         snapshot.forEach(child => {
             const order = child.val();
+            // Accountants/Cashiers only ever process their own branch's queue. Admin sees
+            // the queue for whichever branch they're currently standing in (see branch switcher).
+            if ((order.branchId || 'main') !== currentBranch) return;
+
             if (order.status === 'Pending Verification') {
                 tbody.innerHTML += `
                     <tr>
@@ -973,7 +1254,7 @@ function loadPendingOrdersQueue() {
         });
 
         if (tbody.innerHTML === '') {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue for ${branchNameOf(currentBranch)}.</td></tr>`;
         }
     }, error => {
         console.error("loadPendingOrdersQueue error:", error);
@@ -983,7 +1264,7 @@ function loadPendingOrdersQueue() {
 // ==================== SPLIT PAYMENT & RECEIPT LOGIC ====================
 function openSplitModal(txId, totalAmount) {
     const numericTotal = Number(totalAmount) || 0;
-    currentActiveOrder = { txId, totalAmount: numericTotal, customerId: null, customerName: 'Walk-In Customer' };
+    currentActiveOrder = { txId, totalAmount: numericTotal, customerId: null, customerName: 'Walk-In Customer', branchId: currentBranch };
     
     document.getElementById('modal-tx-id-label').textContent = txId;
     document.getElementById('split-modal-total').textContent = numericTotal.toLocaleString();
@@ -1001,6 +1282,7 @@ function openSplitModal(txId, totalAmount) {
             const order = snapshot.val();
             currentActiveOrder.customerId = order.customerId || null;
             currentActiveOrder.customerName = order.customerName || 'Walk-In Customer';
+            currentActiveOrder.branchId = order.branchId || 'main';
         }
 
         if (currentActiveOrder.customerId && customersCache[currentActiveOrder.customerId]) {
@@ -1009,7 +1291,7 @@ function openSplitModal(txId, totalAmount) {
             if (custInfo) custInfo.innerHTML = `Customer: <strong>${c.name}</strong> &nbsp;|&nbsp; Current Balance: ₦${(Number(c.balance) || 0).toLocaleString()} &nbsp;|&nbsp; Credit Available: ₦${available.toLocaleString()}`;
             if (creditContainer) creditContainer.style.display = 'block';
         } else {
-            if (custInfo) custInfo.innerHTML = `Customer: <strong>${currentActiveOrder.customerName}</strong>`;
+            if (custInfo) custInfo.innerHTML = `Customer: <strong>${currentActiveOrder.customerName}</strong> &nbsp;|&nbsp; Branch: <strong>${branchNameOf(currentActiveOrder.branchId)}</strong>`;
             if (creditContainer) creditContainer.style.display = 'none';
         }
 
@@ -1132,7 +1414,7 @@ function updateAccountantDashboardMetrics(data) {
     }
 }
 
-// ==================== UPDATED SPLIT CHECKOUT & INVENTORY DEDUCTION ====================
+// ==================== UPDATED SPLIT CHECKOUT & INVENTORY DEDUCTION (branch-scoped) ====================
 function completeSplitCheckout() {
     if (!currentActiveOrder) return;
     
@@ -1151,9 +1433,11 @@ function completeSplitCheckout() {
     firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
         if (snapshot.exists()) {
             const orderData = snapshot.val();
+            const branchId = orderData.branchId || 'main';
             orderData.status = 'Completed';
             orderData.paymentBreakdown = { cash, transfer, credit };
             orderData.date = new Date().toISOString();
+            orderData.branchId = branchId;
             orderData.customerId = customerId;
             orderData.customerName = customerName;
             
@@ -1161,14 +1445,14 @@ function completeSplitCheckout() {
             firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).set(orderData);
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
-            // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM
+            // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM (from the branch that made the sale)
             if (Array.isArray(orderData.items)) {
                 orderData.items.forEach(cartItem => {
                     const productId = cartItem.id;
                     const soldQty = Number(cartItem.qty) || 0;
 
                     if (productId && soldQty > 0) {
-                        const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${productId}`);
+                        const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}/${productId}`);
                         
                         productRef.once('value').then(prodSnap => {
                             if (prodSnap.exists()) {
@@ -1181,9 +1465,9 @@ function completeSplitCheckout() {
                                     stockQty: newStock
                                 });
 
-                                if (typeof inventoryCache !== 'undefined' && inventoryCache[productId]) {
-                                    inventoryCache[productId].stock = newStock;
-                                    inventoryCache[productId].stockQty = newStock;
+                                if (inventoryCache[branchId] && inventoryCache[branchId][productId]) {
+                                    inventoryCache[branchId][productId].stock = newStock;
+                                    inventoryCache[branchId][productId].stockQty = newStock;
                                 }
                             }
                         });
@@ -1296,7 +1580,7 @@ function renderReceiptView(orderData, isReprint = false) {
                     printableBox.prepend(cashierRow);
                 }
             }
-            cashierRow.innerHTML = `Cashier: ${cashierName}`;
+            cashierRow.innerHTML = `Cashier: ${cashierName}${orderData.branchId ? ` &middot; Branch: ${branchNameOf(orderData.branchId)}` : ''}`;
 
             // Insert customer name row right after the cashier row when a registered
             // customer (not Walk-In) is attached to this sale
@@ -1362,7 +1646,9 @@ function renderReceiptView(orderData, isReprint = false) {
 }
 
 // ==================== DEDICATED THERMAL PRINTER IFRAME BRIDGE ====================
-function triggerThermalPrint(htmlContent) {
+// Supports both 58mm and 80mm thermal paper widths. Defaults to 80mm; pass '58mm' as
+// paperWidth when printing from a branch fitted with a 58mm printer.
+function triggerThermalPrint(htmlContent, paperWidth = '80mm') {
     let existingIframe = document.getElementById('thermal-print-iframe');
     if (existingIframe) existingIframe.remove();
 
@@ -1374,6 +1660,8 @@ function triggerThermalPrint(htmlContent) {
     printWindow.style.width = '0px';
     printWindow.style.height = '0px';
     document.body.appendChild(printWindow);
+
+    const bodyWidth = paperWidth === '58mm' ? '50mm' : '72mm';
 
     let doc = printWindow.contentWindow.document;
     doc.open();
@@ -1387,7 +1675,7 @@ function triggerThermalPrint(htmlContent) {
                     font-family: 'Courier New', Courier, monospace;
                     font-size: 12px;
                     font-weight: bold;
-                    width: 72mm;
+                    width: ${bodyWidth};
                     margin: 0;
                     padding: 2mm;
                     color: #000000;
@@ -1439,7 +1727,35 @@ function viewPastReceipt(txId) {
     });
 }
 
-// ==================== PAST SALES HISTORY & REPORTS ====================
+// ==================== PAST SALES HISTORY & REPORTS (branch filterable) ====================
+function populateReportsBranchFilter() {
+    const select = document.getElementById('sales-branch-filter');
+    if (!select) return;
+
+    if (currentUserRole !== 'Admin') {
+        // Non-admins never reach reports-view (blocked in switchView), but guard anyway.
+        select.innerHTML = `<option value="${currentBranch}">${branchNameOf(currentBranch)}</option>`;
+        select.disabled = true;
+        currentReportBranchFilter = currentBranch;
+        return;
+    }
+
+    let options = `<option value="all" ${currentReportBranchFilter === 'all' ? 'selected' : ''}>🌐 All Branches</option>`;
+    Object.keys(branchesCache).forEach(id => {
+        options += `<option value="${id}" ${currentReportBranchFilter === id ? 'selected' : ''}>${branchesCache[id].name}</option>`;
+    });
+    select.innerHTML = options;
+    select.disabled = false;
+}
+
+function onReportsBranchFilterChange() {
+    const select = document.getElementById('sales-branch-filter');
+    if (!select) return;
+    currentReportBranchFilter = select.value;
+    loadPastSalesHistory(document.getElementById('sales-date-filter')?.value || null);
+    loadProfitAndLossModule();
+}
+
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
@@ -1472,8 +1788,13 @@ function loadPastSalesHistory(selectedDateString = null) {
         startOfWeek.setDate(now.getDate() - now.getDay());
         startOfWeek.setHours(0, 0, 0, 0);
 
+        const branchFilter = currentReportBranchFilter || 'all';
+
         snapshot.forEach(child => {
             const tx = child.val();
+            const txBranch = tx.branchId || 'main';
+            if (branchFilter !== 'all' && txBranch !== branchFilter) return;
+
             const txTotal = Number(tx.totalAmount) || 0;
             const txDate = tx.date ? new Date(tx.date) : null;
 
@@ -1511,6 +1832,7 @@ function loadPastSalesHistory(selectedDateString = null) {
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${transactionId}</strong>${customerTag}</td>
+                    <td>${branchNameOf(txBranch)}</td>
                     <td>${dateStr}</td>
                     <td>${sellerName}</td>
                     <td>₦${txTotal.toLocaleString()}</td>
@@ -1523,8 +1845,8 @@ function loadPastSalesHistory(selectedDateString = null) {
             `;
         });
 
-        if (snapshot.numChildren() === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No past sales transactions found in the database.</td></tr>`;
+        if (tbody.innerHTML === '') {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No past sales transactions found for this filter.</td></tr>`;
         }
         
         const dayEl = document.getElementById('todays-revenue-card') || document.getElementById('total-revenue-day-label');
@@ -1616,7 +1938,17 @@ function downloadReceiptPDF() {
     html2pdf().from(element).set(opt).save();
 }
 
-// ==================== STAFF MANAGEMENT ====================
+// ==================== STAFF MANAGEMENT (branch assignment) ====================
+function populateStaffBranchDropdown() {
+    const select = document.getElementById('staff-branch-input');
+    if (!select) return;
+    let options = '';
+    Object.keys(branchesCache).forEach(id => {
+        options += `<option value="${id}">${branchesCache[id].name}</option>`;
+    });
+    select.innerHTML = options || `<option value="main">Main</option>`;
+}
+
 function loadStaffTable() {
     if (!currentStoreId) return;
 
@@ -1632,13 +1964,14 @@ function loadStaffTable() {
                 <tr>
                     <td>${staff.name}</td>
                     <td>${staff.role}</td>
+                    <td>${branchNameOf(staff.branchId || 'main')}</td>
                     <td><button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto;" onclick="deleteStaff('${id}')">Remove</button></td>
                 </tr>
             `;
         });
 
         if (snapshot.numChildren() === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center;">No additional staff registered.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center;">No additional staff registered.</td></tr>`;
         }
     });
 }
@@ -1652,14 +1985,16 @@ function addStaffMember() {
     const name = document.getElementById('staff-name-input').value.trim();
     const pin = document.getElementById('staff-pin-input').value.trim();
     const role = document.getElementById('staff-role-input').value;
+    const branchSelect = document.getElementById('staff-branch-input');
+    const branchId = branchSelect && branchSelect.value ? branchSelect.value : 'main';
 
     if (!name || !pin) {
         alert("Staff Name and PIN are required.");
         return;
     }
 
-    firebase.database().ref(`stores/${currentStoreId}/staff`).push({ name, pin, role }).then(() => {
-        alert("Staff member added successfully!");
+    firebase.database().ref(`stores/${currentStoreId}/staff`).push({ name, pin, role, branchId }).then(() => {
+        alert(`Staff member added successfully to ${branchNameOf(branchId)}!`);
         document.getElementById('staff-name-input').value = '';
         document.getElementById('staff-pin-input').value = '';
     });
@@ -1718,7 +2053,7 @@ function updateBusinessProfile() {
     });
 }
 
-// ==================== EXPENSES MANAGEMENT MODULE ====================
+// ==================== EXPENSES MANAGEMENT MODULE (branch-scoped) ====================
 function loadExpensesTable() {
     if (!currentStoreId) return;
     
@@ -1732,6 +2067,8 @@ function loadExpensesTable() {
         snapshot.forEach(child => {
             const id = child.key;
             const item = child.val();
+            if ((item.branchId || 'main') !== currentBranch) return;
+
             const amount = Number(item.amount) || 0;
             totalExpenses += amount;
 
@@ -1749,8 +2086,8 @@ function loadExpensesTable() {
             `;
         });
 
-        if (snapshot.numChildren() === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet.</td></tr>`;
+        if (totalExpenses === 0 && tbody.innerHTML === '') {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet for ${branchNameOf(currentBranch)}.</td></tr>`;
         }
 
         const totalLabel = document.getElementById('total-expenses-label');
@@ -1778,7 +2115,8 @@ function saveExpense() {
         description,
         amount,
         date: dateInput ? new Date(dateInput).toISOString() : new Date().toISOString(),
-        recordedBy: document.getElementById('user-role-label').textContent
+        recordedBy: document.getElementById('user-role-label').textContent,
+        branchId: currentBranch
     };
 
     firebase.database().ref(`stores/${currentStoreId}/expenses`).push(expenseData).then(() => {
@@ -1800,9 +2138,13 @@ function deleteExpense(id) {
     }
 }
 
-// ==================== PROFIT & LOSS (P&L) ANALYTICS MODULE ====================
+// ==================== PROFIT & LOSS (P&L) ANALYTICS MODULE (branch filterable) ====================
 function loadProfitAndLossModule() {
     if (!currentStoreId) return;
+
+    const plBranchFilter = document.getElementById('sales-branch-filter') ? currentReportBranchFilter : currentBranch;
+    const plLabel = document.getElementById('pl-branch-label');
+    if (plLabel) plLabel.textContent = plBranchFilter === 'all' ? '(All Branches)' : `(${branchNameOf(plBranchFilter)})`;
 
     Promise.all([
         firebase.database().ref(`stores/${currentStoreId}/transactions`).once('value'),
@@ -1810,16 +2152,22 @@ function loadProfitAndLossModule() {
         firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value')
     ]).then(([txSnapshot, invSnapshot, expSnapshot]) => {
         
+        // costPriceMap keyed by "branchId_productId" (exact) and by lowercased product
+        // name (fallback, used e.g. after a stock transfer creates a new product id
+        // at the destination branch).
         const costPriceMap = {};
-        invSnapshot.forEach(child => {
-            const item = child.val();
-            const cPrice = Number(item.costPrice) || 0;
-            const itemName = item.name || item.productName || '';
-            
-            costPriceMap[child.key] = cPrice;
-            if (itemName) {
-                costPriceMap[itemName.toLowerCase().trim()] = cPrice;
-            }
+        invSnapshot.forEach(branchChild => {
+            const branchId = branchChild.key;
+            branchChild.forEach(prodChild => {
+                const item = prodChild.val();
+                const cPrice = Number(item.costPrice) || 0;
+                const itemName = item.name || item.productName || '';
+
+                costPriceMap[`${branchId}_${prodChild.key}`] = cPrice;
+                if (itemName) {
+                    costPriceMap[itemName.toLowerCase().trim()] = cPrice;
+                }
+            });
         });
 
         let monthRevenue = 0, monthCost = 0, monthExpenses = 0;
@@ -1829,13 +2177,16 @@ function loadProfitAndLossModule() {
 
         txSnapshot.forEach(child => {
             const tx = child.val();
+            const txBranch = tx.branchId || 'main';
+            if (plBranchFilter !== 'all' && txBranch !== plBranchFilter) return;
+
             const txDate = tx.date ? new Date(tx.date) : null;
             const txTotal = Number(tx.totalAmount) || 0;
 
             let txCogs = 0;
             if (Array.isArray(tx.items)) {
                 tx.items.forEach(cartItem => {
-                    const unitCost = costPriceMap[cartItem.id] || costPriceMap[(cartItem.name || '').toLowerCase().trim()] || 0;
+                    const unitCost = costPriceMap[`${txBranch}_${cartItem.id}`] || costPriceMap[(cartItem.name || '').toLowerCase().trim()] || 0;
                     txCogs += unitCost * (Number(cartItem.qty) || 1);
                 });
             }
@@ -1848,6 +2199,9 @@ function loadProfitAndLossModule() {
 
         expSnapshot.forEach(child => {
             const exp = child.val();
+            const expBranch = exp.branchId || 'main';
+            if (plBranchFilter !== 'all' && expBranch !== plBranchFilter) return;
+
             const expDate = exp.date ? new Date(exp.date) : null;
             const amount = Number(exp.amount) || 0;
 
@@ -1867,6 +2221,415 @@ function loadProfitAndLossModule() {
     });
 }
 
+// ==================== BRANCH MANAGEMENT MODULE ====================
+// Data model (Firebase): stores/{storeId}/branches/{branchId} = { name, phone, address, isMain, createdAt }
+function loadBranchesTable() {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/branches`).on('value', snapshot => {
+        const tbody = document.getElementById('branches-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        snapshot.forEach(child => {
+            const id = child.key;
+            const b = child.val();
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${b.name}</strong>${b.isMain ? ' <span style="font-size:10px; color:#166534; background:#dcfce7; padding:2px 6px; border-radius:4px; border:1px solid #86efac;">MAIN</span>' : ''}</td>
+                    <td>${b.phone || 'N/A'}</td>
+                    <td>${b.address || 'N/A'}</td>
+                    <td>
+                        <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editBranch('${id}')">Edit</button>
+                        ${!b.isMain ? `<button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteBranch('${id}')">Delete</button>` : ''}
+                    </td>
+                </tr>
+            `;
+        });
+
+        if (snapshot.numChildren() === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">No branches yet.</td></tr>`;
+        }
+    });
+}
+
+function saveBranch() {
+    if (!currentStoreId) return;
+    if (currentUserRole !== 'Admin') {
+        alert("Access Restricted: Only the Admin can manage branches.");
+        return;
+    }
+
+    const editId = document.getElementById('edit-branch-id').value;
+    const name = document.getElementById('branch-name-input').value.trim();
+    const phone = document.getElementById('branch-phone-input').value.trim();
+    const address = document.getElementById('branch-address-input').value.trim();
+
+    if (!name) {
+        alert("Branch name is required.");
+        return;
+    }
+
+    const branchRef = firebase.database().ref(`stores/${currentStoreId}/branches`);
+
+    if (editId) {
+        branchRef.child(editId).update({ name, phone, address }).then(() => {
+            alert("Branch updated successfully!");
+            resetBranchForm();
+        });
+    } else {
+        const newRef = branchRef.push();
+        newRef.set({ name, phone, address, isMain: false, createdAt: new Date().toISOString() }).then(() => {
+            alert(`Branch "${name}" created successfully!`);
+            resetBranchForm();
+        });
+    }
+}
+
+function editBranch(id) {
+    const b = branchesCache[id];
+    if (!b) return;
+
+    document.getElementById('edit-branch-id').value = id;
+    document.getElementById('branch-name-input').value = b.name || '';
+    document.getElementById('branch-phone-input').value = b.phone || '';
+    document.getElementById('branch-address-input').value = b.address || '';
+    document.getElementById('save-branch-btn').textContent = 'Update Branch';
+    document.getElementById('cancel-branch-edit-btn').style.display = 'block';
+}
+
+function resetBranchForm() {
+    document.getElementById('edit-branch-id').value = '';
+    document.getElementById('branch-name-input').value = '';
+    document.getElementById('branch-phone-input').value = '';
+    document.getElementById('branch-address-input').value = '';
+    document.getElementById('save-branch-btn').textContent = 'Save Branch';
+    document.getElementById('cancel-branch-edit-btn').style.display = 'none';
+}
+
+function deleteBranch(id) {
+    const b = branchesCache[id];
+    if (!b) return;
+    if (b.isMain) {
+        alert("The Main branch cannot be deleted.");
+        return;
+    }
+
+    if (confirm(`Delete branch "${b.name}"? Its inventory records will remain in the database but will no longer be selectable. Staff assigned to it should be reassigned first.`)) {
+        firebase.database().ref(`stores/${currentStoreId}/branches/${id}`).remove();
+    }
+}
+
+// ==================== INTER-BRANCH STOCK TRANSFERS MODULE ====================
+// Data model (Firebase):
+//   stores/{storeId}/transfers/{transferId} = {
+//     fromBranch, toBranch, items: [{productId, name, qty}],
+//     status: 'In Transit' | 'Completed' | 'Cancelled',
+//     createdBy, createdAt, receivedBy, receivedAt
+//   }
+// Stock is deducted from the source branch the moment a transfer is dispatched, and
+// only added to the destination branch once the receiving side confirms receipt —
+// this keeps a truthful "goods in transit" state and avoids double-counting stock.
+function loadTransfersView() {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/transfers`).on('value', snapshot => {
+        const tbody = document.getElementById('transfers-body');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        const rows = [];
+        snapshot.forEach(child => rows.push({ id: child.key, ...child.val() }));
+        rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+        rows.forEach(t => {
+            const itemsSummary = Array.isArray(t.items) ? t.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            const statusColor = t.status === 'Completed' ? '#166534' : (t.status === 'Cancelled' ? '#991b1b' : '#b45309');
+            let actions = `<button class="menu-btn btn-dash" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="printWaybill('${t.id}')">🖨 Waybill</button>`;
+
+            if (t.status === 'In Transit') {
+                actions += ` <button class="menu-btn btn-action-primary" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block; background:#16a34a;" onclick="confirmTransferReceipt('${t.id}')">✅ Confirm Receipt</button>`;
+                actions += ` <button class="menu-btn btn-logout" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="cancelTransfer('${t.id}')">✕ Cancel</button>`;
+            }
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${t.id}</strong></td>
+                    <td>${branchNameOf(t.fromBranch)}</td>
+                    <td>${branchNameOf(t.toBranch)}</td>
+                    <td style="max-width:220px;">${itemsSummary}</td>
+                    <td><span style="color:${statusColor}; font-weight:bold;">${t.status}</span></td>
+                    <td>${t.createdAt ? new Date(t.createdAt).toLocaleString() : 'N/A'}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        });
+
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">No stock transfers yet. Click "+ New Transfer" to dispatch goods between branches.</td></tr>`;
+        }
+    });
+}
+
+function openCreateTransferModal() {
+    if (Object.keys(branchesCache).length < 2) {
+        alert("You need at least two branches to create a stock transfer. Add another branch first.");
+        return;
+    }
+
+    const fromSelect = document.getElementById('transfer-from-branch');
+    const toSelect = document.getElementById('transfer-to-branch');
+    let options = Object.keys(branchesCache).map(id => `<option value="${id}">${branchesCache[id].name}</option>`).join('');
+    fromSelect.innerHTML = options;
+    toSelect.innerHTML = options;
+
+    // Default "From" to the branch the admin is currently in, "To" to a different one
+    fromSelect.value = currentBranch;
+    const otherBranch = Object.keys(branchesCache).find(id => id !== currentBranch);
+    if (otherBranch) toSelect.value = otherBranch;
+
+    document.getElementById('transfer-modal').style.display = 'flex';
+    onTransferFromBranchChange();
+}
+
+function closeCreateTransferModal() {
+    document.getElementById('transfer-modal').style.display = 'none';
+}
+
+function onTransferFromBranchChange() {
+    const fromBranchId = document.getElementById('transfer-from-branch').value;
+    const itemsList = document.getElementById('transfer-items-list');
+    if (!itemsList) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/inventory/${fromBranchId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            itemsList.innerHTML = `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No stock available at ${branchNameOf(fromBranchId)}.</div>`;
+            return;
+        }
+
+        let html = '';
+        snapshot.forEach(child => {
+            const item = child.val();
+            const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
+            if (stock <= 0) return;
+            const name = item.name || item.productName || 'Unnamed Item';
+            html += `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 4px; border-bottom:1px solid #f1f5f9; font-size:13px;">
+                    <span>${name} <small style="color:var(--text-muted);">(Stock: ${stock})</small></span>
+                    <input type="number" min="0" max="${stock}" value="0" data-product-id="${child.key}" data-product-name="${name}" data-max-stock="${stock}" class="transfer-qty-input" style="width:70px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px;">
+                </div>
+            `;
+        });
+
+        itemsList.innerHTML = html || `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No stock available at ${branchNameOf(fromBranchId)}.</div>`;
+    });
+}
+
+function createTransfer() {
+    const fromBranch = document.getElementById('transfer-from-branch').value;
+    const toBranch = document.getElementById('transfer-to-branch').value;
+
+    if (fromBranch === toBranch) {
+        alert("Source and destination branches must be different.");
+        return;
+    }
+
+    const inputs = document.querySelectorAll('.transfer-qty-input');
+    const items = [];
+    let overStock = null;
+
+    inputs.forEach(input => {
+        const qty = parseInt(input.value) || 0;
+        const maxStock = parseInt(input.getAttribute('data-max-stock')) || 0;
+        if (qty > 0) {
+            if (qty > maxStock) {
+                overStock = input.getAttribute('data-product-name');
+                return;
+            }
+            items.push({ productId: input.getAttribute('data-product-id'), name: input.getAttribute('data-product-name'), qty });
+        }
+    });
+
+    if (overStock) {
+        alert(`Quantity for "${overStock}" exceeds available stock at the source branch.`);
+        return;
+    }
+
+    if (items.length === 0) {
+        alert("Please enter a quantity greater than zero for at least one item.");
+        return;
+    }
+
+    const transferId = 'TRF-' + Math.floor(100000 + Math.random() * 900000);
+    const createdBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    const transferData = {
+        fromBranch,
+        toBranch,
+        items,
+        status: 'In Transit',
+        createdBy,
+        createdAt: new Date().toISOString()
+    };
+
+    // Deduct stock from the source branch immediately upon dispatch
+    const updates = {};
+    let deductionPromise = Promise.resolve();
+    items.forEach(item => {
+        deductionPromise = deductionPromise.then(() => {
+            const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${fromBranch}/${item.productId}`);
+            return productRef.once('value').then(snap => {
+                if (!snap.exists()) return;
+                const prod = snap.val();
+                const currentStock = Number(prod.stock !== undefined ? prod.stock : (prod.stockQty || 0));
+                const newStock = Math.max(0, currentStock - item.qty);
+                return productRef.update({ stock: newStock, stockQty: newStock });
+            });
+        });
+    });
+
+    deductionPromise.then(() => {
+        return firebase.database().ref(`stores/${currentStoreId}/transfers/${transferId}`).set(transferData);
+    }).then(() => {
+        alert(`Transfer waybill ${transferId} dispatched from ${branchNameOf(fromBranch)} to ${branchNameOf(toBranch)}!`);
+        closeCreateTransferModal();
+        switchView('transfers-view');
+    }).catch(err => {
+        alert("Failed to create transfer: " + err.message);
+    });
+}
+
+function confirmTransferReceipt(transferId) {
+    firebase.database().ref(`stores/${currentStoreId}/transfers/${transferId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) return;
+        const t = snapshot.val();
+        if (t.status !== 'In Transit') return;
+
+        if (!confirm(`Confirm that ${branchNameOf(t.toBranch)} has received this shipment from ${branchNameOf(t.fromBranch)}? This will add the items to ${branchNameOf(t.toBranch)}'s stock.`)) return;
+
+        const destRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${t.toBranch}`);
+
+        let chain = Promise.resolve();
+        (t.items || []).forEach(item => {
+            chain = chain.then(() => {
+                // Match by product name within the destination branch; if it doesn't
+                // exist there yet, create it (copying price fields from the source item).
+                return destRef.once('value').then(destSnap => {
+                    let matchId = null;
+                    destSnap.forEach(prodChild => {
+                        const p = prodChild.val();
+                        const pName = (p.name || p.productName || '').toLowerCase().trim();
+                        if (pName === item.name.toLowerCase().trim()) matchId = prodChild.key;
+                    });
+
+                    if (matchId) {
+                        const prodRef = destRef.child(matchId);
+                        return prodRef.once('value').then(pSnap => {
+                            const p = pSnap.val();
+                            const newStock = (Number(p.stock !== undefined ? p.stock : (p.stockQty || 0))) + item.qty;
+                            return prodRef.update({ stock: newStock, stockQty: newStock });
+                        });
+                    } else {
+                        // Look up source item's pricing to carry over into the new destination record
+                        return firebase.database().ref(`stores/${currentStoreId}/inventory/${t.fromBranch}/${item.productId}`).once('value').then(srcSnap => {
+                            const src = srcSnap.exists() ? srcSnap.val() : {};
+                            return destRef.push().set({
+                                name: item.name,
+                                productName: item.name,
+                                costPrice: src.costPrice || 0,
+                                price: src.price || src.retailPrice || 0,
+                                retailPrice: src.price || src.retailPrice || 0,
+                                wholesalePrice: src.wholesalePrice || 0,
+                                stock: item.qty,
+                                stockQty: item.qty,
+                                expiry: src.expiry || src.expiryDate || '',
+                                expiryDate: src.expiry || src.expiryDate || '',
+                                branchId: t.toBranch
+                            });
+                        });
+                    }
+                });
+            });
+        });
+
+        chain.then(() => {
+            const receivedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+            return firebase.database().ref(`stores/${currentStoreId}/transfers/${transferId}`).update({
+                status: 'Completed',
+                receivedBy,
+                receivedAt: new Date().toISOString()
+            });
+        }).then(() => {
+            alert("Transfer confirmed — stock has been added to the destination branch.");
+        }).catch(err => alert("Failed to confirm transfer: " + err.message));
+    });
+}
+
+function cancelTransfer(transferId) {
+    firebase.database().ref(`stores/${currentStoreId}/transfers/${transferId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) return;
+        const t = snapshot.val();
+        if (t.status !== 'In Transit') {
+            alert("Only transfers still In Transit can be cancelled.");
+            return;
+        }
+
+        if (!confirm(`Cancel this transfer and return the stock to ${branchNameOf(t.fromBranch)}?`)) return;
+
+        const sourceRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${t.fromBranch}`);
+        let chain = Promise.resolve();
+
+        (t.items || []).forEach(item => {
+            chain = chain.then(() => {
+                const prodRef = sourceRef.child(item.productId);
+                return prodRef.once('value').then(pSnap => {
+                    if (!pSnap.exists()) return;
+                    const p = pSnap.val();
+                    const newStock = (Number(p.stock !== undefined ? p.stock : (p.stockQty || 0))) + item.qty;
+                    return prodRef.update({ stock: newStock, stockQty: newStock });
+                });
+            });
+        });
+
+        chain.then(() => {
+            return firebase.database().ref(`stores/${currentStoreId}/transfers/${transferId}`).update({ status: 'Cancelled' });
+        }).then(() => {
+            alert("Transfer cancelled and stock returned to the source branch.");
+        }).catch(err => alert("Failed to cancel transfer: " + err.message));
+    });
+}
+
+function printWaybill(transferId) {
+    firebase.database().ref(`stores/${currentStoreId}/transfers/${transferId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) return;
+        const t = snapshot.val();
+
+        const mainWrapper = document.getElementById('dashboard-main-wrapper');
+        if (mainWrapper) {
+            mainWrapper.classList.add('active');
+            mainWrapper.style.display = 'block';
+        }
+
+        const workspace = document.getElementById('workspace-content');
+        const template = document.getElementById('waybill-view-template');
+        if (!workspace || !template) return;
+        workspace.innerHTML = template.innerHTML;
+
+        setTimeout(() => {
+            const setText = (id, val) => { const el = workspace.querySelector(id); if (el) el.textContent = val; };
+            setText('#waybill-id', transferId);
+            setText('#waybill-from', branchNameOf(t.fromBranch));
+            setText('#waybill-to', branchNameOf(t.toBranch));
+            setText('#waybill-date', t.createdAt ? new Date(t.createdAt).toLocaleString() : 'N/A');
+            setText('#waybill-status', t.status);
+
+            const itemsBody = workspace.querySelector('#waybill-items-body');
+            if (itemsBody && Array.isArray(t.items)) {
+                itemsBody.innerHTML = t.items.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td></tr>`).join('');
+            }
+        }, 100);
+    });
+}
+
 // ==================== CUSTOMER MANAGEMENT MODULE ====================
 // Data model (Firebase):
 //   stores/{storeId}/customers/{customerId} = {
@@ -1878,7 +2641,8 @@ function loadProfitAndLossModule() {
 //     amount, balanceBefore, balanceAfter, date, txId, recordedBy, note
 //   }
 // Purchase history is derived by filtering stores/{storeId}/transactions by customerId
-// rather than duplicating sale data under each customer record.
+// rather than duplicating sale data under each customer record. Customers are shared
+// across all branches so store credit follows the customer, not the branch.
 
 // Subscribes once per session (called right after login) so the customer directory,
 // POS autocomplete, and any open profile modal all stay live-updated together.
@@ -2152,7 +2916,7 @@ function loadCustomerPurchaseHistory(id) {
             tbody.innerHTML += `
                 <tr>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
-                    <td><strong>${tx.txId || ''}</strong></td>
+                    <td><strong>${tx.txId || ''}</strong> <br><small style="color:var(--text-muted);">${branchNameOf(tx.branchId || 'main')}</small></td>
                     <td style="max-width:220px;">${itemsSummary}</td>
                     <td>₦${Number(tx.totalAmount || 0).toLocaleString()}</td>
                 </tr>
