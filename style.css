@@ -41,6 +41,9 @@ body {
 .btn-staff { background: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; border-left: 4px solid #06b6d4; }
 .btn-cust { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; border-left: 4px solid #8b5cf6; }
 .btn-branch { background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; border-left: 4px solid #f97316; }
+.btn-exp { background: #fefce8; color: #a16207; border: 1px solid #fef08a; border-left: 4px solid #eab308; }
+.btn-supplier { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; }
+.btn-transfer { background: #f0fdfa; color: #0f766e; border: 1px solid #99f6e4; border-left: 4px solid #14b8a6; }
 .btn-sec { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; border-left: 4px solid #64748b; }
 
 .btn-action-primary { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #fff; border: none; text-align: center; justify-content: center; }
