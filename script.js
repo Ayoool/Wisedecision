@@ -1,4 +1,4 @@
-// ==================== FIREBASE INITIALIZATION ====================
+/ ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
     const firebaseConfig = {
@@ -41,6 +41,11 @@ let currentActiveTransfer = null;
 let customersCache = {};
 let currentSelectedCustomer = null; // { id, name, phone, balance, creditLimit } attached to the active POS sale
 let currentProfileCustomerId = null; // customer currently open in the profile modal
+
+// Supplier module state
+let suppliersCache = {};
+let supplyBranchProductNames = []; // product names in the currently-selected supply branch, for autocomplete
+let supplyItemRowCounter = 0;
 
 // Initialize application on load
 window.onload = function() {
@@ -124,7 +129,7 @@ function syncOfflineQueueToFirebase() {
 function switchView(viewId) {
     // Accountants and Cashiers can view the accountant queue, receipt view, business settings,
     // POS view, and customers (to record debt repayments) — but never staff management,
-    // inventory, reports, expenses, transfers, or branches.
+    // inventory, reports, expenses, transfers, branches, or suppliers.
     if (currentUserRole === 'Accountant' || currentUserRole === 'Cashier') {
         const allowedAccountantViews = [
             'accountant-view', 'accountant-view-template', 
@@ -207,6 +212,10 @@ function switchView(viewId) {
             }
             if (viewId === 'transfers-view') {
                 loadTransfersView();
+            }
+            if (viewId === 'suppliers-view') {
+                renderSuppliersTable(suppliersCache);
+                loadSuppliesHistory();
             }
         } else {
             const fullView = document.getElementById(viewId);
@@ -397,6 +406,7 @@ function handleStoreLogin() {
             loadBranchesCache(() => switchView('main-dashboard-view'));
             syncOfflineQueueToFirebase();
             subscribeCustomersCache();
+            subscribeSuppliersCache();
             return;
         }
 
@@ -416,6 +426,7 @@ function handleStoreLogin() {
                     loadBranchesCache(() => switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view'));
                     syncOfflineQueueToFirebase();
                     subscribeCustomersCache();
+                    subscribeSuppliersCache();
                 }
             });
         }
@@ -493,6 +504,7 @@ function logout() {
     currentProfileCustomerId = null;
     customersCache = {};
     branchesCache = {};
+    suppliersCache = {};
     adjustSidebarForRole("Admin");
     switchView('login-view');
 }
@@ -698,11 +710,11 @@ function renderInventoryTable() {
     if (!tbody) return;
 
     const modeNote = document.getElementById('inventory-mode-note');
-    const formCard = document.getElementById('inventory-form-card');
+    const addProductBtn = document.getElementById('add-product-trigger-btn');
     const isAggregate = currentInventoryBranchFilter === 'all';
 
     if (modeNote) modeNote.style.display = isAggregate ? 'inline-block' : 'none';
-    if (formCard) formCard.style.display = isAggregate ? 'none' : 'block';
+    if (addProductBtn) addProductBtn.style.opacity = isAggregate ? '0.6' : '1';
 
     tbody.innerHTML = '';
 
@@ -854,6 +866,22 @@ function filterInventoryTable() {
     }
 }
 
+// ==================== PRODUCT FORM MODAL (Add / Edit) ====================
+// The Add/Edit product form now lives in a popup modal instead of an inline card, so
+// staff editing an item lower down the table don't have to scroll back up to reach it.
+function openAddProductModal() {
+    if (currentInventoryBranchFilter === 'all') {
+        alert("Please select a specific branch before adding a new product — stock is tracked per branch.");
+        return;
+    }
+    resetInventoryForm();
+    document.getElementById('product-form-modal').style.display = 'flex';
+}
+
+function closeProductModal() {
+    document.getElementById('product-form-modal').style.display = 'none';
+}
+
 // ==================== BULLETPROOF PRODUCT SAVER (branch-scoped) ====================
 function saveProduct() {
     if (!currentStoreId) {
@@ -901,6 +929,7 @@ function saveProduct() {
         invRef.child(editId).update(prodData).then(() => {
             alert("Product updated successfully!");
             resetInventoryForm();
+            closeProductModal();
         }).catch(err => {
             alert("Failed to update product: " + err.message);
         });
@@ -909,9 +938,11 @@ function saveProduct() {
         newRef.set(prodData).then(() => {
             alert(`Product saved successfully to ${branchNameOf(targetBranch)}!`);
             resetInventoryForm();
+            closeProductModal();
         }).catch(err => {
             saveRecordLocallyOrCloud('offline_inventory_queue', prodData, `stores/${currentStoreId}/inventory/${targetBranch}`, () => {
                 resetInventoryForm();
+                closeProductModal();
             });
         });
     }
@@ -932,7 +963,10 @@ function editProduct(branchId, id) {
     
     document.getElementById('inv-form-title').textContent = `Edit Product (${branchNameOf(branchId)})`;
     document.getElementById('save-product-btn').textContent = "Update Product";
-    document.getElementById('cancel-edit-btn').style.display = 'block';
+
+    // Pop the form up as a modal right where the user is, instead of making them
+    // scroll back up the page to find it.
+    document.getElementById('product-form-modal').style.display = 'flex';
 }
 
 function resetInventoryForm() {
@@ -947,7 +981,6 @@ function resetInventoryForm() {
     
     document.getElementById('inv-form-title').textContent = "Add New Product";
     document.getElementById('save-product-btn').textContent = "Save Product to Cloud";
-    document.getElementById('cancel-edit-btn').style.display = 'none';
 }
 
 function deleteProduct(branchId, id) {
@@ -2627,6 +2660,424 @@ function printWaybill(transferId) {
                 itemsBody.innerHTML = t.items.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td></tr>`).join('');
             }
         }, 100);
+    });
+}
+
+// ==================== SUPPLIER MANAGEMENT MODULE ====================
+// Data model (Firebase):
+//   stores/{storeId}/suppliers/{supplierId} = {
+//     name, phone, email, address,
+//     totalSupplied, supplyCount, lastSupplyDate, createdAt
+//   }
+//   stores/{storeId}/supplies/{supplyId} = {
+//     supplyId, supplierId, supplierName, branchId,
+//     items: [{name, qty, costPrice, retailPrice, wholesalePrice}],
+//     totalCost, notes, date, recordedBy
+//   }
+// Recording a supply automatically pushes the received quantities into that branch's
+// inventory — matching an existing product by name (updating stock + cost price), or
+// creating a brand new product record if nothing matches yet.
+
+function subscribeSuppliersCache() {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/suppliers`).on('value', snapshot => {
+        suppliersCache = {};
+        snapshot.forEach(child => { suppliersCache[child.key] = child.val(); });
+
+        if (document.getElementById('suppliers-body')) {
+            renderSuppliersTable(suppliersCache);
+        }
+    }, error => console.error("subscribeSuppliersCache error:", error));
+}
+
+function renderSuppliersTable(dataset) {
+    const tbody = document.getElementById('suppliers-body');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    const ids = Object.keys(dataset || {});
+
+    ids.forEach(id => {
+        const s = dataset[id];
+        tbody.innerHTML += `
+            <tr>
+                <td><strong>${s.name || 'Unnamed'}</strong></td>
+                <td>${s.phone || 'N/A'}</td>
+                <td>₦${(Number(s.totalSupplied) || 0).toLocaleString()}</td>
+                <td>${Number(s.supplyCount) || 0}</td>
+                <td>${s.lastSupplyDate ? new Date(s.lastSupplyDate).toLocaleDateString() : 'N/A'}</td>
+                <td>
+                    <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="openAddSupplierModal('${id}')">Edit</button>
+                    <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteSupplier('${id}')">Delete</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    if (ids.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No suppliers registered yet. Click "+ Add Supplier" to get started.</td></tr>`;
+    }
+}
+
+function filterSuppliersTable() {
+    const query = (document.getElementById('supplier-search-input')?.value || '').toLowerCase().trim();
+    if (!query) {
+        renderSuppliersTable(suppliersCache);
+        return;
+    }
+
+    const filtered = {};
+    Object.keys(suppliersCache).forEach(id => {
+        const s = suppliersCache[id];
+        if ((s.name || '').toLowerCase().includes(query) || (s.phone || '').includes(query)) {
+            filtered[id] = s;
+        }
+    });
+    renderSuppliersTable(filtered);
+}
+
+function openAddSupplierModal(editId = null) {
+    document.getElementById('edit-supplier-id').value = editId || '';
+
+    if (editId && suppliersCache[editId]) {
+        const s = suppliersCache[editId];
+        document.getElementById('supp-name').value = s.name || '';
+        document.getElementById('supp-phone').value = s.phone || '';
+        document.getElementById('supp-email').value = s.email || '';
+        document.getElementById('supp-address').value = s.address || '';
+        document.getElementById('supplier-form-title').textContent = 'Edit Supplier';
+    } else {
+        ['supp-name', 'supp-phone', 'supp-email', 'supp-address'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        document.getElementById('supplier-form-title').textContent = 'Add New Supplier';
+    }
+
+    document.getElementById('supplier-form-modal').style.display = 'flex';
+}
+
+function closeSupplierModal() {
+    document.getElementById('supplier-form-modal').style.display = 'none';
+}
+
+function saveSupplier() {
+    if (!currentStoreId) return;
+
+    const editId = document.getElementById('edit-supplier-id').value;
+    const name = document.getElementById('supp-name').value.trim();
+    const phone = document.getElementById('supp-phone').value.trim();
+    const email = document.getElementById('supp-email').value.trim();
+    const address = document.getElementById('supp-address').value.trim();
+
+    if (!name || !phone) {
+        alert("Supplier name and phone number are required.");
+        return;
+    }
+
+    const suppRef = firebase.database().ref(`stores/${currentStoreId}/suppliers`);
+
+    if (editId) {
+        suppRef.child(editId).update({ name, phone, email, address }).then(() => {
+            alert("Supplier updated successfully!");
+            closeSupplierModal();
+        }).catch(err => alert("Failed to update supplier: " + err.message));
+    } else {
+        suppRef.push().set({
+            name,
+            phone,
+            email,
+            address,
+            totalSupplied: 0,
+            supplyCount: 0,
+            lastSupplyDate: null,
+            createdAt: new Date().toISOString()
+        }).then(() => {
+            alert("Supplier added successfully!");
+            closeSupplierModal();
+        }).catch(err => alert("Failed to save supplier: " + err.message));
+    }
+}
+
+function deleteSupplier(id) {
+    const s = suppliersCache[id];
+    if (!s) return;
+
+    if (confirm(`Are you sure you want to delete supplier "${s.name}"? Past supply records will remain for your history.`)) {
+        firebase.database().ref(`stores/${currentStoreId}/suppliers/${id}`).remove();
+    }
+}
+
+// ---------- Record a New Supply (restocking) ----------
+function populateSupplySupplierDropdown() {
+    const select = document.getElementById('supply-supplier-select');
+    if (!select) return;
+    let options = '<option value="">-- Select Supplier --</option>';
+    Object.keys(suppliersCache).forEach(id => {
+        options += `<option value="${id}">${suppliersCache[id].name}</option>`;
+    });
+    select.innerHTML = options;
+}
+
+function populateSupplyBranchDropdown() {
+    const select = document.getElementById('supply-branch-select');
+    if (!select) return;
+    let options = '';
+    if (currentUserRole === 'Admin') {
+        Object.keys(branchesCache).forEach(id => {
+            options += `<option value="${id}" ${id === currentBranch ? 'selected' : ''}>${branchesCache[id].name}</option>`;
+        });
+    } else {
+        options = `<option value="${currentBranch}" selected>${branchNameOf(currentBranch)}</option>`;
+    }
+    select.innerHTML = options || `<option value="main">Main</option>`;
+}
+
+function openRecordSupplyModal() {
+    if (Object.keys(suppliersCache).length === 0) {
+        alert("Please add at least one supplier first.");
+        return;
+    }
+
+    populateSupplySupplierDropdown();
+    populateSupplyBranchDropdown();
+    document.getElementById('supply-notes').value = '';
+
+    const itemsContainer = document.getElementById('supply-items-container');
+    itemsContainer.innerHTML = '';
+    supplyItemRowCounter = 0;
+    addSupplyItemRow();
+
+    refreshSupplyBranchProducts();
+    document.getElementById('record-supply-modal').style.display = 'flex';
+}
+
+function closeRecordSupplyModal() {
+    document.getElementById('record-supply-modal').style.display = 'none';
+}
+
+// Refreshes the list of existing product names for the currently-selected supply
+// branch, so item rows can offer autocomplete suggestions (helps staff match an
+// existing product instead of accidentally creating a duplicate).
+function refreshSupplyBranchProducts() {
+    if (!currentStoreId) return;
+    const branchId = document.getElementById('supply-branch-select')?.value || currentBranch;
+
+    firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`).once('value').then(snapshot => {
+        supplyBranchProductNames = [];
+        snapshot.forEach(child => {
+            const item = child.val();
+            const n = item.name || item.productName || '';
+            if (n) supplyBranchProductNames.push(n);
+        });
+        updateAllSupplyDatalists();
+    });
+}
+
+function updateAllSupplyDatalists() {
+    const options = supplyBranchProductNames.map(n => `<option value="${n}">`).join('');
+    document.querySelectorAll('.supply-item-datalist').forEach(dl => { dl.innerHTML = options; });
+}
+
+function addSupplyItemRow() {
+    supplyItemRowCounter++;
+    const rowId = 'supply-row-' + supplyItemRowCounter;
+    const options = supplyBranchProductNames.map(n => `<option value="${n}">`).join('');
+
+    const container = document.getElementById('supply-items-container');
+    const row = document.createElement('div');
+    row.id = rowId;
+    row.style.cssText = 'border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px; background:#f8fafc;';
+    row.innerHTML = `
+        <datalist id="${rowId}-datalist" class="supply-item-datalist">${options}</datalist>
+        <div class="form-group" style="margin-bottom:6px;">
+            <input type="text" list="${rowId}-datalist" placeholder="Product name (existing or new)" class="supply-item-name" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px;">
+            <input type="number" min="1" placeholder="Qty Received" class="supply-item-qty" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Cost Price (₦)" class="supply-item-cost" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; margin-top:6px;">
+            <input type="number" min="0" placeholder="Retail Price (new items)" class="supply-item-retail" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Wholesale Price (new items)" class="supply-item-wholesale" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+        </div>
+        <button type="button" class="menu-btn btn-logout" style="width:auto; margin-top:6px; margin-bottom:0; padding:3px 10px; font-size:11px;" onclick="document.getElementById('${rowId}').remove()">✕ Remove Item</button>
+    `;
+    container.appendChild(row);
+}
+
+function saveSupply() {
+    if (!currentStoreId) return;
+
+    const supplierId = document.getElementById('supply-supplier-select').value;
+    const branchId = document.getElementById('supply-branch-select').value;
+    const notes = document.getElementById('supply-notes').value.trim();
+
+    if (!supplierId || !suppliersCache[supplierId]) {
+        alert("Please select a valid supplier.");
+        return;
+    }
+    if (!branchId) {
+        alert("Please select a destination branch.");
+        return;
+    }
+
+    const rows = document.querySelectorAll('#supply-items-container > div');
+    const items = [];
+    let invalidRow = false;
+    let totalCost = 0;
+
+    rows.forEach(row => {
+        const name = row.querySelector('.supply-item-name')?.value.trim() || '';
+        const qty = parseInt(row.querySelector('.supply-item-qty')?.value) || 0;
+        const cost = parseFloat(row.querySelector('.supply-item-cost')?.value) || 0;
+        const retailRaw = row.querySelector('.supply-item-retail')?.value;
+        const wholesaleRaw = row.querySelector('.supply-item-wholesale')?.value;
+
+        if (!name && qty === 0) return; // skip a fully empty row
+
+        if (!name || qty <= 0) {
+            invalidRow = true;
+            return;
+        }
+
+        items.push({
+            name,
+            qty,
+            costPrice: cost,
+            retailPrice: (retailRaw !== '' && retailRaw !== undefined) ? parseFloat(retailRaw) : null,
+            wholesalePrice: (wholesaleRaw !== '' && wholesaleRaw !== undefined) ? parseFloat(wholesaleRaw) : null
+        });
+        totalCost += cost * qty;
+    });
+
+    if (invalidRow) {
+        alert("Each item needs a product name and a quantity greater than zero.");
+        return;
+    }
+    if (items.length === 0) {
+        alert("Please add at least one item received in this supply.");
+        return;
+    }
+
+    const supplyId = 'SUP-' + Math.floor(100000 + Math.random() * 900000);
+    const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    const nowIso = new Date().toISOString();
+
+    const supplyData = {
+        supplyId,
+        supplierId,
+        supplierName: suppliersCache[supplierId].name,
+        branchId,
+        items,
+        totalCost,
+        notes,
+        date: nowIso,
+        recordedBy
+    };
+
+    const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`);
+
+    // 1. Match each supplied item against existing inventory by name (case-insensitive);
+    //    update stock + cost price if found, otherwise create a new product record.
+    invRef.once('value').then(snapshot => {
+        const existingByName = {};
+        snapshot.forEach(child => {
+            const item = child.val();
+            const n = (item.name || item.productName || '').toLowerCase().trim();
+            if (n) existingByName[n] = { id: child.key, data: item };
+        });
+
+        let chain = Promise.resolve();
+        items.forEach(item => {
+            chain = chain.then(() => {
+                const key = item.name.toLowerCase().trim();
+                const match = existingByName[key];
+
+                if (match) {
+                    const p = match.data;
+                    const currentStock = Number(p.stock !== undefined ? p.stock : (p.stockQty || 0));
+                    const newStock = currentStock + item.qty;
+                    const updateData = { stock: newStock, stockQty: newStock, costPrice: item.costPrice };
+                    if (item.retailPrice !== null && !isNaN(item.retailPrice)) {
+                        updateData.price = item.retailPrice;
+                        updateData.retailPrice = item.retailPrice;
+                    }
+                    if (item.wholesalePrice !== null && !isNaN(item.wholesalePrice)) {
+                        updateData.wholesalePrice = item.wholesalePrice;
+                    }
+                    return invRef.child(match.id).update(updateData);
+                } else {
+                    return invRef.push().set({
+                        name: item.name,
+                        productName: item.name,
+                        costPrice: item.costPrice,
+                        price: item.retailPrice || 0,
+                        retailPrice: item.retailPrice || 0,
+                        wholesalePrice: item.wholesalePrice || 0,
+                        stock: item.qty,
+                        stockQty: item.qty,
+                        expiry: '',
+                        expiryDate: '',
+                        branchId
+                    });
+                }
+            });
+        });
+
+        return chain;
+    }).then(() => {
+        // 2. Save the supply record for history/reporting
+        return firebase.database().ref(`stores/${currentStoreId}/supplies/${supplyId}`).set(supplyData);
+    }).then(() => {
+        // 3. Update the supplier's running totals
+        const supp = suppliersCache[supplierId];
+        return firebase.database().ref(`stores/${currentStoreId}/suppliers/${supplierId}`).update({
+            totalSupplied: (Number(supp.totalSupplied) || 0) + totalCost,
+            supplyCount: (Number(supp.supplyCount) || 0) + 1,
+            lastSupplyDate: nowIso
+        });
+    }).then(() => {
+        alert(`Supply recorded successfully! Inventory at ${branchNameOf(branchId)} has been updated automatically.`);
+        closeRecordSupplyModal();
+        loadSuppliesHistory();
+    }).catch(err => {
+        console.error("saveSupply error:", err);
+        alert("Failed to record supply: " + err.message);
+    });
+}
+
+function loadSuppliesHistory() {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/supplies`).on('value', snapshot => {
+        const tbody = document.getElementById('supplies-history-body');
+        if (!tbody) return;
+
+        const rows = [];
+        snapshot.forEach(child => rows.push(child.val()));
+        rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        tbody.innerHTML = '';
+        rows.forEach(s => {
+            const itemsSummary = Array.isArray(s.items) ? s.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${s.supplyId || ''}</strong></td>
+                    <td>${s.date ? new Date(s.date).toLocaleString() : 'N/A'}</td>
+                    <td>${s.supplierName || 'N/A'}</td>
+                    <td>${branchNameOf(s.branchId)}</td>
+                    <td style="max-width:220px;">${itemsSummary}</td>
+                    <td>₦${(Number(s.totalCost) || 0).toLocaleString()}</td>
+                    <td>${s.recordedBy || ''}</td>
+                </tr>
+            `;
+        });
+
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">No supply records yet. Click "+ Record New Supply" to log stock received from a supplier.</td></tr>`;
+        }
     });
 }
 
