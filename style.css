@@ -165,13 +165,17 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
 
 @media print {
     body * { display: none !important; }
-    #printable-receipt-box, #printable-receipt-box * { display: block !important; visibility: visible !important; }
-    
-    #printable-receipt-box table { display: table !important; width: 100% !important; }
-    #printable-receipt-box tr { display: table-row !important; }
-    #printable-receipt-box th, #printable-receipt-box td { display: table-cell !important; }
+    #printable-receipt-box, #printable-receipt-box *,
+    #printable-debt-receipt-box, #printable-debt-receipt-box *,
+    #printable-waybill-box, #printable-waybill-box * { display: block !important; visibility: visible !important; }
 
-    #printable-receipt-box {
+    #printable-receipt-box table, #printable-debt-receipt-box table, #printable-waybill-box table { display: table !important; width: 100% !important; }
+    #printable-receipt-box tr, #printable-debt-receipt-box tr, #printable-waybill-box tr { display: table-row !important; }
+    #printable-receipt-box th, #printable-receipt-box td,
+    #printable-debt-receipt-box th, #printable-debt-receipt-box td,
+    #printable-waybill-box th, #printable-waybill-box td { display: table-cell !important; }
+
+    #printable-receipt-box, #printable-debt-receipt-box, #printable-waybill-box {
         position: absolute; 
         left: 0; 
         top: 0; 
