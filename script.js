@@ -1280,6 +1280,7 @@ function loadPendingOrdersQueue() {
                         <td><span style="color: #d97706; font-weight: bold;">Pending Payment</span></td>
                         <td>
                             <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="openSplitModal('${order.txId}', ${order.totalAmount})">Process Payment 💳</button>
+                            <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="cancelPendingOrder('${order.txId}')">Cancel ✕</button>
                         </td>
                     </tr>
                 `;
@@ -1291,6 +1292,42 @@ function loadPendingOrdersQueue() {
         }
     }, error => {
         console.error("loadPendingOrdersQueue error:", error);
+    });
+}
+
+// Cancels a pending (unpaid) order — used when a customer walks away before paying.
+// No inventory reversal is needed here because stock is only deducted once payment
+// is actually completed in completeSplitCheckout(). We log the cancellation for
+// audit purposes before removing it from the live queue.
+function cancelPendingOrder(txId) {
+    const reason = prompt(`Cancel order ${txId}?\n\nOptional: enter a reason (e.g. "Customer changed mind", "Wrong item added"). Leave blank to skip.`);
+    if (reason === null) return; // user pressed Cancel on the prompt itself
+
+    firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            alert("This order is no longer in the pending queue (it may have already been processed or cancelled).");
+            return;
+        }
+
+        const orderData = snapshot.val();
+        const cancelledBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+
+        const cancelledRecord = {
+            ...orderData,
+            status: 'Cancelled',
+            cancelledBy,
+            cancelledAt: new Date().toISOString(),
+            cancelReason: reason || 'No reason given'
+        };
+
+        // Log it for record-keeping, then remove from the live pending queue
+        firebase.database().ref(`stores/${currentStoreId}/cancelledOrders/${txId}`).set(cancelledRecord).then(() => {
+            return firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
+        }).then(() => {
+            alert(`Order ${txId} has been cancelled.`);
+        }).catch(err => {
+            alert("Failed to cancel order: " + err.message);
+        });
     });
 }
 
