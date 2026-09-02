@@ -3036,6 +3036,10 @@ function saveSupply() {
                     const p = match.data;
                     const currentStock = Number(p.stock !== undefined ? p.stock : (p.stockQty || 0));
                     const newStock = currentStock + item.qty;
+                    // Record stock levels before/after so the Supply Details view can
+                    // show exactly what changed for this item in this delivery.
+                    item.stockBefore = currentStock;
+                    item.stockAfter = newStock;
                     const updateData = { stock: newStock, stockQty: newStock, costPrice: item.costPrice };
                     if (item.retailPrice !== null && !isNaN(item.retailPrice)) {
                         updateData.price = item.retailPrice;
@@ -3046,6 +3050,8 @@ function saveSupply() {
                     }
                     return invRef.child(match.id).update(updateData);
                 } else {
+                    item.stockBefore = 0;
+                    item.stockAfter = item.qty;
                     return invRef.push().set({
                         name: item.name,
                         productName: item.name,
@@ -3098,24 +3104,79 @@ function loadSuppliesHistory() {
 
         tbody.innerHTML = '';
         rows.forEach(s => {
-            const itemsSummary = Array.isArray(s.items) ? s.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            const itemCount = Array.isArray(s.items) ? s.items.length : 0;
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${s.supplyId || ''}</strong></td>
                     <td>${s.date ? new Date(s.date).toLocaleString() : 'N/A'}</td>
                     <td>${s.supplierName || 'N/A'}</td>
                     <td>${branchNameOf(s.branchId)}</td>
-                    <td style="max-width:220px;">${itemsSummary}</td>
+                    <td>${itemCount} item${itemCount === 1 ? '' : 's'}</td>
                     <td>₦${(Number(s.totalCost) || 0).toLocaleString()}</td>
                     <td>${s.recordedBy || ''}</td>
+                    <td><button class="menu-btn btn-dash" style="padding: 4px 10px; font-size:11px; width:auto; display:inline-block;" onclick="viewSupplyDetails('${s.supplyId}')">View</button></td>
                 </tr>
             `;
         });
 
         if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">No supply records yet. Click "+ Record New Supply" to log stock received from a supplier.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">No supply records yet. Click "+ Record New Supply" to log stock received from a supplier.</td></tr>`;
         }
     });
+}
+
+// Shows a clean breakdown of one supply delivery: stock before vs after per item,
+// so an admin can confirm exactly what changed instead of reading a crammed list.
+function viewSupplyDetails(supplyId) {
+    if (!currentStoreId) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/supplies/${supplyId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            alert("Supply record not found.");
+            return;
+        }
+        const s = snapshot.val();
+
+        document.getElementById('supply-details-id').textContent = s.supplyId || supplyId;
+        document.getElementById('supply-details-date').textContent = s.date ? new Date(s.date).toLocaleString() : 'N/A';
+        document.getElementById('supply-details-supplier').textContent = s.supplierName || 'N/A';
+        document.getElementById('supply-details-branch').textContent = branchNameOf(s.branchId);
+        document.getElementById('supply-details-recorder').textContent = s.recordedBy || 'N/A';
+
+        const notesEl = document.getElementById('supply-details-notes');
+        if (notesEl) notesEl.textContent = s.notes ? `📝 ${s.notes}` : '';
+
+        const tbody = document.getElementById('supply-details-items-body');
+        tbody.innerHTML = '';
+        (s.items || []).forEach(item => {
+            const lineTotal = (Number(item.costPrice) || 0) * (Number(item.qty) || 0);
+            const hasStockHistory = item.stockBefore !== undefined && item.stockAfter !== undefined;
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.name}</td>
+                    <td>${hasStockHistory ? item.stockBefore : '—'}</td>
+                    <td style="color:#166534; font-weight:bold;">+${item.qty}</td>
+                    <td>${hasStockHistory ? item.stockAfter : '—'}</td>
+                    <td>₦${(Number(item.costPrice) || 0).toLocaleString()}</td>
+                    <td>₦${lineTotal.toLocaleString()}</td>
+                </tr>
+            `;
+        });
+
+        if (!s.items || s.items.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:15px;">No items recorded for this supply.</td></tr>`;
+        }
+
+        document.getElementById('supply-details-total-cost').textContent = '₦' + (Number(s.totalCost) || 0).toLocaleString();
+
+        document.getElementById('supply-details-modal').style.display = 'flex';
+    }).catch(err => {
+        alert("Failed to load supply details: " + err.message);
+    });
+}
+
+function closeSupplyDetailsModal() {
+    document.getElementById('supply-details-modal').style.display = 'none';
 }
 
 // ==================== CUSTOMER MANAGEMENT MODULE ====================
