@@ -3006,22 +3006,10 @@ function saveSupply() {
     const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
     const nowIso = new Date().toISOString();
 
-    const supplyData = {
-        supplyId,
-        supplierId,
-        supplierName: suppliersCache[supplierId].name,
-        branchId,
-        items,
-        totalCost,
-        notes,
-        date: nowIso,
-        recordedBy
-    };
-
     const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`);
 
-    // 1. Match each supplied item against existing inventory by name (case-insensitive);
-    //    update stock + cost price if found, otherwise create a new product record.
+    // 1. Read current inventory (read-only) to work out what each item's stock
+    //    level will be before/after this delivery — nothing is written yet.
     invRef.once('value').then(snapshot => {
         const existingByName = {};
         snapshot.forEach(child => {
@@ -3030,55 +3018,75 @@ function saveSupply() {
             if (n) existingByName[n] = { id: child.key, data: item };
         });
 
-        let chain = Promise.resolve();
         items.forEach(item => {
-            chain = chain.then(() => {
-                const key = item.name.toLowerCase().trim();
-                const match = existingByName[key];
-
-                if (match) {
-                    const p = match.data;
-                    const currentStock = Number(p.stock !== undefined ? p.stock : (p.stockQty || 0));
-                    const newStock = currentStock + item.qty;
-                    // Record stock levels before/after so the Supply Details view can
-                    // show exactly what changed for this item in this delivery.
-                    item.stockBefore = currentStock;
-                    item.stockAfter = newStock;
-                    const updateData = { stock: newStock, stockQty: newStock, costPrice: item.costPrice };
-                    if (item.retailPrice !== null && !isNaN(item.retailPrice)) {
-                        updateData.price = item.retailPrice;
-                        updateData.retailPrice = item.retailPrice;
-                    }
-                    if (item.wholesalePrice !== null && !isNaN(item.wholesalePrice)) {
-                        updateData.wholesalePrice = item.wholesalePrice;
-                    }
-                    return invRef.child(match.id).update(updateData);
-                } else {
-                    item.stockBefore = 0;
-                    item.stockAfter = item.qty;
-                    return invRef.push().set({
-                        name: item.name,
-                        productName: item.name,
-                        costPrice: item.costPrice,
-                        price: item.retailPrice || 0,
-                        retailPrice: item.retailPrice || 0,
-                        wholesalePrice: item.wholesalePrice || 0,
-                        stock: item.qty,
-                        stockQty: item.qty,
-                        expiry: '',
-                        expiryDate: '',
-                        branchId
-                    });
-                }
-            });
+            const key = item.name.toLowerCase().trim();
+            const match = existingByName[key];
+            if (match) {
+                const currentStock = Number(match.data.stock !== undefined ? match.data.stock : (match.data.stockQty || 0));
+                item.stockBefore = currentStock;
+                item.stockAfter = currentStock + item.qty;
+                item._matchId = match.id;
+            } else {
+                item.stockBefore = 0;
+                item.stockAfter = item.qty;
+                item._matchId = null;
+            }
         });
 
-        return chain;
+        const supplyData = {
+            supplyId,
+            supplierId,
+            supplierName: suppliersCache[supplierId].name,
+            branchId,
+            items: items.map(({ _matchId, ...rest }) => rest), // internal-only field, not stored
+            totalCost,
+            notes,
+            date: nowIso,
+            recordedBy
+        };
+
+        // 2. Save the Purchase Order / Supply record FIRST. This is the permanent
+        //    log — if this write fails for any reason (weak signal, permissions,
+        //    etc.), we stop right here and touch nothing else, so a failure can
+        //    never again look like a successful restock that's missing from history.
+        return firebase.database().ref(`stores/${currentStoreId}/supplies/${supplyId}`).set(supplyData).then(() => {
+            // 3. Only after the history record is safely saved do we apply the
+            //    actual inventory changes.
+            let chain = Promise.resolve();
+            items.forEach(item => {
+                chain = chain.then(() => {
+                    if (item._matchId) {
+                        const updateData = { stock: item.stockAfter, stockQty: item.stockAfter, costPrice: item.costPrice };
+                        if (item.retailPrice !== null && !isNaN(item.retailPrice)) {
+                            updateData.price = item.retailPrice;
+                            updateData.retailPrice = item.retailPrice;
+                        }
+                        if (item.wholesalePrice !== null && !isNaN(item.wholesalePrice)) {
+                            updateData.wholesalePrice = item.wholesalePrice;
+                        }
+                        return invRef.child(item._matchId).update(updateData);
+                    } else {
+                        return invRef.push().set({
+                            name: item.name,
+                            productName: item.name,
+                            costPrice: item.costPrice,
+                            price: item.retailPrice || 0,
+                            retailPrice: item.retailPrice || 0,
+                            wholesalePrice: item.wholesalePrice || 0,
+                            stock: item.qty,
+                            stockQty: item.qty,
+                            expiry: '',
+                            expiryDate: '',
+                            branchId
+                        });
+                    }
+                });
+            });
+            return chain;
+        });
     }).then(() => {
-        // 2. Save the supply record for history/reporting
-        return firebase.database().ref(`stores/${currentStoreId}/supplies/${supplyId}`).set(supplyData);
-    }).then(() => {
-        // 3. Update the supplier's running totals
+        // 4. Update the supplier's running totals — last, since it's just a
+        //    summary derived from the history record, not the source of truth.
         const supp = suppliersCache[supplierId];
         return firebase.database().ref(`stores/${currentStoreId}/suppliers/${supplierId}`).update({
             totalSupplied: (Number(supp.totalSupplied) || 0) + totalCost,
@@ -3091,7 +3099,7 @@ function saveSupply() {
         loadSuppliesHistory();
     }).catch(err => {
         console.error("saveSupply error:", err);
-        alert("Failed to record supply: " + err.message);
+        alert("⚠️ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
     });
 }
 
