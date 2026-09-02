@@ -590,6 +590,7 @@
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
                 <button class="menu-btn btn-action-primary btn-supplier" style="width:auto; margin:0;" onclick="openRecordSupplyModal()">🚚 Record New Supply</button>
                 <button class="menu-btn" style="width:auto; margin:0; background:#e2e8f0; border:1px solid #cbd5e1;" onclick="openAddSupplierModal()">+ Add Supplier</button>
+                <button class="menu-btn btn-dash" style="width:auto; margin:0;" onclick="togglePurchaseOrderHistory()">📋 Purchase Order History</button>
             </div>
         </div>
         <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 15px 0;">Keep records of who supplies your stock. Recording a supply automatically adds the received quantity to your inventory.</p>
@@ -616,25 +617,27 @@
             </table>
         </div>
 
-        <h3 style="font-size: 16px; color: var(--text); margin-bottom: 10px;">📜 Supply History</h3>
-        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Supply ID</th>
-                        <th>Date</th>
-                        <th>Supplier</th>
-                        <th>Branch</th>
-                        <th>Items</th>
-                        <th>Total Cost</th>
-                        <th>Recorded By</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="supplies-history-body">
-                    <tr><td colspan="8" style="text-align: center;">Loading supply history...</td></tr>
-                </tbody>
-            </table>
+        <div id="purchase-order-history-section" style="display:none;">
+            <h3 style="font-size: 16px; color: var(--text); margin-bottom: 10px;">📋 Purchase Order History (Full Supply Record)</h3>
+            <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Supply ID</th>
+                            <th>Date</th>
+                            <th>Supplier</th>
+                            <th>Branch</th>
+                            <th>Items</th>
+                            <th>Total Cost</th>
+                            <th>Recorded By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="supplies-history-body">
+                        <tr><td colspan="8" style="text-align: center;">Loading supply history...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
