@@ -628,10 +628,11 @@
                         <th>Items</th>
                         <th>Total Cost</th>
                         <th>Recorded By</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="supplies-history-body">
-                    <tr><td colspan="7" style="text-align: center;">Loading supply history...</td></tr>
+                    <tr><td colspan="8" style="text-align: center;">Loading supply history...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -1042,6 +1043,49 @@
             <div style="display: flex; gap: 10px;">
                 <button class="menu-btn btn-action-primary btn-supplier" style="margin-bottom:0; justify-content: center;" onclick="saveSupply()">Save Supply & Update Inventory 📦</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeRecordSupplyModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= SUPPLY DETAILS VIEW MODAL ================= -->
+    <!-- Shows stock-before vs stock-after per item so an admin can see exactly what
+         changed when a supplier brings new goods, instead of a long inline item list. -->
+    <div id="supply-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 10px;">
+                <h3 style="margin:0; color: var(--text); font-size: 17px;">Supply Details — <span id="supply-details-id">SUP-000000</span></h3>
+                <button class="menu-btn btn-logout" style="width:auto; margin:0; padding: 6px 12px;" onclick="closeSupplyDetailsModal()">✕ Close</button>
+            </div>
+
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 15px; line-height:1.6;">
+                📅 <span id="supply-details-date">--</span> &nbsp;|&nbsp;
+                🚚 <span id="supply-details-supplier">--</span> &nbsp;|&nbsp;
+                🏢 <span id="supply-details-branch">--</span><br>
+                👤 Recorded by: <span id="supply-details-recorder">--</span>
+                <div id="supply-details-notes" style="margin-top:6px; font-style:italic;"></div>
+            </div>
+
+            <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow-x: auto; margin-bottom: 15px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Stock Before</th>
+                            <th>Qty Added</th>
+                            <th>Stock After</th>
+                            <th>Cost Price</th>
+                            <th>Line Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="supply-details-items-body">
+                        <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="font-size: 15px; font-weight: bold; display:flex; justify-content:space-between; background:#f0fdf4; border:1px solid #bbf7d0; padding:10px 14px; border-radius:8px;">
+                <span>Total Cost:</span>
+                <span id="supply-details-total-cost">₦0</span>
             </div>
         </div>
     </div>
