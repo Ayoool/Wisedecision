@@ -2998,7 +2998,11 @@ function saveSupply() {
         return;
     }
 
-    const supplyId = 'SUP-' + Math.floor(100000 + Math.random() * 900000);
+    // Use Firebase's push() key instead of a random 6-digit number — random IDs can
+    // collide, and a collision silently overwrites the earlier supply record (which
+    // is why some supplies were disappearing from Supply History while the supplier's
+    // running totals still updated). push() keys are guaranteed unique.
+    const supplyId = 'SUP-' + firebase.database().ref(`stores/${currentStoreId}/supplies`).push().key;
     const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
     const nowIso = new Date().toISOString();
 
@@ -3094,7 +3098,9 @@ function saveSupply() {
 function loadSuppliesHistory() {
     if (!currentStoreId) return;
 
-    firebase.database().ref(`stores/${currentStoreId}/supplies`).on('value', snapshot => {
+    const suppliesRef = firebase.database().ref(`stores/${currentStoreId}/supplies`);
+    suppliesRef.off(); // clear any previous listener so re-opening this view doesn't stack duplicates
+    suppliesRef.on('value', snapshot => {
         const tbody = document.getElementById('supplies-history-body');
         if (!tbody) return;
 
