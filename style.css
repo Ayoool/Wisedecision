@@ -182,13 +182,13 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     #printable-receipt-box *, 
     #printable-debt-receipt-box *, 
     #printable-waybill-box * {
-        display: block !important;
         visibility: visible !important;
     }
 
     #printable-receipt-box, 
     #printable-debt-receipt-box, 
     #printable-waybill-box {
+        display: block !important;
         position: absolute;
         left: 0;
         top: 0;
@@ -213,6 +213,7 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     #printable-debt-receipt-box tr, 
     #printable-waybill-box tr { 
         display: table-row !important; 
+        width: 100% !important;
     }
     #printable-receipt-box th, #printable-receipt-box td,
     #printable-debt-receipt-box th, #printable-debt-receipt-box td,
@@ -220,6 +221,15 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
         display: table-cell !important; 
         padding: 3px !important;
         font-size: 11px !important;
+        width: auto !important;
+    }
+
+    /* Fallback for generic divs inside the receipt containers */
+    #printable-receipt-box div, 
+    #printable-debt-receipt-box div, 
+    #printable-waybill-box div {
+        display: block !important;
+        width: 100% !important;
     }
 
     @page {
