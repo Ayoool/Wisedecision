@@ -163,7 +163,7 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     overflow-y: auto;
 }
 
-/* --- START OF CORRECTED PRINT STYLES --- */
+/* --- START OF UNIVERSAL PRINT STYLES (Optimized for 58mm & 80mm) --- */
 @media print {
     /* 1. Reset EVERYTHING first to ensure only the receipt shows */
     body * {
@@ -181,12 +181,13 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
         visibility: visible !important;
         float: none !important; /* Prevent floating elements from breaking layout */
         box-shadow: none !important; /* Remove box-shadows */
+        border-radius: 0 !important; /* Reset border-radius for print */
     }
 
     /* 3. Force table display within the boxes */
     #printable-receipt-box table, #printable-debt-receipt-box table, #printable-waybill-box table {
         display: table !important;
-        width: 100% !important;
+        width: 100% !important; /* Table takes up full width of the container */
         border-collapse: collapse !important;
         margin-bottom: 5px !important;
         table-layout: fixed !important; /* Ensure columns share space evenly */
@@ -206,54 +207,37 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
         font-size: 11px !important;
     }
 
-    /* 4. THE FIX: Target the main container box */
+    /* 4. THE UNIVERSAL FIX: Target the main container box */
     #printable-receipt-box, #printable-debt-receipt-box, #printable-waybill-box {
         position: absolute;
         left: 0 !important;
         top: 0 !important;
 
-        /* DO NOT USE box-sizing: border-box here. It conflicts with print drivers. */
-        /* Instead, let the content fill the width defined in @page. */
+        /* CRITICAL CHANGE: Use 100% width so it fills whatever paper size is set in Windows */
         width: 100% !important;
         min-width: 0 !important; /* Allow shrinking if needed */
+        max-width: none !important; /* Remove hard caps so it scales with page setup */
 
         /* Reset any margins or padding that add extra space */
         margin: 0 !important;
-        padding: 0 !important; /* Let padding come from inner elements if necessary */
+        padding: 2px !important; /* Small padding to ensure text isn't right on edge */
         border: none !important;
 
         /* Ensure text is black on white for thermal printing */
         background: #fff !important;
         color: #000 !important;
 
-        /* Keep font size small and clean for 80mm paper */
+        /* Keep font size small and clean for receipt paper */
         font-size: 11px !important;
         line-height: 1.2 !important;
     }
 
     /* 5. Constrain logos and images so they don't overflow */
     #printable-receipt-box img, #printable-debt-receipt-box img, #printable-waybill-box img {
-        max-width: 60mm !important; /* Slightly narrower than 80mm paper */
+        max-width: 80% !important; /* Logo will be 80% width of the paper roll */
         height: auto !important;
         margin: 0 auto !important;
         display: block !important;
     }
 
-    /* 6. Define physical page characteristics for thermal rolls */
-    @page {
-        /* Tell the browser this is an 80mm continuous roll, not A4 */
-        size: 80mm auto;
-        /* Set hard browser margins to zero so content takes up full roll width */
-        margin: 0 !important;
-    }
-}
-/* --- END OF CORRECTED PRINT STYLES --- */
-
-iframe, div[class*="mimo"], div[id*="mimo"] {
-    pointer-events: none !important;
-}
-
-.pos-grid > div:first-child button:nth-of-type(2),
-.pos-grid > div:last-child button:nth-of-type(2) {
-    display: none !important;
-}
+    /* 6.
