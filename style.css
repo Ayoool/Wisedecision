@@ -203,6 +203,7 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
         /* Force a clean, readable monospace font for receipts */
         font-family: 'Courier New', Courier, monospace !important;
         word-wrap: break-word !important; /* Handle long product names */
+        font-size: 11px !important;
     }
 
     /* 4. THE FIX: Target the main container box */
