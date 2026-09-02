@@ -163,81 +163,43 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     overflow-y: auto;
 }
 
-/* --- START OF UNIVERSAL PRINT STYLES (Optimized for 58mm & 80mm) --- */
 @media print {
-    /* 1. Reset EVERYTHING first to ensure only the receipt shows */
-    body * {
-        display: none !important;
-        visibility: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-
-    /* 2. Target ONLY the printable containers and their children */
+    body * { display: none !important; }
     #printable-receipt-box, #printable-receipt-box *,
     #printable-debt-receipt-box, #printable-debt-receipt-box *,
-    #printable-waybill-box, #printable-waybill-box * {
-        display: block !important;
-        visibility: visible !important;
-        float: none !important; /* Prevent floating elements from breaking layout */
-        box-shadow: none !important; /* Remove box-shadows */
-        border-radius: 0 !important; /* Reset border-radius for print */
-    }
+    #printable-waybill-box, #printable-waybill-box * { display: block !important; visibility: visible !important; }
 
-    /* 3. Force table display within the boxes */
-    #printable-receipt-box table, #printable-debt-receipt-box table, #printable-waybill-box table {
-        display: table !important;
-        width: 100% !important; /* Table takes up full width of the container */
-        border-collapse: collapse !important;
-        margin-bottom: 5px !important;
-        table-layout: fixed !important; /* Ensure columns share space evenly */
-    }
-    #printable-receipt-box tr, #printable-debt-receipt-box tr, #printable-waybill-box tr {
-        display: table-row !important;
-    }
+    #printable-receipt-box table, #printable-debt-receipt-box table, #printable-waybill-box table { display: table !important; width: 100% !important; }
+    #printable-receipt-box tr, #printable-debt-receipt-box tr, #printable-waybill-box tr { display: table-row !important; }
     #printable-receipt-box th, #printable-receipt-box td,
     #printable-debt-receipt-box th, #printable-debt-receipt-box td,
-    #printable-waybill-box th, #printable-waybill-box td {
-        display: table-cell !important;
-        border-bottom: 1px solid #ccc !important; /* Ensure borders print clearly on thermal paper */
-        padding: 3px !important;
-        /* Force a clean, readable monospace font for receipts */
-        font-family: 'Courier New', Courier, monospace !important;
-        word-wrap: break-word !important; /* Handle long product names */
-        font-size: 11px !important;
-    }
+    #printable-waybill-box th, #printable-waybill-box td { display: table-cell !important; }
 
-    /* 4. THE UNIVERSAL FIX: Target the main container box */
     #printable-receipt-box, #printable-debt-receipt-box, #printable-waybill-box {
-        position: absolute;
-        left: 0 !important;
-        top: 0 !important;
-
-        /* CRITICAL CHANGE: Use 100% width so it fills whatever paper size is set in Windows */
-        width: 100% !important;
-        min-width: 0 !important; /* Allow shrinking if needed */
-        max-width: none !important; /* Remove hard caps so it scales with page setup */
-
-        /* Reset any margins or padding that add extra space */
-        margin: 0 !important;
-        padding: 2px !important; /* Small padding to ensure text isn't right on edge */
-        border: none !important;
-
-        /* Ensure text is black on white for thermal printing */
-        background: #fff !important;
-        color: #000 !important;
-
-        /* Keep font size small and clean for receipt paper */
-        font-size: 11px !important;
-        line-height: 1.2 !important;
+        position: absolute; 
+        left: 0; 
+        top: 0; 
+        width: 100% !important; 
+        max-width: 72mm !important;
+        margin: 0 !important; 
+        padding: 2mm !important; 
+        border: none !important; 
+        background: #fff !important; 
+        color: #000 !important; 
+        font-size: 11px !important; 
+        box-sizing: border-box !important;
     }
-
-    /* 5. Constrain logos and images so they don't overflow */
-    #printable-receipt-box img, #printable-debt-receipt-box img, #printable-waybill-box img {
-        max-width: 80% !important; /* Logo will be 80% width of the paper roll */
-        height: auto !important;
-        margin: 0 auto !important;
-        display: block !important;
+    @page {
+        size: 80mm auto;
+        margin: 0;
     }
+}
 
-    /* 6.
+iframe, div[class*="mimo"], div[id*="mimo"] {
+    pointer-events: none !important;
+}
+
+.pos-grid > div:first-child button:nth-of-type(2),
+.pos-grid > div:last-child button:nth-of-type(2) {
+    display: none !important;
+}
