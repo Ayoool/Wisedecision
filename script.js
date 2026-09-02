@@ -299,6 +299,7 @@ function finishBranchLoad(afterLoadCallback) {
     if (afterLoadCallback) afterLoadCallback();
 
     // Keep it live so Admins adding/renaming branches reflect instantly across the app
+    firebase.database().ref(`stores/${currentStoreId}/branches`).off();
     firebase.database().ref(`stores/${currentStoreId}/branches`).on('value', snapshot => {
         branchesCache = {};
         snapshot.forEach(child => { branchesCache[child.key] = child.val(); });
@@ -363,7 +364,14 @@ function handleStoreLogin() {
 
     if (storeId === "superadmin") {
         firebase.database().ref('superAdmin/masterPin').once('value').then(snapshot => {
-            const masterPin = snapshot.val() || "2026";
+            // FIX: no more hardcoded "2026" fallback. If the master PIN hasn't been
+            // configured in the database yet, login must fail closed rather than
+            // silently accepting a guessable default.
+            if (!snapshot.exists() || !snapshot.val()) {
+                alert("Super Admin access is not configured yet. Set superAdmin/masterPin in the database first.");
+                return;
+            }
+            const masterPin = snapshot.val();
             if (pin === masterPin) {
                 currentStoreId = "SUPER_ADMIN";
                 currentUserRole = "SuperAdmin";
@@ -452,13 +460,12 @@ function registerBusinessAccount() {
         return;
     }
 
-    const secretRegistrationCode = "Mazanest2026";
-    const userEnteredCode = prompt("Enter the authorized developer license/activation code to register this store:");
-
-    if (userEnteredCode !== secretRegistrationCode) {
-        alert("Access Denied: Invalid or missing authorization code.");
-        return;
-    }
+    // FIX: the previous hardcoded "Mazanest2026" activation code was readable by
+    // anyone who opened this script.js file in the browser, so it provided no real
+    // protection. Registration gating like this needs to live server-side (Firebase
+    // security rules or a Cloud Function that checks an invite/license record before
+    // allowing a write to /stores/{storeId}) — a client-side string can't be a secret.
+    // Registration now proceeds directly; lock this down with database rules instead.
 
     const storeRef = firebase.database().ref('stores/' + storeId);
     storeRef.once('value').then(snapshot => {
@@ -493,6 +500,15 @@ function registerBusinessAccount() {
 function logout() {
     if (currentStoreId) {
         firebase.database().ref(`stores/${currentStoreId}/branches`).off();
+        firebase.database().ref(`stores/${currentStoreId}/inventory`).off();
+        firebase.database().ref(`stores/${currentStoreId}/pendingOrders`).off();
+        firebase.database().ref(`stores/${currentStoreId}/staff`).off();
+        firebase.database().ref(`stores/${currentStoreId}/expenses`).off();
+        firebase.database().ref(`stores/${currentStoreId}/transactions`).off();
+        firebase.database().ref(`stores/${currentStoreId}/transfers`).off();
+        firebase.database().ref(`stores/${currentStoreId}/suppliers`).off();
+        firebase.database().ref(`stores/${currentStoreId}/supplies`).off();
+        firebase.database().ref(`stores/${currentStoreId}/customers`).off();
     }
     currentStoreId = null;
     currentUserRole = "Admin";
@@ -511,6 +527,7 @@ function logout() {
 
 // ==================== SUPER ADMIN DASHBOARD CONTROL ====================
 function loadSuperAdminDashboard() {
+    firebase.database().ref('stores').off();
     firebase.database().ref('stores').on('value', snapshot => {
         const tbody = document.getElementById('super-admin-stores-body');
         if (!tbody) return;
@@ -564,11 +581,27 @@ function promptChangeStorePassword(storeId) {
     });
 }
 
+// FIX: normalizes a locally-formatted Nigerian number (e.g. "08012345678") into the
+// full international format wa.me requires ("2348012345678"). Previously the raw
+// stored number was passed straight through, which produced broken wa.me links for
+// any phone saved in local format.
+function normalizePhoneForWhatsApp(phone) {
+    if (!phone) return '';
+    let digits = String(phone).replace(/\D/g, '');
+    if (digits.startsWith('0')) {
+        digits = '234' + digits.slice(1);
+    } else if (!digits.startsWith('234')) {
+        digits = '234' + digits;
+    }
+    return digits;
+}
+
 function sendMaintenanceNotice(storeId, phone) {
     const message = `Hello, this is a reminder from Wise Decision support regarding your software subscription. Your monthly maintenance fee is due to keep your store account active and unlocked.\n\nStore ID: ${storeId}\n\nPayment Details:\nBank Name: MONIEPOINT\nAccount Number: 9168140710\nAccount Name: EMMANUEL AYOOLA FISUYI\n\nPlease send proof of payment once done. Thank you!`;
     
     if (phone) {
-        const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+        const normalizedPhone = normalizePhoneForWhatsApp(phone);
+        const whatsappUrl = `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
         window.open(whatsappUrl, '_blank');
     } else {
         prompt("Copy payment notice message for store owner:", message);
@@ -661,6 +694,7 @@ function loadDashboardMetrics() {
 function loadInventoryTable() {
     if (!currentStoreId) return;
     
+    firebase.database().ref(`stores/${currentStoreId}/inventory`).off();
     firebase.database().ref(`stores/${currentStoreId}/inventory`).on('value', snapshot => {
         inventoryCache = {};
         snapshot.forEach(branchChild => {
@@ -1259,6 +1293,7 @@ function loadPendingOrdersQueue() {
         return;
     }
 
+    firebase.database().ref(`stores/${currentStoreId}/pendingOrders`).off();
     firebase.database().ref(`stores/${currentStoreId}/pendingOrders`).on('value', snapshot => {
         const tbody = document.getElementById('accountant-queue-body');
         if (!tbody) return;
@@ -1429,58 +1464,6 @@ function calcSplit() {
         acceptBtn.disabled = true;
         acceptBtn.style.opacity = "0.6";
         acceptBtn.style.cursor = "not-allowed";
-    }
-}
-
-// ==================== NEW FINALIZATION & METRICS INTEGRATION ====================
-function finalizeCompleteSale() {
-    const cashTendered = parseFloat(document.getElementById('cash-amount').value) || 0;
-    const transferTendered = parseFloat(document.getElementById('transfer-amount').value) || 0;
-    const totalDue = currentActiveOrder ? currentActiveOrder.totalAmount : 0;
-
-    // 1. Validation sanity check
-    if ((cashTendered + transferTendered) < totalDue) {
-        alert("Amount tendered is less than total due!");
-        return;
-    }
-
-    // 2. Build the transaction payload for dashboard and storage sync
-    const receiptNo = document.getElementById('modal-receipt-no') ? document.getElementById('modal-receipt-no').innerText : (currentActiveOrder ? currentActiveOrder.txId : 'WD-000000');
-    const transactionData = {
-        receiptNo,
-        total: totalDue,
-        cash: cashTendered,
-        transfer: transferTendered,
-        timestamp: new Date().toISOString(),
-        cashier: document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : "Accountant"
-    };
-
-    // 3. Save transaction (LocalStorage, Firebase, or Backend API)
-    saveTransactionToDatabase(transactionData);
-
-    // 4. Update Accountant Dashboard metrics immediately
-    updateAccountantDashboardMetrics(transactionData);
-
-    // 5. Close payment modal and trigger receipt print
-    closeSplitModal();
-    if (typeof triggerThermalReceiptPrint === 'function') {
-        triggerThermalReceiptPrint(transactionData);
-    }
-}
-
-function saveTransactionToDatabase(data) {
-    let salesHistory = JSON.parse(localStorage.getItem('wd_sales_history')) || [];
-    salesHistory.push(data);
-    localStorage.setItem('wd_sales_history', JSON.stringify(salesHistory));
-}
-
-function updateAccountantDashboardMetrics(data) {
-    let currentRevenue = parseFloat(localStorage.getItem('wd_total_revenue') || '0');
-    currentRevenue += data.total;
-    localStorage.setItem('wd_total_revenue', currentRevenue);
-    
-    if (typeof refreshDashboardUI === 'function') {
-        refreshDashboardUI();
     }
 }
 
@@ -1829,6 +1812,7 @@ function onReportsBranchFilterChange() {
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
+    firebase.database().ref(`stores/${currentStoreId}/transactions`).off();
     firebase.database().ref(`stores/${currentStoreId}/transactions`).on('value', snapshot => {
         const tbody = document.getElementById('sales-history-body');
         if (!tbody) return;
@@ -2022,6 +2006,7 @@ function populateStaffBranchDropdown() {
 function loadStaffTable() {
     if (!currentStoreId) return;
 
+    firebase.database().ref(`stores/${currentStoreId}/staff`).off();
     firebase.database().ref(`stores/${currentStoreId}/staff`).on('value', snapshot => {
         const tbody = document.getElementById('staff-body');
         if (!tbody) return;
@@ -2127,6 +2112,7 @@ function updateBusinessProfile() {
 function loadExpensesTable() {
     if (!currentStoreId) return;
     
+    firebase.database().ref(`stores/${currentStoreId}/expenses`).off();
     firebase.database().ref(`stores/${currentStoreId}/expenses`).on('value', snapshot => {
         const tbody = document.getElementById('expenses-body');
         if (!tbody) return;
@@ -2296,6 +2282,7 @@ function loadProfitAndLossModule() {
 function loadBranchesTable() {
     if (!currentStoreId) return;
 
+    firebase.database().ref(`stores/${currentStoreId}/branches`).off('value');
     firebase.database().ref(`stores/${currentStoreId}/branches`).on('value', snapshot => {
         const tbody = document.getElementById('branches-body');
         if (!tbody) return;
@@ -2403,6 +2390,7 @@ function deleteBranch(id) {
 function loadTransfersView() {
     if (!currentStoreId) return;
 
+    firebase.database().ref(`stores/${currentStoreId}/transfers`).off();
     firebase.database().ref(`stores/${currentStoreId}/transfers`).on('value', snapshot => {
         const tbody = document.getElementById('transfers-body');
         if (!tbody) return;
@@ -2718,6 +2706,7 @@ function printWaybill(transferId) {
 function subscribeSuppliersCache() {
     if (!currentStoreId) return;
 
+    firebase.database().ref(`stores/${currentStoreId}/suppliers`).off();
     firebase.database().ref(`stores/${currentStoreId}/suppliers`).on('value', snapshot => {
         suppliersCache = {};
         snapshot.forEach(child => { suppliersCache[child.key] = child.val(); });
@@ -3230,6 +3219,7 @@ function closeSupplyDetailsModal() {
 function subscribeCustomersCache() {
     if (!currentStoreId) return;
 
+    firebase.database().ref(`stores/${currentStoreId}/customers`).off();
     firebase.database().ref(`stores/${currentStoreId}/customers`).on('value', snapshot => {
         customersCache = {};
         snapshot.forEach(child => {
