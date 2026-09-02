@@ -3095,6 +3095,24 @@ function saveSupply() {
     });
 }
 
+// Shows/hides the Purchase Order History panel on demand instead of always
+// cluttering the Suppliers screen. The underlying data (stores/{storeId}/supplies)
+// is already kept in sync in real time by loadSuppliesHistory()'s Firebase listener —
+// every supply submitted through "Record New Supply" pushes straight into that
+// persistent history the moment it's saved, so this button always shows the full,
+// current record with nothing extra to trigger.
+function togglePurchaseOrderHistory() {
+    const section = document.getElementById('purchase-order-history-section');
+    if (!section) return;
+
+    const isHidden = section.style.display === 'none' || section.style.display === '';
+    section.style.display = isHidden ? 'block' : 'none';
+
+    if (isHidden) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
 function loadSuppliesHistory() {
     if (!currentStoreId) return;
 
