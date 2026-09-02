@@ -192,8 +192,8 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
         position: absolute;
         left: 0;
         top: 0;
-        width: 100% !important;
-        max-width: 80mm !important;
+        width: 76mm !important;
+        max-width: 76mm !important;
         margin: 0 !important;
         padding: 2mm !important;
         border: none !important;
@@ -208,6 +208,7 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     #printable-waybill-box table { 
         display: table !important; 
         width: 100% !important; 
+        table-layout: fixed !important;
     }
     #printable-receipt-box tr, 
     #printable-debt-receipt-box tr, 
@@ -219,12 +220,11 @@ th { background: #e0f2fe; color: #0369a1; font-weight: 700; }
     #printable-debt-receipt-box th, #printable-debt-receipt-box td,
     #printable-waybill-box th, #printable-waybill-box td { 
         display: table-cell !important; 
-        padding: 3px !important;
+        padding: 2px !important;
         font-size: 11px !important;
-        width: auto !important;
+        word-break: break-word !important;
     }
 
-    /* Fallback for generic divs inside the receipt containers */
     #printable-receipt-box div, 
     #printable-debt-receipt-box div, 
     #printable-waybill-box div {
