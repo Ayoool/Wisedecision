@@ -30,6 +30,7 @@ let inventoryCache = {};              // { branchId: { productId: item } }  (nes
 let currentCart = [];
 let currentActiveOrder = null;
 let currentCustomerType = "Retail"; // Default customer type
+let currentSellingUnit = "Pack";    // "Pack" or "Piece" — which unit the next cart line is sold in
 
 // ==================== BRANCH MODULE STATE ====================
 let branchesCache = {};               // { branchId: { name, phone, address, isMain, createdAt } }
@@ -175,6 +176,8 @@ function switchView(viewId) {
             if (viewId === 'pos-view') {
                 loadPosInventoryDropdown();
                 updatePosCustomerBadge();
+                updateSellingUnitButtons();
+                updatePosQtyLabel();
                 const posBranchLabel = document.getElementById('pos-branch-label');
                 if (posBranchLabel) posBranchLabel.textContent = branchNameOf(currentBranch);
             }
@@ -673,7 +676,7 @@ function loadDashboardMetrics() {
                 tbody.innerHTML += `
                     <tr>
                         <td>${itemName}</td>
-                        <td>${stock}</td>
+                        <td>${stock} pcs${formatPackBreakdown(stock, item.unitsPerPack)}</td>
                         <td>${expiryVal || 'N/A'}</td>
                         <td>${badge}</td>
                     </tr>
@@ -685,6 +688,22 @@ function loadDashboardMetrics() {
             tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No stock or expiry alerts. Inventory is healthy!</td></tr>`;
         }
     });
+}
+
+// ==================== PACK / PIECE HELPERS ====================
+// Returns e.g. " (12 packs + 3 pcs)" when the product has a meaningful pack size,
+// or "" when it's only ever sold by the piece (unitsPerPack <= 1).
+function formatPackBreakdown(totalPieces, unitsPerPack) {
+    const upp = Number(unitsPerPack) || 1;
+    if (upp <= 1) return '';
+    const packs = Math.floor(totalPieces / upp);
+    const loose = totalPieces % upp;
+    return ` <small style="color:var(--text-muted);">(${packs} pack${packs === 1 ? '' : 's'} + ${loose} pc${loose === 1 ? '' : 's'})</small>`;
+}
+
+function getUnitsPerPack(item) {
+    const upp = Number(item && item.unitsPerPack) || 1;
+    return upp > 0 ? upp : 1;
 }
 
 // ==================== BULLETPROOF INVENTORY LOADER (branch-aware) ====================
@@ -753,15 +772,26 @@ function renderInventoryTable() {
     tbody.innerHTML = '';
 
     if (isAggregate) {
-        // Combined enterprise view: sum stock for matching product names across all branches
-        const combined = {}; // name -> { costPrice, price, wholesalePrice, stock, expiry, branches: {branchName: stock} }
+        // Combined enterprise view: sum stock (in pieces) for matching product names across all branches
+        const combined = {}; // name -> { costPrice, price, wholesalePrice, piecePrice, pieceWholesalePrice, unitsPerPack, stock, expiry, branches: {branchName: stock} }
         Object.keys(inventoryCache).forEach(branchId => {
             const branchName = branchNameOf(branchId);
             Object.values(inventoryCache[branchId] || {}).forEach(item => {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                    combined[key] = {
+                        name,
+                        costPrice: item.costPrice || 0,
+                        price: item.price || item.retailPrice || 0,
+                        wholesalePrice: item.wholesalePrice || 0,
+                        piecePrice: item.piecePrice || 0,
+                        pieceWholesalePrice: item.pieceWholesalePrice || 0,
+                        unitsPerPack: getUnitsPerPack(item),
+                        stock: 0,
+                        expiry: item.expiry || item.expiryDate || 'N/A',
+                        branches: {}
+                    };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -772,14 +802,14 @@ function renderInventoryTable() {
         const keys = Object.keys(combined);
         keys.forEach(key => {
             const item = combined[key];
-            const branchBreakdown = Object.keys(item.branches).map(bn => `${bn}: ${item.branches[bn]}`).join(', ');
+            const branchBreakdown = Object.keys(item.branches).map(bn => `${bn}: ${item.branches[bn]} pcs`).join(', ');
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
                     <td>₦${Number(item.costPrice).toLocaleString()}</td>
-                    <td>₦${Number(item.price).toLocaleString()}</td>
-                    <td>₦${Number(item.wholesalePrice).toLocaleString()}</td>
-                    <td>${item.stock} <br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
+                    <td>₦${Number(item.price).toLocaleString()} / ₦${Number(item.piecePrice || item.price).toLocaleString()}</td>
+                    <td>₦${Number(item.wholesalePrice).toLocaleString()} / ₦${Number(item.pieceWholesalePrice || item.wholesalePrice).toLocaleString()}</td>
+                    <td>${item.stock} pcs${formatPackBreakdown(item.stock, item.unitsPerPack)}<br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
                     <td>${item.expiry}</td>
                     <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                 </tr>
@@ -802,6 +832,8 @@ function renderInventoryTable() {
         const cPrice = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
         const rPrice = item.price !== undefined ? item.price : (item.retailPrice || 0);
         const wPrice = item.wholesalePrice !== undefined ? item.wholesalePrice : 0;
+        const rPiecePrice = item.piecePrice !== undefined && item.piecePrice !== '' ? item.piecePrice : rPrice;
+        const wPiecePrice = item.pieceWholesalePrice !== undefined && item.pieceWholesalePrice !== '' ? item.pieceWholesalePrice : wPrice;
         const pStock = item.stock !== undefined ? item.stock : (item.stockQty !== undefined ? item.stockQty : 0);
         const pExpiry = item.expiry || item.expiryDate || 'N/A';
 
@@ -809,9 +841,9 @@ function renderInventoryTable() {
             <tr>
                 <td>${pName}</td>
                 <td>₦${Number(cPrice).toLocaleString()}</td>
-                <td>₦${Number(rPrice).toLocaleString()}</td>
-                <td>₦${Number(wPrice).toLocaleString()}</td>
-                <td>${pStock}</td>
+                <td>₦${Number(rPrice).toLocaleString()} / ₦${Number(rPiecePrice).toLocaleString()}</td>
+                <td>₦${Number(wPrice).toLocaleString()} / ₦${Number(wPiecePrice).toLocaleString()}</td>
+                <td>${pStock} pcs${formatPackBreakdown(pStock, item.unitsPerPack)}</td>
                 <td>${pExpiry}</td>
                 <td>
                     <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
@@ -850,15 +882,17 @@ function filterInventoryTable() {
                 const cPrice = item.costPrice || 0;
                 const rPrice = item.price || item.retailPrice || 0;
                 const wPrice = item.wholesalePrice || 0;
+                const rPiecePrice = item.piecePrice || rPrice;
+                const wPiecePrice = item.pieceWholesalePrice || wPrice;
                 const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 const pExpiry = item.expiry || item.expiryDate || 'N/A';
                 tbody.innerHTML += `
                     <tr>
                         <td>${pName} <br><small style="color:var(--text-muted);">${branchName}</small></td>
                         <td>₦${Number(cPrice).toLocaleString()}</td>
-                        <td>₦${Number(rPrice).toLocaleString()}</td>
-                        <td>₦${Number(wPrice).toLocaleString()}</td>
-                        <td>${pStock}</td>
+                        <td>₦${Number(rPrice).toLocaleString()} / ₦${Number(rPiecePrice).toLocaleString()}</td>
+                        <td>₦${Number(wPrice).toLocaleString()} / ₦${Number(wPiecePrice).toLocaleString()}</td>
+                        <td>${pStock} pcs${formatPackBreakdown(pStock, item.unitsPerPack)}</td>
                         <td>${pExpiry}</td>
                         <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                     </tr>
@@ -876,15 +910,17 @@ function filterInventoryTable() {
             const cPrice = item.costPrice || 0;
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
+            const rPiecePrice = item.piecePrice || rPrice;
+            const wPiecePrice = item.pieceWholesalePrice || wPrice;
             const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
             const pExpiry = item.expiry || item.expiryDate || 'N/A';
             tbody.innerHTML += `
                 <tr>
                     <td>${pName}</td>
                     <td>₦${Number(cPrice).toLocaleString()}</td>
-                    <td>₦${Number(rPrice).toLocaleString()}</td>
-                    <td>₦${Number(wPrice).toLocaleString()}</td>
-                    <td>${pStock}</td>
+                    <td>₦${Number(rPrice).toLocaleString()} / ₦${Number(rPiecePrice).toLocaleString()}</td>
+                    <td>₦${Number(wPrice).toLocaleString()} / ₦${Number(wPiecePrice).toLocaleString()}</td>
+                    <td>${pStock} pcs${formatPackBreakdown(pStock, item.unitsPerPack)}</td>
                     <td>${pExpiry}</td>
                     <td>
                         <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
@@ -935,6 +971,12 @@ function saveProduct() {
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
+    const unitsPerPack = Math.max(1, parseInt(document.getElementById('inv-units-per-pack').value) || 1);
+    const piecePriceRaw = document.getElementById('inv-piece-price').value;
+    const pieceWholesalePriceRaw = document.getElementById('inv-piece-wholesale-price').value;
+    // If the piece price is left blank, fall back to the pack price (unitsPerPack=1 case, or single-piece-only items)
+    const piecePrice = piecePriceRaw !== '' ? (parseFloat(piecePriceRaw) || 0) : price;
+    const pieceWholesalePrice = pieceWholesalePriceRaw !== '' ? (parseFloat(pieceWholesalePriceRaw) || 0) : wholesalePrice;
     const stock = parseInt(document.getElementById('inv-stock').value) || 0;
     const expiry = document.getElementById('inv-expiry').value;
 
@@ -950,6 +992,9 @@ function saveProduct() {
         price, 
         retailPrice: price,
         wholesalePrice, 
+        unitsPerPack,
+        piecePrice,
+        pieceWholesalePrice,
         stock, 
         stockQty: stock,
         expiry,
@@ -992,6 +1037,9 @@ function editProduct(branchId, id) {
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
+    document.getElementById('inv-units-per-pack').value = getUnitsPerPack(item);
+    document.getElementById('inv-piece-price').value = (item.piecePrice !== undefined && item.piecePrice !== null) ? item.piecePrice : '';
+    document.getElementById('inv-piece-wholesale-price').value = (item.pieceWholesalePrice !== undefined && item.pieceWholesalePrice !== null) ? item.pieceWholesalePrice : '';
     document.getElementById('inv-stock').value = item.stock !== undefined ? item.stock : (item.stockQty || '');
     document.getElementById('inv-expiry').value = item.expiry || item.expiryDate || '';
     
@@ -1010,6 +1058,9 @@ function resetInventoryForm() {
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
+    document.getElementById('inv-units-per-pack').value = 1;
+    document.getElementById('inv-piece-price').value = '';
+    document.getElementById('inv-piece-wholesale-price').value = '';
     document.getElementById('inv-stock').value = '';
     document.getElementById('inv-expiry').value = '';
     
@@ -1045,6 +1096,37 @@ function setCustomerType(type) {
     onPosProductChange();
 }
 
+// Toggles whether the next cart line is sold as a whole Pack or a single Piece.
+function setSellingUnit(unit) {
+    currentSellingUnit = unit;
+    updateSellingUnitButtons();
+    updatePosQtyLabel();
+    onPosProductChange();
+}
+
+function updateSellingUnitButtons() {
+    const packBtn = document.getElementById('btn-unit-pack');
+    const pieceBtn = document.getElementById('btn-unit-piece');
+    if (!packBtn || !pieceBtn) return;
+
+    if (currentSellingUnit === 'Piece') {
+        pieceBtn.style.background = '#7c3aed';
+        pieceBtn.style.color = '#fff';
+        packBtn.style.background = '#e2e8f0';
+        packBtn.style.color = '#1e293b';
+    } else {
+        packBtn.style.background = '#7c3aed';
+        packBtn.style.color = '#fff';
+        pieceBtn.style.background = '#e2e8f0';
+        pieceBtn.style.color = '#1e293b';
+    }
+}
+
+function updatePosQtyLabel() {
+    const label = document.getElementById('pos-qty-label');
+    if (label) label.textContent = currentSellingUnit === 'Piece' ? 'Quantity (Pieces)' : 'Quantity (Packs)';
+}
+
 // POS always sells from the logged-in user's active branch (currentBranch) — never
 // the aggregate "All Branches" view, since a sale must draw down one physical location's stock.
 function loadPosInventoryDropdown() {
@@ -1061,15 +1143,19 @@ function loadPosInventoryDropdown() {
             const id = child.key;
             const item = child.val();
             inventoryCache[currentBranch][id] = item;
-            
-            const pName = item.name || item.productName || 'Unnamed Item';
-            const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
-            const rPrice = item.price || item.retailPrice || 0;
-            const wPrice = item.wholesalePrice || 0;
-
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock}) - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${id}">${posDropdownLabel(item)}</option>`;
         });
     });
+}
+
+function posDropdownLabel(item) {
+    const pName = item.name || item.productName || 'Unnamed Item';
+    const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
+    const rPrice = item.price || item.retailPrice || 0;
+    const wPrice = item.wholesalePrice || 0;
+    const rPiece = item.piecePrice !== undefined && item.piecePrice !== '' ? item.piecePrice : rPrice;
+    const wPiece = item.pieceWholesalePrice !== undefined && item.pieceWholesalePrice !== '' ? item.pieceWholesalePrice : wPrice;
+    return `${pName} (Stock: ${pStock} pcs) - Pack R:₦${rPrice}/W:₦${wPrice} | Piece R:₦${rPiece}/W:₦${wPiece}`;
 }
 
 function filterPosInventory() {
@@ -1083,12 +1169,8 @@ function filterPosInventory() {
     Object.keys(branchItems).forEach(id => {
         const item = branchItems[id];
         const pName = item.name || item.productName || 'Unnamed Item';
-        const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
-        const rPrice = item.price || item.retailPrice || 0;
-        const wPrice = item.wholesalePrice || 0;
-
         if (pName.toLowerCase().includes(query)) {
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock}) - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${id}">${posDropdownLabel(item)}</option>`;
         }
     });
 }
@@ -1099,13 +1181,25 @@ function onPosProductChange() {
     const branchItems = inventoryCache[currentBranch] || {};
     if (id && branchItems[id]) {
         const item = branchItems[id];
-        const rPrice = item.price || item.retailPrice || 0;
-        const wPrice = item.wholesalePrice || rPrice;
-
-        priceInput.value = (currentCustomerType === 'Wholesale') ? wPrice : rPrice;
+        priceInput.value = unitPriceFor(item, currentSellingUnit, currentCustomerType);
     } else {
         priceInput.value = '';
     }
+}
+
+// Resolves the correct unit price for a product given the selected selling unit
+// (Pack/Piece) and customer tier (Retail/Wholesale), with sensible fallbacks so
+// products saved before this feature existed (no piece pricing set) still work.
+function unitPriceFor(item, unit, customerType) {
+    const rPack = item.price || item.retailPrice || 0;
+    const wPack = item.wholesalePrice || 0;
+    const rPiece = (item.piecePrice !== undefined && item.piecePrice !== null && item.piecePrice !== '') ? item.piecePrice : rPack;
+    const wPiece = (item.pieceWholesalePrice !== undefined && item.pieceWholesalePrice !== null && item.pieceWholesalePrice !== '') ? item.pieceWholesalePrice : wPack;
+
+    if (unit === 'Piece') {
+        return customerType === 'Wholesale' ? wPiece : rPiece;
+    }
+    return customerType === 'Wholesale' ? wPack : rPack;
 }
 
 function addToCart() {
@@ -1122,19 +1216,26 @@ function addToCart() {
     const item = branchItems[id];
     const pName = item.name || item.productName || 'Unnamed Item';
     const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
-    const rPrice = item.price || item.retailPrice || 0;
-    const wPrice = item.wholesalePrice || rPrice;
+    const unitsPerPack = getUnitsPerPack(item);
+    const unit = currentSellingUnit; // "Pack" or "Piece"
 
-    const price = !isNaN(customPrice) ? customPrice : (currentCustomerType === 'Wholesale' ? wPrice : rPrice);
+    // How many individual pieces this line will actually remove from stock
+    const piecesToDeduct = qty * (unit === 'Pack' ? unitsPerPack : 1);
 
-    if (qty > pStock) {
-        alert(`Warning: Requested quantity exceeds available stock (${pStock}).`);
+    const defaultPrice = unitPriceFor(item, unit, currentCustomerType);
+    const price = !isNaN(customPrice) ? customPrice : defaultPrice;
+
+    if (piecesToDeduct > pStock) {
+        alert(`Warning: Requested quantity exceeds available stock (${pStock} pcs).`);
     }
 
     currentCart.push({
         id,
         name: pName,
         qty,
+        unit,
+        unitsPerPack,
+        piecesToDeduct,
         price,
         total: qty * price,
         customerType: currentCustomerType
@@ -1158,9 +1259,10 @@ function renderCart() {
 
     currentCart.forEach((cartItem, index) => {
         grandTotal += cartItem.total;
+        const unitLabel = cartItem.unit === 'Piece' ? 'Piece' : 'Pack';
         tbody.innerHTML += `
             <tr>
-                <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType}]</small></td>
+                <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType} · ${unitLabel}]</small></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <button class="menu-btn" style="padding: 2px 6px; font-size: 10px; width: auto;" onclick="decreaseQty(${index})">-</button>
@@ -1186,21 +1288,26 @@ function increaseQty(index) {
     const branchItems = inventoryCache[currentBranch] || {};
     const stockItem = branchItems[item.id];
     const pStock = stockItem ? (stockItem.stock !== undefined ? stockItem.stock : (stockItem.stockQty || 0)) : 0;
+    const perUnitPieces = item.unit === 'Pack' ? (item.unitsPerPack || 1) : 1;
+    const newPiecesToDeduct = item.piecesToDeduct + perUnitPieces;
 
-    if (stockItem && item.qty + 1 > pStock) {
-        alert(`Warning: Requested quantity exceeds available stock (${pStock}).`);
+    if (stockItem && newPiecesToDeduct > pStock) {
+        alert(`Warning: Requested quantity exceeds available stock (${pStock} pcs).`);
         return;
     }
 
     item.qty += 1;
+    item.piecesToDeduct = newPiecesToDeduct;
     item.total = item.qty * item.price;
     renderCart();
 }
 
 function decreaseQty(index) {
     const item = currentCart[index];
+    const perUnitPieces = item.unit === 'Pack' ? (item.unitsPerPack || 1) : 1;
     if (item.qty > 1) {
         item.qty -= 1;
+        item.piecesToDeduct -= perUnitPieces;
         item.total = item.qty * item.price;
     } else {
         removeFromCart(index);
@@ -1498,20 +1605,22 @@ function completeSplitCheckout() {
             firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).set(orderData);
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
-            // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM (from the branch that made the sale)
+            // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM (in pieces, from the branch that made the sale).
+            //    piecesToDeduct already accounts for Pack vs Piece selling — for older cart
+            //    records saved before this field existed, fall back to qty (legacy = pieces).
             if (Array.isArray(orderData.items)) {
                 orderData.items.forEach(cartItem => {
                     const productId = cartItem.id;
-                    const soldQty = Number(cartItem.qty) || 0;
+                    const piecesToDeduct = Number(cartItem.piecesToDeduct !== undefined ? cartItem.piecesToDeduct : cartItem.qty) || 0;
 
-                    if (productId && soldQty > 0) {
+                    if (productId && piecesToDeduct > 0) {
                         const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}/${productId}`);
                         
                         productRef.once('value').then(prodSnap => {
                             if (prodSnap.exists()) {
                                 const prodData = prodSnap.val();
                                 let currentStock = Number(prodData.stock !== undefined ? prodData.stock : (prodData.stockQty || 0));
-                                let newStock = Math.max(0, currentStock - soldQty);
+                                let newStock = Math.max(0, currentStock - piecesToDeduct);
 
                                 productRef.update({
                                     stock: newStock,
@@ -1657,9 +1766,10 @@ function renderReceiptView(orderData, isReprint = false) {
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
+                const unitTag = item.unit ? ` (${item.unit})` : '';
                 receiptItemsContainer.innerHTML += `
                     <tr>
-                        <td style="font-weight: bold;">${item.name || ''}</td>
+                        <td style="font-weight: bold;">${item.name || ''}${unitTag}</td>
                         <td>${item.qty || 0}</td>
                         <td>₦${safeItemTotal}</td>
                     </tr>
@@ -2210,7 +2320,7 @@ function loadProfitAndLossModule() {
         
         // costPriceMap keyed by "branchId_productId" (exact) and by lowercased product
         // name (fallback, used e.g. after a stock transfer creates a new product id
-        // at the destination branch).
+        // at the destination branch). Cost price is always per PIECE (the base stock unit).
         const costPriceMap = {};
         invSnapshot.forEach(branchChild => {
             const branchId = branchChild.key;
@@ -2243,7 +2353,10 @@ function loadProfitAndLossModule() {
             if (Array.isArray(tx.items)) {
                 tx.items.forEach(cartItem => {
                     const unitCost = costPriceMap[`${txBranch}_${cartItem.id}`] || costPriceMap[(cartItem.name || '').toLowerCase().trim()] || 0;
-                    txCogs += unitCost * (Number(cartItem.qty) || 1);
+                    // COGS is always computed in pieces — piecesToDeduct already accounts
+                    // for Pack vs Piece sales; legacy cart records without it fall back to qty.
+                    const piecesSold = Number(cartItem.piecesToDeduct !== undefined ? cartItem.piecesToDeduct : cartItem.qty) || 0;
+                    txCogs += unitCost * piecesSold;
                 });
             }
 
@@ -2380,7 +2493,7 @@ function deleteBranch(id) {
 // ==================== INTER-BRANCH STOCK TRANSFERS MODULE ====================
 // Data model (Firebase):
 //   stores/{storeId}/transfers/{transferId} = {
-//     fromBranch, toBranch, items: [{productId, name, qty}],
+//     fromBranch, toBranch, items: [{productId, name, qty}],  // qty is in pieces
 //     status: 'In Transit' | 'Completed' | 'Cancelled',
 //     createdBy, createdAt, receivedBy, receivedAt
 //   }
@@ -2401,7 +2514,7 @@ function loadTransfersView() {
         rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
         rows.forEach(t => {
-            const itemsSummary = Array.isArray(t.items) ? t.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            const itemsSummary = Array.isArray(t.items) ? t.items.map(i => `${i.name} x${i.qty}pcs`).join(', ') : '';
             const statusColor = t.status === 'Completed' ? '#166534' : (t.status === 'Cancelled' ? '#991b1b' : '#b45309');
             let actions = `<button class="menu-btn btn-dash" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="printWaybill('${t.id}')">🖨 Waybill</button>`;
 
@@ -2473,7 +2586,7 @@ function onTransferFromBranchChange() {
             const name = item.name || item.productName || 'Unnamed Item';
             html += `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 4px; border-bottom:1px solid #f1f5f9; font-size:13px;">
-                    <span>${name} <small style="color:var(--text-muted);">(Stock: ${stock})</small></span>
+                    <span>${name} <small style="color:var(--text-muted);">(Stock: ${stock} pcs)</small></span>
                     <input type="number" min="0" max="${stock}" value="0" data-product-id="${child.key}" data-product-name="${name}" data-max-stock="${stock}" class="transfer-qty-input" style="width:70px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px;">
                 </div>
             `;
@@ -2597,6 +2710,9 @@ function confirmTransferReceipt(transferId) {
                                 price: src.price || src.retailPrice || 0,
                                 retailPrice: src.price || src.retailPrice || 0,
                                 wholesalePrice: src.wholesalePrice || 0,
+                                unitsPerPack: getUnitsPerPack(src),
+                                piecePrice: (src.piecePrice !== undefined ? src.piecePrice : (src.price || src.retailPrice || 0)),
+                                pieceWholesalePrice: (src.pieceWholesalePrice !== undefined ? src.pieceWholesalePrice : (src.wholesalePrice || 0)),
                                 stock: item.qty,
                                 stockQty: item.qty,
                                 expiry: src.expiry || src.expiryDate || '',
@@ -2682,7 +2798,7 @@ function printWaybill(transferId) {
 
             const itemsBody = workspace.querySelector('#waybill-items-body');
             if (itemsBody && Array.isArray(t.items)) {
-                itemsBody.innerHTML = t.items.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td></tr>`).join('');
+                itemsBody.innerHTML = t.items.map(i => `<tr><td>${i.name}</td><td>${i.qty} pcs</td></tr>`).join('');
             }
         }, 100);
     });
@@ -2696,12 +2812,12 @@ function printWaybill(transferId) {
 //   }
 //   stores/{storeId}/supplies/{supplyId} = {
 //     supplyId, supplierId, supplierName, branchId,
-//     items: [{name, qty, costPrice, retailPrice, wholesalePrice}],
+//     items: [{name, qty, costPrice, retailPrice, wholesalePrice}],  // qty is in pieces
 //     totalCost, notes, date, recordedBy
 //   }
-// Recording a supply automatically pushes the received quantities into that branch's
-// inventory — matching an existing product by name (updating stock + cost price), or
-// creating a brand new product record if nothing matches yet.
+// Recording a supply automatically pushes the received quantities (in pieces) into
+// that branch's inventory — matching an existing product by name (updating stock +
+// cost price), or creating a brand new product record if nothing matches yet.
 
 function subscribeSuppliersCache() {
     if (!currentStoreId) return;
@@ -2921,12 +3037,16 @@ function addSupplyItemRow() {
             <input type="text" list="${rowId}-datalist" placeholder="Product name (existing or new)" class="supply-item-name" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px;">
-            <input type="number" min="1" placeholder="Qty Received" class="supply-item-qty" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
-            <input type="number" min="0" placeholder="Cost Price (₦)" class="supply-item-cost" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="1" placeholder="Qty Received (pieces)" class="supply-item-qty" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Cost Price (₦ per piece)" class="supply-item-cost" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; margin-top:6px;">
-            <input type="number" min="0" placeholder="Retail Price (new items)" class="supply-item-retail" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
-            <input type="number" min="0" placeholder="Wholesale Price (new items)" class="supply-item-wholesale" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Retail Price — Pack (new items)" class="supply-item-retail" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Wholesale Price — Pack (new items)" class="supply-item-wholesale" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; margin-top:6px;">
+            <input type="number" min="1" placeholder="Units Per Pack (new items, default 1)" class="supply-item-units-per-pack" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Retail Price — Piece (new items)" class="supply-item-piece-price" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
         <button type="button" class="menu-btn btn-logout" style="width:auto; margin-top:6px; margin-bottom:0; padding:3px 10px; font-size:11px;" onclick="document.getElementById('${rowId}').remove()">✕ Remove Item</button>
     `;
@@ -2960,6 +3080,8 @@ function saveSupply() {
         const cost = parseFloat(row.querySelector('.supply-item-cost')?.value) || 0;
         const retailRaw = row.querySelector('.supply-item-retail')?.value;
         const wholesaleRaw = row.querySelector('.supply-item-wholesale')?.value;
+        const unitsPerPackRaw = row.querySelector('.supply-item-units-per-pack')?.value;
+        const piecePriceRaw = row.querySelector('.supply-item-piece-price')?.value;
 
         if (!name && qty === 0) return; // skip a fully empty row
 
@@ -2973,7 +3095,9 @@ function saveSupply() {
             qty,
             costPrice: cost,
             retailPrice: (retailRaw !== '' && retailRaw !== undefined) ? parseFloat(retailRaw) : null,
-            wholesalePrice: (wholesaleRaw !== '' && wholesaleRaw !== undefined) ? parseFloat(wholesaleRaw) : null
+            wholesalePrice: (wholesaleRaw !== '' && wholesaleRaw !== undefined) ? parseFloat(wholesaleRaw) : null,
+            unitsPerPack: (unitsPerPackRaw !== '' && unitsPerPackRaw !== undefined) ? Math.max(1, parseInt(unitsPerPackRaw) || 1) : null,
+            piecePrice: (piecePriceRaw !== '' && piecePriceRaw !== undefined) ? parseFloat(piecePriceRaw) : null
         });
         totalCost += cost * qty;
     });
@@ -2998,7 +3122,7 @@ function saveSupply() {
     const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`);
 
     // 1. Read current inventory (read-only) to work out what each item's stock
-    //    level will be before/after this delivery — nothing is written yet.
+    //    level (in pieces) will be before/after this delivery — nothing is written yet.
     invRef.once('value').then(snapshot => {
         const existingByName = {};
         snapshot.forEach(child => {
@@ -3053,6 +3177,12 @@ function saveSupply() {
                         if (item.wholesalePrice !== null && !isNaN(item.wholesalePrice)) {
                             updateData.wholesalePrice = item.wholesalePrice;
                         }
+                        if (item.unitsPerPack !== null && !isNaN(item.unitsPerPack)) {
+                            updateData.unitsPerPack = item.unitsPerPack;
+                        }
+                        if (item.piecePrice !== null && !isNaN(item.piecePrice)) {
+                            updateData.piecePrice = item.piecePrice;
+                        }
                         return invRef.child(item._matchId).update(updateData);
                     } else {
                         return invRef.push().set({
@@ -3062,6 +3192,9 @@ function saveSupply() {
                             price: item.retailPrice || 0,
                             retailPrice: item.retailPrice || 0,
                             wholesalePrice: item.wholesalePrice || 0,
+                            unitsPerPack: item.unitsPerPack || 1,
+                            piecePrice: item.piecePrice !== null ? item.piecePrice : (item.retailPrice || 0),
+                            pieceWholesalePrice: item.wholesalePrice || 0,
                             stock: item.qty,
                             stockQty: item.qty,
                             expiry: '',
@@ -3088,7 +3221,7 @@ function saveSupply() {
         loadSuppliesHistory();
     }).catch(err => {
         console.error("saveSupply error:", err);
-        alert("⚠️ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
+        alert("⚠ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
     });
 }
 
@@ -3175,9 +3308,9 @@ function viewSupplyDetails(supplyId) {
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
-                    <td>${hasStockHistory ? item.stockBefore : '—'}</td>
-                    <td style="color:#166534; font-weight:bold;">+${item.qty}</td>
-                    <td>${hasStockHistory ? item.stockAfter : '—'}</td>
+                    <td>${hasStockHistory ? item.stockBefore + ' pcs' : '—'}</td>
+                    <td style="color:#166534; font-weight:bold;">+${item.qty} pcs</td>
+                    <td>${hasStockHistory ? item.stockAfter + ' pcs' : '—'}</td>
                     <td>₦${(Number(item.costPrice) || 0).toLocaleString()}</td>
                     <td>₦${lineTotal.toLocaleString()}</td>
                 </tr>
@@ -3483,7 +3616,7 @@ function loadCustomerPurchaseHistory(id) {
 
         tbody.innerHTML = '';
         purchases.forEach(tx => {
-            const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${i.name} x${i.qty}${i.unit ? ` (${i.unit})` : ''}`).join(', ') : '';
             tbody.innerHTML += `
                 <tr>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
