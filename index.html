@@ -157,7 +157,7 @@
             <h3 style="margin-top: 0; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px;">
                 ⚠ Inventory Health Alerts (Low Stock & Expiry Warnings)
             </h3>
-            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Items running low (Stock &le; 5 pcs) or expiring within 30 days, for your current branch.</p>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Items running low (Stock &le; 5) or expiring within 30 days, for your current branch.</p>
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
@@ -180,15 +180,10 @@
         <h2>Point of Sale (POS) Register</h2>
         
         <!-- Customer Type Selection Toggle Bar -->
-        <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center; flex-wrap: wrap;">
+        <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center;">
             <span style="font-size: 13px; font-weight: bold; color: var(--text);">Customer Tier:</span>
             <button id="btn-type-retail" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #0284c7; color: #fff;" onclick="setCustomerType('Retail')">Retail Price</button>
             <button id="btn-type-wholesale" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #e2e8f0; color: #1e293b;" onclick="setCustomerType('Wholesale')">Wholesale Price</button>
-
-            <span style="font-size: 13px; font-weight: bold; color: var(--text); margin-left: 10px;">Selling Unit:</span>
-            <button id="btn-unit-pack" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #7c3aed; color: #fff;" onclick="setSellingUnit('Pack')">📦 Pack</button>
-            <button id="btn-unit-piece" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #e2e8f0; color: #1e293b;" onclick="setSellingUnit('Piece')">🧩 Piece</button>
-
             <span style="margin-left: auto; font-size: 11px; font-weight: bold; color: #166534; background: #dcfce7; border: 1px solid #86efac; padding: 4px 10px; border-radius: 6px;">Selling from: <span id="pos-branch-label">Main</span></span>
         </div>
 
@@ -218,7 +213,7 @@
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group">
-                        <label id="pos-qty-label">Quantity (Packs)</label>
+                        <label>Quantity</label>
                         <input type="number" id="pos-qty" value="1" min="1">
                     </div>
                     <div class="form-group">
@@ -368,8 +363,8 @@
                     <tr>
                         <th>Product Name</th>
                         <th>Cost Price</th>
-                        <th>Retail (Pack / Piece)</th>
-                        <th>Wholesale (Pack / Piece)</th>
+                        <th>Retail Price</th>
+                        <th>Wholesale Price</th>
                         <th>Stock</th>
                         <th>Expiry Date</th>
                         <th>Actions</th>
@@ -697,7 +692,7 @@
             <h2 style="margin:0;">Inter-Branch Stock Transfers</h2>
             <button class="menu-btn btn-action-primary btn-transfer" style="width:auto; margin:0;" onclick="openCreateTransferModal()">+ New Transfer</button>
         </div>
-        <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 15px 0;">Dispatch goods from one branch to another with a digital waybill (quantities are in pieces). Stock leaves the source branch immediately and only lands in the destination branch once confirmed received.</p>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 8px 0 15px 0;">Dispatch goods from one branch to another with a digital waybill. Stock leaves the source branch immediately and only lands in the destination branch once confirmed received.</p>
 
         <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
             <table>
@@ -733,7 +728,7 @@
                     <select id="transfer-to-branch"></select>
                 </div>
             </div>
-            <label style="display:block; font-size: 12px; font-weight: bold; color: var(--text-muted); margin: 10px 0 5px 0;">Items to Transfer (set quantity in pieces for each item to include)</label>
+            <label style="display:block; font-size: 12px; font-weight: bold; color: var(--text-muted); margin: 10px 0 5px 0;">Items to Transfer (set quantity for each item to include)</label>
             <div id="transfer-items-list" style="max-height: 260px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px;">
                 <div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">Select a source branch with stock.</div>
             </div>
@@ -928,43 +923,26 @@
 
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Cost Price (₦ per piece)</label>
+                    <label>Cost Price (₦)</label>
                     <input type="number" id="inv-cost-price" placeholder="Cost Price">
                 </div>
             </div>
 
-            <div class="form-group" style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px;">
-                <label>Units Per Pack (pieces in one pack/carton)</label>
-                <input type="number" id="inv-units-per-pack" placeholder="e.g. 10" min="1" value="1">
-                <small style="color:var(--text-muted); display:block; margin-top:4px;">Leave as 1 if this product is only ever sold as single pieces.</small>
-            </div>
-
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Retail Price — Per Pack (₦)</label>
-                    <input type="number" id="inv-price" placeholder="Retail Price (Pack)">
+                    <label>Retail Selling Price (₦)</label>
+                    <input type="number" id="inv-price" placeholder="Retail Price">
                 </div>
                 <div class="form-group">
-                    <label>Wholesale Price — Per Pack (₦)</label>
-                    <input type="number" id="inv-wholesale-price" placeholder="Wholesale Price (Pack)">
+                    <label>Wholesale Price (₦)</label>
+                    <input type="number" id="inv-wholesale-price" placeholder="Wholesale Price">
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Retail Price — Per Piece (₦)</label>
-                    <input type="number" id="inv-piece-price" placeholder="Retail Price (Piece)">
-                </div>
-                <div class="form-group">
-                    <label>Wholesale Price — Per Piece (₦)</label>
-                    <input type="number" id="inv-piece-wholesale-price" placeholder="Wholesale Price (Piece)">
-                </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="form-group">
-                    <label>Total Stock (in pieces)</label>
-                    <input type="number" id="inv-stock" placeholder="Stock Qty (pieces)">
+                    <label>Stock Qty</label>
+                    <input type="number" id="inv-stock" placeholder="Stock Qty">
                 </div>
                 <div class="form-group">
                     <label>Expiry Date</label>
@@ -1043,7 +1021,7 @@
     <div id="record-supply-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
             <h3 style="margin-top:0; color: var(--text);">Record New Supply</h3>
-            <p style="font-size: 12px; color: var(--text-muted); margin-top:-8px; margin-bottom: 12px;">Items you list below will be added straight into the destination branch's inventory (quantity is in <strong>pieces</strong>) — matched to an existing product by name, or created as new.</p>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top:-8px; margin-bottom: 12px;">Items you list below will be added straight into the destination branch's inventory — matched to an existing product by name, or created as new.</p>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
