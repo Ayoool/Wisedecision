@@ -1182,16 +1182,26 @@ function addToCart() {
 
     // piecesNeeded = how many individual pieces this line item will draw down from
     // stock (stock is always tracked in pieces). Selling by Pack converts qty*unitsPerPack.
+    // Also account for pieces of this same product already sitting in the cart from
+    // an earlier line, so a second add can't push the combined total past stock.
     const piecesNeeded = saleUnit === 'Piece' ? qty : (qty * unitsPerPack);
+    const piecesAlreadyInCart = currentCart
+        .filter(ci => ci.id === id)
+        .reduce((sum, ci) => sum + (Number(ci.piecesNeeded) || 0), 0);
+
+    // Stock check happens BEFORE anything is added — if the requested quantity
+    // (combined with what's already in the cart for this product) exceeds available
+    // stock, the item is rejected outright rather than being added anyway.
+    if (piecesAlreadyInCart + piecesNeeded > pStock) {
+        const remaining = Math.max(0, pStock - piecesAlreadyInCart);
+        alert(`Cannot add to cart: only ${remaining} piece(s) of "${pName}" left in stock (you requested ${piecesNeeded}). Please reduce the quantity.`);
+        return;
+    }
 
     const defaultUnitPrice = saleUnit === 'Piece'
         ? getPiecePrice(item, currentCustomerType)
         : (currentCustomerType === 'Wholesale' ? wPrice : rPrice);
     const price = !isNaN(customPrice) ? customPrice : defaultUnitPrice;
-
-    if (piecesNeeded > pStock) {
-        alert(`Warning: Requested quantity exceeds available stock (${pStock} pcs).`);
-    }
 
     currentCart.push({
         id,
@@ -1255,8 +1265,15 @@ function increaseQty(index) {
     const unitsPerPack = item.unitsPerPack || 1;
     const nextPiecesNeeded = item.saleUnit === 'Piece' ? (item.qty + 1) : ((item.qty + 1) * unitsPerPack);
 
-    if (stockItem && nextPiecesNeeded > pStock) {
-        alert(`Warning: Requested quantity exceeds available stock (${pStock} pcs).`);
+    // Include pieces reserved by any OTHER cart lines for this same product so the
+    // combined total across all lines never exceeds stock.
+    const piecesInOtherLines = currentCart
+        .filter((ci, i) => i !== index && ci.id === item.id)
+        .reduce((sum, ci) => sum + (Number(ci.piecesNeeded) || 0), 0);
+
+    if (stockItem && (piecesInOtherLines + nextPiecesNeeded) > pStock) {
+        const remaining = Math.max(0, pStock - piecesInOtherLines);
+        alert(`Cannot increase quantity: only ${remaining} piece(s) of "${item.name}" left in stock.`);
         return;
     }
 
