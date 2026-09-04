@@ -180,10 +180,15 @@
         <h2>Point of Sale (POS) Register</h2>
         
         <!-- Customer Type Selection Toggle Bar -->
-        <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center;">
+        <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center; flex-wrap: wrap;">
             <span style="font-size: 13px; font-weight: bold; color: var(--text);">Customer Tier:</span>
             <button id="btn-type-retail" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #0284c7; color: #fff;" onclick="setCustomerType('Retail')">Retail Price</button>
             <button id="btn-type-wholesale" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #e2e8f0; color: #1e293b;" onclick="setCustomerType('Wholesale')">Wholesale Price</button>
+
+            <span style="font-size: 13px; font-weight: bold; color: var(--text); margin-left: 12px;">Sell By:</span>
+            <button id="btn-unit-pack" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #7c3aed; color: #fff;" onclick="setSaleUnit('Pack')">📦 Pack</button>
+            <button id="btn-unit-piece" class="menu-btn" style="width: auto; margin: 0; padding: 6px 14px; background: #e2e8f0; color: #1e293b;" onclick="setSaleUnit('Piece')">🔹 Piece</button>
+
             <span style="margin-left: auto; font-size: 11px; font-weight: bold; color: #166534; background: #dcfce7; border: 1px solid #86efac; padding: 4px 10px; border-radius: 6px;">Selling from: <span id="pos-branch-label">Main</span></span>
         </div>
 
@@ -211,13 +216,14 @@
                         <option value="">-- Choose Inventory Item --</option>
                     </select>
                 </div>
+                <div id="pos-unit-info" style="font-size: 11px; color: var(--text-muted); margin: -6px 0 10px 0;"></div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group">
-                        <label>Quantity</label>
+                        <label id="pos-qty-label">Quantity (Packs)</label>
                         <input type="number" id="pos-qty" value="1" min="1">
                     </div>
                     <div class="form-group">
-                        <label>Selling Price (₦)</label>
+                        <label id="pos-price-label">Selling Price (₦ / Pack)</label>
                         <input type="number" id="pos-custom-price" placeholder="Price">
                     </div>
                 </div>
@@ -365,13 +371,14 @@
                         <th>Cost Price</th>
                         <th>Retail Price</th>
                         <th>Wholesale Price</th>
+                        <th>Pack Size / Piece Price</th>
                         <th>Stock</th>
                         <th>Expiry Date</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="inventory-body">
-                    <tr><td colspan="7" style="text-align: center;">Loading inventory...</td></tr>
+                    <tr><td colspan="8" style="text-align: center;">Loading inventory...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -923,25 +930,40 @@
 
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Cost Price (₦)</label>
+                    <label>Cost Price (₦ per Pack)</label>
                     <input type="number" id="inv-cost-price" placeholder="Cost Price">
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Retail Selling Price (₦)</label>
+                    <label>Retail Selling Price (₦ / Pack)</label>
                     <input type="number" id="inv-price" placeholder="Retail Price">
                 </div>
                 <div class="form-group">
-                    <label>Wholesale Price (₦)</label>
+                    <label>Wholesale Price (₦ / Pack)</label>
                     <input type="number" id="inv-wholesale-price" placeholder="Wholesale Price">
                 </div>
             </div>
 
+            <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px; margin-bottom:12px;">
+                <div style="font-size:11px; font-weight:bold; color:#6d28d9; margin-bottom:8px;">🔹 SELL IN PIECES (optional)</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Pieces per Pack</label>
+                        <input type="number" id="inv-units-per-pack" placeholder="e.g. 10" min="1">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>Piece Price (₦)</label>
+                        <input type="number" id="inv-piece-price" placeholder="Price per piece">
+                    </div>
+                </div>
+                <div style="font-size:10px; color:var(--text-muted); margin-top:6px;">Leave "Pieces per Pack" as 1 (or blank) if this product is only ever sold whole. Stock below is tracked in individual pieces.</div>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Stock Qty</label>
+                    <label>Stock Qty (in Pieces)</label>
                     <input type="number" id="inv-stock" placeholder="Stock Qty">
                 </div>
                 <div class="form-group">
