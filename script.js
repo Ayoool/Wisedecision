@@ -30,6 +30,7 @@ let inventoryCache = {};              // { branchId: { productId: item } }  (nes
 let currentCart = [];
 let currentActiveOrder = null;
 let currentCustomerType = "Retail"; // Default customer type
+let currentSaleUnit = "Pack";       // "Pack" or "Piece" — which unit the next POS line item is sold in
 
 // ==================== BRANCH MODULE STATE ====================
 let branchesCache = {};               // { branchId: { name, phone, address, isMain, createdAt } }
@@ -177,6 +178,7 @@ function switchView(viewId) {
                 updatePosCustomerBadge();
                 const posBranchLabel = document.getElementById('pos-branch-label');
                 if (posBranchLabel) posBranchLabel.textContent = branchNameOf(currentBranch);
+                applySaleUnitUI();
             }
             if (viewId === 'inventory-view') {
                 populateInventoryBranchFilter();
@@ -705,6 +707,28 @@ function onInventoryBranchFilterChange() {
     renderInventoryTable();
 }
 
+// Builds the small "1 pack = N pcs · Piece: ₦X" helper string used in the inventory
+// table and the POS dropdown so staff can see the piece breakdown at a glance.
+function packPieceInfoLabel(item) {
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    if (unitsPerPack <= 1) return '<span style="color:var(--text-muted);">Sold whole only</span>';
+    const piecePrice = getPiecePrice(item, 'Retail');
+    return `1 pack = ${unitsPerPack} pcs<br>Piece: ₦${Number(piecePrice).toLocaleString()}`;
+}
+
+// Returns the per-piece price for an item, given the customer tier. Falls back to
+// dividing the pack price by unitsPerPack when no explicit piece price was set.
+function getPiecePrice(item, customerType) {
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    const explicitPiece = Number(item.piecePrice) || 0;
+    if (explicitPiece > 0) return explicitPiece;
+    const packPrice = customerType === 'Wholesale'
+        ? (Number(item.wholesalePrice) || Number(item.price) || Number(item.retailPrice) || 0)
+        : (Number(item.price) || Number(item.retailPrice) || 0);
+    if (unitsPerPack <= 1) return packPrice;
+    return Math.round((packPrice / unitsPerPack) * 100) / 100;
+}
+
 function renderInventoryTable() {
     const tbody = document.getElementById('inventory-body');
     if (!tbody) return;
@@ -727,7 +751,7 @@ function renderInventoryTable() {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                    combined[key] = { name, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -745,6 +769,7 @@ function renderInventoryTable() {
                     <td>₦${Number(item.costPrice).toLocaleString()}</td>
                     <td>₦${Number(item.price).toLocaleString()}</td>
                     <td>₦${Number(item.wholesalePrice).toLocaleString()}</td>
+                    <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                     <td>${item.stock} <br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
                     <td>${item.expiry}</td>
                     <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
@@ -753,7 +778,7 @@ function renderInventoryTable() {
         });
 
         if (keys.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in any branch yet.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in any branch yet.</td></tr>`;
         }
         return;
     }
@@ -777,6 +802,7 @@ function renderInventoryTable() {
                 <td>₦${Number(cPrice).toLocaleString()}</td>
                 <td>₦${Number(rPrice).toLocaleString()}</td>
                 <td>₦${Number(wPrice).toLocaleString()}</td>
+                <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                 <td>${pStock}</td>
                 <td>${pExpiry}</td>
                 <td>
@@ -788,7 +814,7 @@ function renderInventoryTable() {
     });
 
     if (ids.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in ${branchNameOf(branchId)}. Add your first item above!</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in ${branchNameOf(branchId)}. Add your first item above!</td></tr>`;
     }
 }
 
@@ -824,6 +850,7 @@ function filterInventoryTable() {
                         <td>₦${Number(cPrice).toLocaleString()}</td>
                         <td>₦${Number(rPrice).toLocaleString()}</td>
                         <td>₦${Number(wPrice).toLocaleString()}</td>
+                        <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                         <td>${pStock}</td>
                         <td>${pExpiry}</td>
                         <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
@@ -850,6 +877,7 @@ function filterInventoryTable() {
                     <td>₦${Number(cPrice).toLocaleString()}</td>
                     <td>₦${Number(rPrice).toLocaleString()}</td>
                     <td>₦${Number(wPrice).toLocaleString()}</td>
+                    <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                     <td>${pStock}</td>
                     <td>${pExpiry}</td>
                     <td>
@@ -862,7 +890,7 @@ function filterInventoryTable() {
     }
 
     if (matchCount === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`;
     }
 }
 
@@ -901,6 +929,8 @@ function saveProduct() {
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
+    const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
+    const piecePrice = parseFloat(document.getElementById('inv-piece-price').value) || 0;
     const stock = parseInt(document.getElementById('inv-stock').value) || 0;
     const expiry = document.getElementById('inv-expiry').value;
 
@@ -916,6 +946,8 @@ function saveProduct() {
         price, 
         retailPrice: price,
         wholesalePrice, 
+        unitsPerPack,
+        piecePrice,
         stock, 
         stockQty: stock,
         expiry,
@@ -958,6 +990,8 @@ function editProduct(branchId, id) {
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
+    document.getElementById('inv-units-per-pack').value = item.unitsPerPack || '';
+    document.getElementById('inv-piece-price').value = item.piecePrice || '';
     document.getElementById('inv-stock').value = item.stock !== undefined ? item.stock : (item.stockQty || '');
     document.getElementById('inv-expiry').value = item.expiry || item.expiryDate || '';
     
@@ -976,6 +1010,8 @@ function resetInventoryForm() {
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
+    document.getElementById('inv-units-per-pack').value = '';
+    document.getElementById('inv-piece-price').value = '';
     document.getElementById('inv-stock').value = '';
     document.getElementById('inv-expiry').value = '';
     
@@ -1011,6 +1047,38 @@ function setCustomerType(type) {
     onPosProductChange();
 }
 
+// Toggles whether the next cart line item is sold as a whole Pack or as individual
+// Pieces. Piece pricing/quantity/stock is only meaningful for products that have
+// unitsPerPack > 1 set in Inventory — see getPiecePrice() / packPieceInfoLabel().
+function setSaleUnit(unit) {
+    currentSaleUnit = unit;
+    applySaleUnitUI();
+    onPosProductChange();
+}
+
+function applySaleUnitUI() {
+    const packBtn = document.getElementById('btn-unit-pack');
+    const pieceBtn = document.getElementById('btn-unit-piece');
+    const qtyLabel = document.getElementById('pos-qty-label');
+    const priceLabel = document.getElementById('pos-price-label');
+
+    if (packBtn && pieceBtn) {
+        if (currentSaleUnit === 'Piece') {
+            pieceBtn.style.background = '#7c3aed';
+            pieceBtn.style.color = '#fff';
+            packBtn.style.background = '#e2e8f0';
+            packBtn.style.color = '#1e293b';
+        } else {
+            packBtn.style.background = '#7c3aed';
+            packBtn.style.color = '#fff';
+            pieceBtn.style.background = '#e2e8f0';
+            pieceBtn.style.color = '#1e293b';
+        }
+    }
+    if (qtyLabel) qtyLabel.textContent = currentSaleUnit === 'Piece' ? 'Quantity (Pieces)' : 'Quantity (Packs)';
+    if (priceLabel) priceLabel.textContent = currentSaleUnit === 'Piece' ? 'Selling Price (₦ / Piece)' : 'Selling Price (₦ / Pack)';
+}
+
 // POS always sells from the logged-in user's active branch (currentBranch) — never
 // the aggregate "All Branches" view, since a sale must draw down one physical location's stock.
 function loadPosInventoryDropdown() {
@@ -1032,8 +1100,10 @@ function loadPosInventoryDropdown() {
             const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
+            const unitsPerPack = Number(item.unitsPerPack) || 1;
+            const pieceNote = unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '';
 
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock}) - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock} pcs)${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         });
     });
 }
@@ -1052,9 +1122,11 @@ function filterPosInventory() {
         const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
         const rPrice = item.price || item.retailPrice || 0;
         const wPrice = item.wholesalePrice || 0;
+        const unitsPerPack = Number(item.unitsPerPack) || 1;
+        const pieceNote = unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '';
 
         if (pName.toLowerCase().includes(query)) {
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock}) - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock} pcs)${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         }
     });
 }
@@ -1062,15 +1134,30 @@ function filterPosInventory() {
 function onPosProductChange() {
     const id = document.getElementById('pos-product-select').value;
     const priceInput = document.getElementById('pos-custom-price');
+    const unitInfoEl = document.getElementById('pos-unit-info');
     const branchItems = inventoryCache[currentBranch] || {};
+
     if (id && branchItems[id]) {
         const item = branchItems[id];
+        const unitsPerPack = Number(item.unitsPerPack) || 1;
         const rPrice = item.price || item.retailPrice || 0;
         const wPrice = item.wholesalePrice || rPrice;
+        const packPrice = (currentCustomerType === 'Wholesale') ? wPrice : rPrice;
 
-        priceInput.value = (currentCustomerType === 'Wholesale') ? wPrice : rPrice;
+        if (currentSaleUnit === 'Piece') {
+            priceInput.value = getPiecePrice(item, currentCustomerType);
+            if (unitInfoEl) {
+                unitInfoEl.textContent = unitsPerPack > 1
+                    ? `1 pack = ${unitsPerPack} pcs. Selling by the piece.`
+                    : `⚠ This product isn't set up for piece sales (Pieces per Pack = 1) — selling whole units.`;
+            }
+        } else {
+            priceInput.value = packPrice;
+            if (unitInfoEl) unitInfoEl.textContent = unitsPerPack > 1 ? `1 pack = ${unitsPerPack} pcs.` : '';
+        }
     } else {
         priceInput.value = '';
+        if (unitInfoEl) unitInfoEl.textContent = '';
     }
 }
 
@@ -1090,17 +1177,29 @@ function addToCart() {
     const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     const rPrice = item.price || item.retailPrice || 0;
     const wPrice = item.wholesalePrice || rPrice;
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    const saleUnit = currentSaleUnit;
 
-    const price = !isNaN(customPrice) ? customPrice : (currentCustomerType === 'Wholesale' ? wPrice : rPrice);
+    // piecesNeeded = how many individual pieces this line item will draw down from
+    // stock (stock is always tracked in pieces). Selling by Pack converts qty*unitsPerPack.
+    const piecesNeeded = saleUnit === 'Piece' ? qty : (qty * unitsPerPack);
 
-    if (qty > pStock) {
-        alert(`Warning: Requested quantity exceeds available stock (${pStock}).`);
+    const defaultUnitPrice = saleUnit === 'Piece'
+        ? getPiecePrice(item, currentCustomerType)
+        : (currentCustomerType === 'Wholesale' ? wPrice : rPrice);
+    const price = !isNaN(customPrice) ? customPrice : defaultUnitPrice;
+
+    if (piecesNeeded > pStock) {
+        alert(`Warning: Requested quantity exceeds available stock (${pStock} pcs).`);
     }
 
     currentCart.push({
         id,
         name: pName,
         qty,
+        saleUnit,
+        unitsPerPack,
+        piecesNeeded,
         price,
         total: qty * price,
         customerType: currentCustomerType
@@ -1124,9 +1223,10 @@ function renderCart() {
 
     currentCart.forEach((cartItem, index) => {
         grandTotal += cartItem.total;
+        const unitLabel = cartItem.saleUnit === 'Piece' ? 'pcs' : 'pack(s)';
         tbody.innerHTML += `
             <tr>
-                <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType}]</small></td>
+                <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType} · ${unitLabel}]</small></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <button class="menu-btn" style="padding: 2px 6px; font-size: 10px; width: auto;" onclick="decreaseQty(${index})">-</button>
@@ -1152,21 +1252,26 @@ function increaseQty(index) {
     const branchItems = inventoryCache[currentBranch] || {};
     const stockItem = branchItems[item.id];
     const pStock = stockItem ? (stockItem.stock !== undefined ? stockItem.stock : (stockItem.stockQty || 0)) : 0;
+    const unitsPerPack = item.unitsPerPack || 1;
+    const nextPiecesNeeded = item.saleUnit === 'Piece' ? (item.qty + 1) : ((item.qty + 1) * unitsPerPack);
 
-    if (stockItem && item.qty + 1 > pStock) {
-        alert(`Warning: Requested quantity exceeds available stock (${pStock}).`);
+    if (stockItem && nextPiecesNeeded > pStock) {
+        alert(`Warning: Requested quantity exceeds available stock (${pStock} pcs).`);
         return;
     }
 
     item.qty += 1;
+    item.piecesNeeded = nextPiecesNeeded;
     item.total = item.qty * item.price;
     renderCart();
 }
 
 function decreaseQty(index) {
     const item = currentCart[index];
+    const unitsPerPack = item.unitsPerPack || 1;
     if (item.qty > 1) {
         item.qty -= 1;
+        item.piecesNeeded = item.saleUnit === 'Piece' ? item.qty : (item.qty * unitsPerPack);
         item.total = item.qty * item.price;
     } else {
         removeFromCart(index);
@@ -1516,19 +1621,23 @@ function completeSplitCheckout() {
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
             // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM (from the branch that made the sale)
+            // Deduct in PIECES: item.piecesNeeded already accounts for pack vs piece sales
+            // (piecesNeeded = qty for a piece sale, or qty * unitsPerPack for a pack sale).
+            // Older cart records saved before this feature existed won't have piecesNeeded,
+            // so we fall back to the raw qty for those (matches the old pack-only behavior).
             if (Array.isArray(orderData.items)) {
                 orderData.items.forEach(cartItem => {
                     const productId = cartItem.id;
-                    const soldQty = Number(cartItem.qty) || 0;
+                    const soldPieces = Number(cartItem.piecesNeeded !== undefined ? cartItem.piecesNeeded : cartItem.qty) || 0;
 
-                    if (productId && soldQty > 0) {
+                    if (productId && soldPieces > 0) {
                         const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}/${productId}`);
                         
                         productRef.once('value').then(prodSnap => {
                             if (prodSnap.exists()) {
                                 const prodData = prodSnap.val();
                                 let currentStock = Number(prodData.stock !== undefined ? prodData.stock : (prodData.stockQty || 0));
-                                let newStock = Math.max(0, currentStock - soldQty);
+                                let newStock = Math.max(0, currentStock - soldPieces);
 
                                 productRef.update({
                                     stock: newStock,
@@ -1674,10 +1783,12 @@ function renderReceiptView(orderData, isReprint = false) {
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
+                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : (item.saleUnit === 'Pack' ? 'pack' : '');
+                const qtyDisplay = unitLabel ? `${item.qty || 0} ${unitLabel}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
                 receiptItemsContainer.innerHTML += `
                     <tr>
                         <td style="font-weight: bold;">${item.name || ''}</td>
-                        <td>${item.qty || 0}</td>
+                        <td>${qtyDisplay}</td>
                         <td>₦${safeItemTotal}</td>
                     </tr>
                 `;
@@ -2224,18 +2335,20 @@ function loadProfitAndLossModule() {
         
         // costPriceMap keyed by "branchId_productId" (exact) and by lowercased product
         // name (fallback, used e.g. after a stock transfer creates a new product id
-        // at the destination branch).
+        // at the destination branch). Values are per-PIECE cost (costPrice / unitsPerPack)
+        // so COGS lines up with piecesNeeded-based sales below.
         const costPriceMap = {};
         invSnapshot.forEach(branchChild => {
             const branchId = branchChild.key;
             branchChild.forEach(prodChild => {
                 const item = prodChild.val();
-                const cPrice = Number(item.costPrice) || 0;
+                const unitsPerPack = Number(item.unitsPerPack) || 1;
+                const cPricePerPiece = (Number(item.costPrice) || 0) / unitsPerPack;
                 const itemName = item.name || item.productName || '';
 
-                costPriceMap[`${branchId}_${prodChild.key}`] = cPrice;
+                costPriceMap[`${branchId}_${prodChild.key}`] = cPricePerPiece;
                 if (itemName) {
-                    costPriceMap[itemName.toLowerCase().trim()] = cPrice;
+                    costPriceMap[itemName.toLowerCase().trim()] = cPricePerPiece;
                 }
             });
         });
@@ -2256,8 +2369,9 @@ function loadProfitAndLossModule() {
             let txCogs = 0;
             if (Array.isArray(tx.items)) {
                 tx.items.forEach(cartItem => {
-                    const unitCost = costPriceMap[`${txBranch}_${cartItem.id}`] || costPriceMap[(cartItem.name || '').toLowerCase().trim()] || 0;
-                    txCogs += unitCost * (Number(cartItem.qty) || 1);
+                    const unitCostPerPiece = costPriceMap[`${txBranch}_${cartItem.id}`] || costPriceMap[(cartItem.name || '').toLowerCase().trim()] || 0;
+                    const piecesSold = Number(cartItem.piecesNeeded !== undefined ? cartItem.piecesNeeded : cartItem.qty) || 0;
+                    txCogs += unitCostPerPiece * piecesSold;
                 });
             }
 
@@ -2609,6 +2723,8 @@ function confirmTransferReceipt(transferId) {
                                 price: src.price || src.retailPrice || 0,
                                 retailPrice: src.price || src.retailPrice || 0,
                                 wholesalePrice: src.wholesalePrice || 0,
+                                unitsPerPack: src.unitsPerPack || 1,
+                                piecePrice: src.piecePrice || 0,
                                 stock: item.qty,
                                 stockQty: item.qty,
                                 expiry: src.expiry || src.expiryDate || '',
@@ -3073,6 +3189,8 @@ function saveSupply() {
                             price: item.retailPrice || 0,
                             retailPrice: item.retailPrice || 0,
                             wholesalePrice: item.wholesalePrice || 0,
+                            unitsPerPack: 1,
+                            piecePrice: 0,
                             stock: item.qty,
                             stockQty: item.qty,
                             expiry: '',
@@ -3099,7 +3217,7 @@ function saveSupply() {
         loadSuppliesHistory();
     }).catch(err => {
         console.error("saveSupply error:", err);
-        alert("⚠️ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
+        alert("⚠ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
     });
 }
 
