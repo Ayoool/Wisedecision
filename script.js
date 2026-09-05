@@ -300,14 +300,20 @@ function finishBranchLoad(afterLoadCallback) {
     updateBranchBadge();
     if (afterLoadCallback) afterLoadCallback();
 
-    // Keep it live so Admins adding/renaming branches reflect instantly across the app
-    firebase.database().ref(`stores/${currentStoreId}/branches`).on('value', snapshot => {
+    // Keep it live so Admins adding/renaming branches reflect instantly across the app.
+    // .off() first: this is called once per login, but re-attaching without clearing
+    // the old listener (e.g. a re-login in the same tab) would stack duplicate
+    // listeners that each re-render on every future branch change.
+    const branchesRef = firebase.database().ref(`stores/${currentStoreId}/branches`);
+    branchesRef.off();
+    branchesRef.on('value', snapshot => {
         branchesCache = {};
         snapshot.forEach(child => { branchesCache[child.key] = child.val(); });
         updateBranchBadge();
         populateInventoryBranchFilter();
         populateReportsBranchFilter();
         populateStaffBranchDropdown();
+        renderBranchesTable();
     });
 }
 
@@ -513,18 +519,23 @@ function logout() {
 
 // ==================== SUPER ADMIN DASHBOARD CONTROL ====================
 function loadSuperAdminDashboard() {
-    firebase.database().ref('stores').on('value', snapshot => {
+    // .off() first — the "🔄 Refresh List" button calls this function directly, so
+    // without clearing the previous listener each click stacked another one on top,
+    // meaning every future update re-rendered the table N times instead of once.
+    const storesRef = firebase.database().ref('stores');
+    storesRef.off();
+    storesRef.on('value', snapshot => {
         const tbody = document.getElementById('super-admin-stores-body');
         if (!tbody) return;
 
-        tbody.innerHTML = '';
+        const rowsHtml = [];
         snapshot.forEach(child => {
             const storeId = child.key;
             const data = child.val();
             const status = data.status || 'active';
             const statusColor = status === 'active' ? 'green' : 'red';
 
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td><strong>${storeId}</strong></td>
                     <td>${data.businessName || 'N/A'}</td>
@@ -539,8 +550,9 @@ function loadSuperAdminDashboard() {
                         <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="deleteBusinessAccount('${storeId}')">🗑 Delete</button>
                     </td>
                 </tr>
-            `;
+            `);
         });
+        tbody.innerHTML = rowsHtml.join('');
     });
 }
 
@@ -662,8 +674,14 @@ function loadDashboardMetrics() {
 // (aggregated, read-only) and any single branch (full CRUD) without re-subscribing.
 function loadInventoryTable() {
     if (!currentStoreId) return;
-    
-    firebase.database().ref(`stores/${currentStoreId}/inventory`).on('value', snapshot => {
+
+    // .off() first — switchView('inventory-view') calls this every time the sidebar
+    // Inventory button is clicked, so without clearing the old listener each visit
+    // stacked another one, and renderInventoryTable() ended up running once per
+    // stacked listener on every future inventory change.
+    const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory`);
+    invRef.off();
+    invRef.on('value', snapshot => {
         inventoryCache = {};
         snapshot.forEach(branchChild => {
             const branchId = branchChild.key;
@@ -753,8 +771,6 @@ function renderInventoryTable() {
     if (modeNote) modeNote.style.display = isAggregate ? 'inline-block' : 'none';
     if (addProductBtn) addProductBtn.style.opacity = isAggregate ? '0.6' : '1';
 
-    tbody.innerHTML = '';
-
     if (isAggregate) {
         // Combined enterprise view: sum stock for matching product names across all branches
         const combined = {}; // name -> { costPrice, price, wholesalePrice, stock, expiry, branches: {branchName: stock} }
@@ -772,11 +788,16 @@ function renderInventoryTable() {
             });
         });
 
+        // Build every row as a string in an array and join once at the end — setting
+        // innerHTML += inside the loop forces the browser to re-parse the whole
+        // accumulated HTML on every iteration, which gets quadratically slower as the
+        // product list grows. A single join()/assignment is one parse regardless of size.
         const keys = Object.keys(combined);
+        const rowsHtml = [];
         keys.forEach(key => {
             const item = combined[key];
             const branchBreakdown = Object.keys(item.branches).map(bn => `${bn}: ${item.branches[bn]}`).join(', ');
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td>${item.name}</td>
                     <td>₦${Number(item.costPrice).toLocaleString()}</td>
@@ -787,18 +808,19 @@ function renderInventoryTable() {
                     <td>${item.expiry}</td>
                     <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                 </tr>
-            `;
+            `);
         });
 
-        if (keys.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in any branch yet.</td></tr>`;
-        }
+        tbody.innerHTML = keys.length === 0
+            ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in any branch yet.</td></tr>`
+            : rowsHtml.join('');
         return;
     }
 
     const branchId = currentInventoryBranchFilter;
     const branchItems = inventoryCache[branchId] || {};
     const ids = Object.keys(branchItems);
+    const rowsHtml = [];
 
     ids.forEach(id => {
         const item = branchItems[id];
@@ -809,7 +831,7 @@ function renderInventoryTable() {
         const pStock = item.stock !== undefined ? item.stock : (item.stockQty !== undefined ? item.stockQty : 0);
         const pExpiry = item.expiry || item.expiryDate || 'N/A';
 
-        tbody.innerHTML += `
+        rowsHtml.push(`
             <tr>
                 <td>${pName}</td>
                 <td>₦${Number(cPrice).toLocaleString()}</td>
@@ -823,12 +845,12 @@ function renderInventoryTable() {
                     <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${branchId}','${id}')">Delete</button>
                 </td>
             </tr>
-        `;
+        `);
     });
 
-    if (ids.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in ${branchNameOf(branchId)}. Add your first item above!</td></tr>`;
-    }
+    tbody.innerHTML = ids.length === 0
+        ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in ${branchNameOf(branchId)}. Add your first item above!</td></tr>`
+        : rowsHtml.join('');
 }
 
 function filterInventoryTable() {
@@ -840,10 +862,9 @@ function filterInventoryTable() {
 
     const tbody = document.getElementById('inventory-body');
     if (!tbody) return;
-    tbody.innerHTML = '';
 
     const isAggregate = currentInventoryBranchFilter === 'all';
-    let matchCount = 0;
+    const rowsHtml = [];
 
     if (isAggregate) {
         Object.keys(inventoryCache).forEach(branchId => {
@@ -851,13 +872,12 @@ function filterInventoryTable() {
             Object.values(inventoryCache[branchId] || {}).forEach(item => {
                 const pName = item.name || item.productName || 'Unnamed Item';
                 if (!pName.toLowerCase().includes(query)) return;
-                matchCount++;
                 const cPrice = item.costPrice || 0;
                 const rPrice = item.price || item.retailPrice || 0;
                 const wPrice = item.wholesalePrice || 0;
                 const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 const pExpiry = item.expiry || item.expiryDate || 'N/A';
-                tbody.innerHTML += `
+                rowsHtml.push(`
                     <tr>
                         <td>${pName} <br><small style="color:var(--text-muted);">${branchName}</small></td>
                         <td>₦${Number(cPrice).toLocaleString()}</td>
@@ -868,7 +888,7 @@ function filterInventoryTable() {
                         <td>${pExpiry}</td>
                         <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                     </tr>
-                `;
+                `);
             });
         });
     } else {
@@ -878,13 +898,12 @@ function filterInventoryTable() {
             const item = branchItems[id];
             const pName = item.name || item.productName || 'Unnamed Item';
             if (!pName.toLowerCase().includes(query)) return;
-            matchCount++;
             const cPrice = item.costPrice || 0;
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
             const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
             const pExpiry = item.expiry || item.expiryDate || 'N/A';
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td>${pName}</td>
                     <td>₦${Number(cPrice).toLocaleString()}</td>
@@ -898,13 +917,13 @@ function filterInventoryTable() {
                         <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${branchId}','${id}')">Delete</button>
                     </td>
                 </tr>
-            `;
+            `);
         });
     }
 
-    if (matchCount === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`;
-    }
+    tbody.innerHTML = rowsHtml.length === 0
+        ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`
+        : rowsHtml.join('');
 }
 
 // ==================== PRODUCT FORM MODAL (Add / Edit) ====================
@@ -1254,12 +1273,20 @@ function onPosProductChange() {
 
 function addToCart() {
     const id = document.getElementById('pos-product-select').value;
-    const qty = parseInt(document.getElementById('pos-qty').value) || 1;
+    // parseFloat (not parseInt) so half-quantities like 0.5 are honored — lets
+    // staff sell half a product (e.g. half a bag, half a pack) instead of being
+    // forced to round to a whole unit.
+    const qty = parseFloat(document.getElementById('pos-qty').value) || 1;
     const customPrice = parseFloat(document.getElementById('pos-custom-price').value);
     const branchItems = inventoryCache[currentBranch] || {};
 
     if (!id || !branchItems[id]) {
         alert("Please select a valid product.");
+        return;
+    }
+
+    if (qty <= 0) {
+        alert("Please enter a quantity greater than zero.");
         return;
     }
 
@@ -1275,7 +1302,8 @@ function addToCart() {
     // stock (stock is always tracked in pieces). Selling by Pack converts qty*unitsPerPack.
     // Also account for pieces of this same product already sitting in the cart from
     // an earlier line, so a second add can't push the combined total past stock.
-    const piecesNeeded = saleUnit === 'Piece' ? qty : (qty * unitsPerPack);
+    // Rounded to 2dp to avoid floating-point artifacts (e.g. 0.1 + 0.2 = 0.30000000000000004).
+    const piecesNeeded = Math.round((saleUnit === 'Piece' ? qty : (qty * unitsPerPack)) * 100) / 100;
     const piecesAlreadyInCart = currentCart
         .filter(ci => ci.id === id)
         .reduce((sum, ci) => sum + (Number(ci.piecesNeeded) || 0), 0);
@@ -1302,7 +1330,7 @@ function addToCart() {
         unitsPerPack,
         piecesNeeded,
         price,
-        total: qty * price,
+        total: Math.round(qty * price * 100) / 100,
         customerType: currentCustomerType
     });
 
@@ -1348,13 +1376,18 @@ function renderCart() {
     totalEl.textContent = grandTotal.toLocaleString();
 }
 
+// The cart's +/- buttons step by 0.5 so a line item can be nudged down to a half
+// quantity (e.g. 1 → 0.5) instead of only ever moving in whole-unit increments.
+const CART_QTY_STEP = 0.5;
+
 function increaseQty(index) {
     const item = currentCart[index];
     const branchItems = inventoryCache[currentBranch] || {};
     const stockItem = branchItems[item.id];
     const pStock = stockItem ? (stockItem.stock !== undefined ? stockItem.stock : (stockItem.stockQty || 0)) : 0;
     const unitsPerPack = item.unitsPerPack || 1;
-    const nextPiecesNeeded = item.saleUnit === 'Piece' ? (item.qty + 1) : ((item.qty + 1) * unitsPerPack);
+    const nextQty = Math.round((item.qty + CART_QTY_STEP) * 100) / 100;
+    const nextPiecesNeeded = Math.round((item.saleUnit === 'Piece' ? nextQty : (nextQty * unitsPerPack)) * 100) / 100;
 
     // Include pieces reserved by any OTHER cart lines for this same product so the
     // combined total across all lines never exceeds stock.
@@ -1368,19 +1401,21 @@ function increaseQty(index) {
         return;
     }
 
-    item.qty += 1;
+    item.qty = nextQty;
     item.piecesNeeded = nextPiecesNeeded;
-    item.total = item.qty * item.price;
+    item.total = Math.round(item.qty * item.price * 100) / 100;
     renderCart();
 }
 
 function decreaseQty(index) {
     const item = currentCart[index];
     const unitsPerPack = item.unitsPerPack || 1;
-    if (item.qty > 1) {
-        item.qty -= 1;
-        item.piecesNeeded = item.saleUnit === 'Piece' ? item.qty : (item.qty * unitsPerPack);
-        item.total = item.qty * item.price;
+    const nextQty = Math.round((item.qty - CART_QTY_STEP) * 100) / 100;
+
+    if (nextQty > 0) {
+        item.qty = nextQty;
+        item.piecesNeeded = Math.round((item.saleUnit === 'Piece' ? item.qty : (item.qty * unitsPerPack)) * 100) / 100;
+        item.total = Math.round(item.qty * item.price * 100) / 100;
     } else {
         removeFromCart(index);
         return;
@@ -1472,12 +1507,16 @@ function loadPendingOrdersQueue() {
         return;
     }
 
-    firebase.database().ref(`stores/${currentStoreId}/pendingOrders`).on('value', snapshot => {
+    // .off() first — switchView('accountant-view') and the "🔄 Refresh Queue" button
+    // both call this directly, so without clearing the previous listener each visit
+    // or click stacked another one on top of the pendingOrders node.
+    const pendingRef = firebase.database().ref(`stores/${currentStoreId}/pendingOrders`);
+    pendingRef.off();
+    pendingRef.on('value', snapshot => {
         const tbody = document.getElementById('accountant-queue-body');
         if (!tbody) return;
 
-        tbody.innerHTML = '';
-
+        const rowsHtml = [];
         snapshot.forEach(child => {
             const order = child.val();
             // Accountants/Cashiers only ever process their own branch's queue. Admin sees
@@ -1485,7 +1524,7 @@ function loadPendingOrdersQueue() {
             if ((order.branchId || 'main') !== currentBranch) return;
 
             if (order.status === 'Pending Verification') {
-                tbody.innerHTML += `
+                rowsHtml.push(`
                     <tr>
                         <td><strong>${order.txId}</strong>${order.customerName && order.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${order.customerName}</small>` : ''}</td>
                         <td>${order.staff || order.soldBy || 'Staff'}</td>
@@ -1496,13 +1535,13 @@ function loadPendingOrdersQueue() {
                             <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="cancelPendingOrder('${order.txId}')">Cancel ✕</button>
                         </td>
                     </tr>
-                `;
+                `);
             }
         });
 
-        if (tbody.innerHTML === '') {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue for ${branchNameOf(currentBranch)}.</td></tr>`;
-        }
+        tbody.innerHTML = rowsHtml.length === 0
+            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue for ${branchNameOf(currentBranch)}.</td></tr>`
+            : rowsHtml.join('');
     }, error => {
         console.error("loadPendingOrdersQueue error:", error);
     });
@@ -2048,11 +2087,17 @@ function onReportsBranchFilterChange() {
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
-    firebase.database().ref(`stores/${currentStoreId}/transactions`).on('value', snapshot => {
+    // .off() first — this is called again every time the branch filter or date
+    // filter changes (onReportsBranchFilterChange, filterSalesByDate,
+    // resetSalesDateFilter), so without clearing the old listener each filter
+    // change stacked another one, and a single future sale ended up re-rendering
+    // the whole table once per stacked listener.
+    const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`);
+    txRef.off();
+    txRef.on('value', snapshot => {
         const tbody = document.getElementById('sales-history-body');
         if (!tbody) return;
 
-        tbody.innerHTML = '';
         let dayRevenue = 0;
         let weekRevenue = 0;
         let monthRevenue = 0;
@@ -2078,6 +2123,11 @@ function loadPastSalesHistory(selectedDateString = null) {
         startOfWeek.setHours(0, 0, 0, 0);
 
         const branchFilter = currentReportBranchFilter || 'all';
+        // Build every row as a string and join once at the end instead of appending
+        // to innerHTML per-row — appending forces a full re-parse of the growing
+        // HTML string on every iteration, which gets much slower as sales history
+        // grows into the hundreds/thousands of transactions.
+        const rowsHtml = [];
 
         snapshot.forEach(child => {
             const tx = child.val();
@@ -2118,7 +2168,7 @@ function loadPastSalesHistory(selectedDateString = null) {
             const sellerName = tx.staff || tx.soldBy || 'Staff';
             const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
 
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td><strong>${transactionId}</strong>${customerTag}</td>
                     <td>${branchNameOf(txBranch)}</td>
@@ -2131,12 +2181,12 @@ function loadPastSalesHistory(selectedDateString = null) {
                         <button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button>
                     </td>
                 </tr>
-            `;
+            `);
         });
 
-        if (tbody.innerHTML === '') {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No past sales transactions found for this filter.</td></tr>`;
-        }
+        tbody.innerHTML = rowsHtml.length === 0
+            ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No past sales transactions found for this filter.</td></tr>`
+            : rowsHtml.join('');
         
         const dayEl = document.getElementById('todays-revenue-card') || document.getElementById('total-revenue-day-label');
         if (dayEl) dayEl.textContent = '₦' + selectedDayRevenue.toLocaleString();
@@ -2241,27 +2291,31 @@ function populateStaffBranchDropdown() {
 function loadStaffTable() {
     if (!currentStoreId) return;
 
-    firebase.database().ref(`stores/${currentStoreId}/staff`).on('value', snapshot => {
+    // .off() first — switchView('staff-view') calls this every time the Staff sidebar
+    // button is clicked, so without clearing the old listener each visit stacked one.
+    const staffRef = firebase.database().ref(`stores/${currentStoreId}/staff`);
+    staffRef.off();
+    staffRef.on('value', snapshot => {
         const tbody = document.getElementById('staff-body');
         if (!tbody) return;
 
-        tbody.innerHTML = '';
+        const rowsHtml = [];
         snapshot.forEach(child => {
             const id = child.key;
             const staff = child.val();
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td>${staff.name}</td>
                     <td>${staff.role}</td>
                     <td>${branchNameOf(staff.branchId || 'main')}</td>
                     <td><button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto;" onclick="deleteStaff('${id}')">Remove</button></td>
                 </tr>
-            `;
+            `);
         });
 
-        if (snapshot.numChildren() === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center;">No additional staff registered.</td></tr>`;
-        }
+        tbody.innerHTML = rowsHtml.length === 0
+            ? `<tr><td colspan="4" style="text-align: center;">No additional staff registered.</td></tr>`
+            : rowsHtml.join('');
     });
 }
 
@@ -2345,13 +2399,18 @@ function updateBusinessProfile() {
 // ==================== EXPENSES MANAGEMENT MODULE (branch-scoped) ====================
 function loadExpensesTable() {
     if (!currentStoreId) return;
-    
-    firebase.database().ref(`stores/${currentStoreId}/expenses`).on('value', snapshot => {
+
+    // .off() first — switchView('expenses-view') and saveExpense()/deleteExpense()
+    // all call this again, so without clearing the old listener each call stacked
+    // another one on top of the expenses node.
+    const expRef = firebase.database().ref(`stores/${currentStoreId}/expenses`);
+    expRef.off();
+    expRef.on('value', snapshot => {
         const tbody = document.getElementById('expenses-body');
         if (!tbody) return;
-        
-        tbody.innerHTML = '';
+
         let totalExpenses = 0;
+        const rowsHtml = [];
 
         snapshot.forEach(child => {
             const id = child.key;
@@ -2361,7 +2420,7 @@ function loadExpensesTable() {
             const amount = Number(item.amount) || 0;
             totalExpenses += amount;
 
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td>${item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
                     <td><strong>${item.category}</strong></td>
@@ -2372,12 +2431,12 @@ function loadExpensesTable() {
                         <button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto;" onclick="deleteExpense('${id}')">Delete</button>
                     </td>
                 </tr>
-            `;
+            `);
         });
 
-        if (totalExpenses === 0 && tbody.innerHTML === '') {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet for ${branchNameOf(currentBranch)}.</td></tr>`;
-        }
+        tbody.innerHTML = rowsHtml.length === 0
+            ? `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet for ${branchNameOf(currentBranch)}.</td></tr>`
+            : rowsHtml.join('');
 
         const totalLabel = document.getElementById('total-expenses-label');
         if (totalLabel) {
@@ -2515,34 +2574,40 @@ function loadProfitAndLossModule() {
 
 // ==================== BRANCH MANAGEMENT MODULE ====================
 // Data model (Firebase): stores/{storeId}/branches/{branchId} = { name, phone, address, isMain, createdAt }
+// Renders the Branches table straight from branchesCache — which finishBranchLoad()
+// already keeps live-synced from Firebase for the whole app (branch badge, dropdowns,
+// etc). Rendering from that shared cache instead of opening a second '.on()' listener
+// on the exact same `branches` path avoids a duplicate-listener conflict: calling
+// `.off()` on a path removes ALL listeners there, so a second listener on this path
+// would either fight with, or accidentally cancel, the one in finishBranchLoad().
+function renderBranchesTable() {
+    const tbody = document.getElementById('branches-body');
+    if (!tbody) return; // Branches view isn't currently open — nothing to render
+
+    const rowsHtml = [];
+    Object.keys(branchesCache).forEach(id => {
+        const b = branchesCache[id];
+        rowsHtml.push(`
+            <tr>
+                <td><strong>${b.name}</strong>${b.isMain ? ' <span style="font-size:10px; color:#166534; background:#dcfce7; padding:2px 6px; border-radius:4px; border:1px solid #86efac;">MAIN</span>' : ''}</td>
+                <td>${b.phone || 'N/A'}</td>
+                <td>${b.address || 'N/A'}</td>
+                <td>
+                    <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editBranch('${id}')">Edit</button>
+                    ${!b.isMain ? `<button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteBranch('${id}')">Delete</button>` : ''}
+                </td>
+            </tr>
+        `);
+    });
+
+    tbody.innerHTML = rowsHtml.length === 0
+        ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">No branches yet.</td></tr>`
+        : rowsHtml.join('');
+}
+
 function loadBranchesTable() {
     if (!currentStoreId) return;
-
-    firebase.database().ref(`stores/${currentStoreId}/branches`).on('value', snapshot => {
-        const tbody = document.getElementById('branches-body');
-        if (!tbody) return;
-
-        tbody.innerHTML = '';
-        snapshot.forEach(child => {
-            const id = child.key;
-            const b = child.val();
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong>${b.name}</strong>${b.isMain ? ' <span style="font-size:10px; color:#166534; background:#dcfce7; padding:2px 6px; border-radius:4px; border:1px solid #86efac;">MAIN</span>' : ''}</td>
-                    <td>${b.phone || 'N/A'}</td>
-                    <td>${b.address || 'N/A'}</td>
-                    <td>
-                        <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editBranch('${id}')">Edit</button>
-                        ${!b.isMain ? `<button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteBranch('${id}')">Delete</button>` : ''}
-                    </td>
-                </tr>
-            `;
-        });
-
-        if (snapshot.numChildren() === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">No branches yet.</td></tr>`;
-        }
-    });
+    renderBranchesTable();
 }
 
 function saveBranch() {
@@ -2625,16 +2690,20 @@ function deleteBranch(id) {
 function loadTransfersView() {
     if (!currentStoreId) return;
 
-    firebase.database().ref(`stores/${currentStoreId}/transfers`).on('value', snapshot => {
+    // .off() first — switchView('transfers-view') calls this on every visit, plus
+    // createTransfer()/confirmTransferReceipt()/cancelTransfer() all re-trigger it
+    // indirectly, so without clearing the old listener these stacked quickly.
+    const transfersRef = firebase.database().ref(`stores/${currentStoreId}/transfers`);
+    transfersRef.off();
+    transfersRef.on('value', snapshot => {
         const tbody = document.getElementById('transfers-body');
         if (!tbody) return;
 
-        tbody.innerHTML = '';
         const rows = [];
         snapshot.forEach(child => rows.push({ id: child.key, ...child.val() }));
         rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
-        rows.forEach(t => {
+        const rowsHtml = rows.map(t => {
             const itemsSummary = Array.isArray(t.items) ? t.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
             const statusColor = t.status === 'Completed' ? '#166534' : (t.status === 'Cancelled' ? '#991b1b' : '#b45309');
             let actions = `<button class="menu-btn btn-dash" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="printWaybill('${t.id}')">🖨 Waybill</button>`;
@@ -2644,7 +2713,7 @@ function loadTransfersView() {
                 actions += ` <button class="menu-btn btn-logout" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="cancelTransfer('${t.id}')">✕ Cancel</button>`;
             }
 
-            tbody.innerHTML += `
+            return `
                 <tr>
                     <td><strong>${t.id}</strong></td>
                     <td>${branchNameOf(t.fromBranch)}</td>
@@ -2657,9 +2726,9 @@ function loadTransfersView() {
             `;
         });
 
-        if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">No stock transfers yet. Click "+ New Transfer" to dispatch goods between branches.</td></tr>`;
-        }
+        tbody.innerHTML = rows.length === 0
+            ? `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">No stock transfers yet. Click "+ New Transfer" to dispatch goods between branches.</td></tr>`
+            : rowsHtml.join('');
     });
 }
 
@@ -2942,7 +3011,11 @@ function printWaybill(transferId) {
 function subscribeSuppliersCache() {
     if (!currentStoreId) return;
 
-    firebase.database().ref(`stores/${currentStoreId}/suppliers`).on('value', snapshot => {
+    // .off() first — called once per login, but guards against a duplicate listener
+    // stacking up if the app ever logs in again without a full page reload.
+    const suppliersRef = firebase.database().ref(`stores/${currentStoreId}/suppliers`);
+    suppliersRef.off();
+    suppliersRef.on('value', snapshot => {
         suppliersCache = {};
         snapshot.forEach(child => { suppliersCache[child.key] = child.val(); });
 
@@ -2956,12 +3029,10 @@ function renderSuppliersTable(dataset) {
     const tbody = document.getElementById('suppliers-body');
     if (!tbody) return;
 
-    tbody.innerHTML = '';
     const ids = Object.keys(dataset || {});
-
-    ids.forEach(id => {
+    const rowsHtml = ids.map(id => {
         const s = dataset[id];
-        tbody.innerHTML += `
+        return `
             <tr>
                 <td><strong>${s.name || 'Unnamed'}</strong></td>
                 <td>${s.phone || 'N/A'}</td>
@@ -2976,9 +3047,9 @@ function renderSuppliersTable(dataset) {
         `;
     });
 
-    if (ids.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No suppliers registered yet. Click "+ Add Supplier" to get started.</td></tr>`;
-    }
+    tbody.innerHTML = ids.length === 0
+        ? `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No suppliers registered yet. Click "+ Add Supplier" to get started.</td></tr>`
+        : rowsHtml.join('');
 }
 
 function filterSuppliersTable() {
@@ -3381,10 +3452,9 @@ function loadSuppliesHistory() {
         snapshot.forEach(child => rows.push(child.val()));
         rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-        tbody.innerHTML = '';
-        rows.forEach(s => {
+        const rowsHtml = rows.map(s => {
             const itemCount = Array.isArray(s.items) ? s.items.length : 0;
-            tbody.innerHTML += `
+            return `
                 <tr>
                     <td><strong>${s.supplyId || ''}</strong></td>
                     <td>${s.date ? new Date(s.date).toLocaleString() : 'N/A'}</td>
@@ -3398,9 +3468,9 @@ function loadSuppliesHistory() {
             `;
         });
 
-        if (rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">No supply records yet. Click "+ Record New Supply" to log stock received from a supplier.</td></tr>`;
-        }
+        tbody.innerHTML = rows.length === 0
+            ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">No supply records yet. Click "+ Record New Supply" to log stock received from a supplier.</td></tr>`
+            : rowsHtml.join('');
     });
 }
 
@@ -3486,7 +3556,11 @@ function closeSupplyDetailsModal() {
 function subscribeCustomersCache() {
     if (!currentStoreId) return;
 
-    firebase.database().ref(`stores/${currentStoreId}/customers`).on('value', snapshot => {
+    // .off() first — guards against a duplicate listener stacking up if login ever
+    // runs twice in the same session without a full page reload.
+    const custRef = firebase.database().ref(`stores/${currentStoreId}/customers`);
+    custRef.off();
+    custRef.on('value', snapshot => {
         customersCache = {};
         snapshot.forEach(child => {
             customersCache[child.key] = child.val();
@@ -3533,10 +3607,8 @@ function renderCustomersTable(dataset) {
     const tbody = document.getElementById('customers-body');
     if (!tbody) return;
 
-    tbody.innerHTML = '';
     const ids = Object.keys(dataset || {});
-
-    ids.forEach(id => {
+    const rowsHtml = ids.map(id => {
         const c = dataset[id];
         const balance = Number(c.balance) || 0;
         const limit = Number(c.creditLimit) || 0;
@@ -3544,7 +3616,7 @@ function renderCustomersTable(dataset) {
         const visits = Number(c.visitCount) || 0;
         const balanceColor = balance > 0 ? '#b91c1c' : '#166534';
 
-        tbody.innerHTML += `
+        return `
             <tr>
                 <td><strong>${c.name || 'Unnamed'}</strong></td>
                 <td>${c.phone || 'N/A'}</td>
@@ -3561,9 +3633,9 @@ function renderCustomersTable(dataset) {
         `;
     });
 
-    if (ids.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No customers registered yet. Click "Add New Customer" to get started.</td></tr>`;
-    }
+    tbody.innerHTML = ids.length === 0
+        ? `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 20px;">No customers registered yet. Click "Add New Customer" to get started.</td></tr>`
+        : rowsHtml.join('');
 }
 
 function filterCustomersTable() {
@@ -3710,14 +3782,13 @@ function loadCustomerLedger(id) {
         snapshot.forEach(child => entries.push(child.val()));
         entries.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        tbody.innerHTML = '';
-        entries.forEach(entry => {
+        const rowsHtml = entries.map(entry => {
             const isPayment = entry.type === 'payment';
             const typeLabel = isPayment ? '💵 Payment' : (entry.type === 'credit_sale' ? '🛒 Credit Sale' : '✏ Adjustment');
             const amtColor = isPayment ? '#166534' : '#b91c1c';
             const amtSign = isPayment ? '-' : '+';
 
-            tbody.innerHTML += `
+            return `
                 <tr>
                     <td>${entry.date ? new Date(entry.date).toLocaleString() : 'N/A'}</td>
                     <td>${typeLabel}</td>
@@ -3728,9 +3799,9 @@ function loadCustomerLedger(id) {
             `;
         });
 
-        if (entries.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:15px;">No ledger activity yet.</td></tr>';
-        }
+        tbody.innerHTML = entries.length === 0
+            ? '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:15px;">No ledger activity yet.</td></tr>'
+            : rowsHtml.join('');
     });
 }
 
@@ -3747,10 +3818,9 @@ function loadCustomerPurchaseHistory(id) {
         });
         purchases.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        tbody.innerHTML = '';
-        purchases.forEach(tx => {
+        const rowsHtml = purchases.map(tx => {
             const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
-            tbody.innerHTML += `
+            return `
                 <tr>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
                     <td><strong>${tx.txId || ''}</strong> <br><small style="color:var(--text-muted);">${branchNameOf(tx.branchId || 'main')}</small></td>
@@ -3760,9 +3830,9 @@ function loadCustomerPurchaseHistory(id) {
             `;
         });
 
-        if (purchases.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">No purchase history yet.</td></tr>';
-        }
+        tbody.innerHTML = purchases.length === 0
+            ? '<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">No purchase history yet.</td></tr>'
+            : rowsHtml.join('');
     });
 }
 
