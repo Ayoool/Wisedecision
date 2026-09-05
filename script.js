@@ -933,6 +933,15 @@ function toggleStockInputMode() {
     const splitGroup = document.getElementById('stock-split-group');
     if (!simpleGroup || !splitGroup) return;
 
+    // "Stock Qty" in simple mode is always a PACK count, so when the user switches
+    // to split mode after already typing a number there, carry it over as the
+    // starting Packs-in-Stock value instead of discarding it.
+    if (unitsPerPack > 1 && splitGroup.style.display === 'none') {
+        const existingPacks = parseInt(document.getElementById('inv-stock').value) || 0;
+        const packsField = document.getElementById('inv-stock-packs');
+        if (packsField && !packsField.value) packsField.value = existingPacks || '';
+    }
+
     if (unitsPerPack > 1) {
         simpleGroup.style.display = 'none';
         splitGroup.style.display = 'block';
@@ -981,16 +990,18 @@ function saveProduct() {
     const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
     const piecePrice = parseFloat(document.getElementById('inv-piece-price').value) || 0;
 
-    // Stock: for split-mode products (unitsPerPack > 1), compute total pieces from
-    // Packs-in-Stock and Loose-Pieces-in-Stock. For whole-only products, use the
-    // simple Stock Qty field directly.
+    // Stock: "Stock Qty" (simple mode) and "Packs in Stock" (split mode) are both
+    // PACK counts, not raw pieces — total pieces = packs × unitsPerPack, plus any
+    // loose pieces in split mode. For whole-only products unitsPerPack is 1, so a
+    // pack and a piece are the same thing and the total comes out unchanged.
     let stock;
     if (unitsPerPack > 1) {
         const packs = parseInt(document.getElementById('inv-stock-packs').value) || 0;
         const loose = parseInt(document.getElementById('inv-stock-loose').value) || 0;
         stock = (packs * unitsPerPack) + loose;
     } else {
-        stock = parseInt(document.getElementById('inv-stock').value) || 0;
+        const packs = parseInt(document.getElementById('inv-stock').value) || 0;
+        stock = packs * unitsPerPack;
     }
 
     const expiry = document.getElementById('inv-expiry').value;
@@ -3145,8 +3156,12 @@ function addSupplyItemRow() {
             <input type="text" list="${rowId}-datalist" placeholder="Product name (existing or new)" class="supply-item-name" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px;">
-            <input type="number" min="1" placeholder="Qty Received" class="supply-item-qty" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
-            <input type="number" min="0" placeholder="Cost Price (₦)" class="supply-item-cost" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Packs Received" class="supply-item-qty" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+            <input type="number" min="0" placeholder="Loose Pieces Received" class="supply-item-loose" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
+        </div>
+        <div style="font-size:10px; color:var(--text-muted); margin:4px 0 6px 0;">For products not sold in pieces, leave "Loose Pieces Received" blank and just enter the count in "Packs Received".</div>
+        <div class="form-group" style="margin-bottom:6px;">
+            <input type="number" min="0" placeholder="Cost Price (₦ per Pack)" class="supply-item-cost" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; margin-top:6px;">
             <input type="number" min="0" placeholder="Retail Price (new items)" class="supply-item-retail" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
@@ -3181,13 +3196,14 @@ function saveSupply() {
     rows.forEach(row => {
         const name = row.querySelector('.supply-item-name')?.value.trim() || '';
         const qty = parseInt(row.querySelector('.supply-item-qty')?.value) || 0;
+        const loosePieces = parseInt(row.querySelector('.supply-item-loose')?.value) || 0;
         const cost = parseFloat(row.querySelector('.supply-item-cost')?.value) || 0;
         const retailRaw = row.querySelector('.supply-item-retail')?.value;
         const wholesaleRaw = row.querySelector('.supply-item-wholesale')?.value;
 
-        if (!name && qty === 0) return; // skip a fully empty row
+        if (!name && qty === 0 && loosePieces === 0) return; // skip a fully empty row
 
-        if (!name || qty <= 0) {
+        if (!name || (qty <= 0 && loosePieces <= 0)) {
             invalidRow = true;
             return;
         }
@@ -3195,15 +3211,17 @@ function saveSupply() {
         items.push({
             name,
             qty,
+            loosePieces,
             costPrice: cost,
             retailPrice: (retailRaw !== '' && retailRaw !== undefined) ? parseFloat(retailRaw) : null,
             wholesalePrice: (wholesaleRaw !== '' && wholesaleRaw !== undefined) ? parseFloat(wholesaleRaw) : null
         });
-        totalCost += cost * qty;
+        // totalCost is finalized below, once each item's effective Pieces-per-Pack
+        // is known (needed to price the loose-piece portion correctly).
     });
 
     if (invalidRow) {
-        alert("Each item needs a product name and a quantity greater than zero.");
+        alert("Each item needs a product name and either a pack count or a loose piece count greater than zero.");
         return;
     }
     if (items.length === 0) {
@@ -3234,14 +3252,28 @@ function saveSupply() {
         items.forEach(item => {
             const key = item.name.toLowerCase().trim();
             const match = existingByName[key];
+            // Packs Received always converts via the product's existing Pieces per
+            // Pack; Loose Pieces Received is added on top as-is. A brand-new product
+            // (no match yet) has no pack size on record, so it defaults to 1 —
+            // packs and loose pieces are simply summed as individual units.
+            const effectiveUnitsPerPack = match ? (Number(match.data.unitsPerPack) || 1) : 1;
+            const piecesReceived = (item.qty * effectiveUnitsPerPack) + item.loosePieces;
+            const costPerPiece = item.costPrice / effectiveUnitsPerPack;
+            const lineCost = (item.costPrice * item.qty) + (costPerPiece * item.loosePieces);
+
+            item.unitsPerPackAtSupply = effectiveUnitsPerPack;
+            item.piecesReceived = piecesReceived;
+            item.lineCost = lineCost;
+            totalCost += lineCost;
+
             if (match) {
                 const currentStock = Number(match.data.stock !== undefined ? match.data.stock : (match.data.stockQty || 0));
                 item.stockBefore = currentStock;
-                item.stockAfter = currentStock + item.qty;
+                item.stockAfter = currentStock + piecesReceived;
                 item._matchId = match.id;
             } else {
                 item.stockBefore = 0;
-                item.stockAfter = item.qty;
+                item.stockAfter = piecesReceived;
                 item._matchId = null;
             }
         });
@@ -3288,8 +3320,8 @@ function saveSupply() {
                             wholesalePrice: item.wholesalePrice || 0,
                             unitsPerPack: 1,
                             piecePrice: 0,
-                            stock: item.qty,
-                            stockQty: item.qty,
+                            stock: item.stockAfter,
+                            stockQty: item.stockAfter,
                             expiry: '',
                             expiryDate: '',
                             branchId
@@ -3396,14 +3428,23 @@ function viewSupplyDetails(supplyId) {
         const tbody = document.getElementById('supply-details-items-body');
         tbody.innerHTML = '';
         (s.items || []).forEach(item => {
-            const lineTotal = (Number(item.costPrice) || 0) * (Number(item.qty) || 0);
             const hasStockHistory = item.stockBefore !== undefined && item.stockAfter !== undefined;
+            const upp = Number(item.unitsPerPackAtSupply) || 1;
+            // Older records (pre-loose-pieces feature) only ever had item.qty as a
+            // raw piece count; newer ones track packs + loose pieces + the computed
+            // pieceReceived total. Show whichever level of detail is available.
+            const qtyAddedLabel = item.piecesReceived !== undefined
+                ? (upp > 1 ? `+${item.qty} Pks + ${item.loosePieces || 0} Pcs` : `+${item.piecesReceived}`)
+                : `+${item.qty}`;
+            const lineTotal = item.lineCost !== undefined ? Number(item.lineCost) : ((Number(item.costPrice) || 0) * (Number(item.qty) || 0));
+            const stockBeforeLabel = hasStockHistory ? stockBreakdownLabel(item.stockBefore, upp) : '—';
+            const stockAfterLabel = hasStockHistory ? stockBreakdownLabel(item.stockAfter, upp) : '—';
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
-                    <td>${hasStockHistory ? item.stockBefore : '—'}</td>
-                    <td style="color:#166534; font-weight:bold;">+${item.qty}</td>
-                    <td>${hasStockHistory ? item.stockAfter : '—'}</td>
+                    <td>${stockBeforeLabel}</td>
+                    <td style="color:#166534; font-weight:bold;">${qtyAddedLabel}</td>
+                    <td>${stockAfterLabel}</td>
                     <td>₦${(Number(item.costPrice) || 0).toLocaleString()}</td>
                     <td>₦${lineTotal.toLocaleString()}</td>
                 </tr>
