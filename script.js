@@ -729,6 +729,19 @@ function getPiecePrice(item, customerType) {
     return Math.round((packPrice / unitsPerPack) * 100) / 100;
 }
 
+// Formats a total piece count as "2 Pks + 4 Pcs" for products sold in pieces, so
+// stock audits show packs/loose pieces instead of one raw number. Falls back to the
+// plain number for whole-only products (unitsPerPack <= 1).
+function stockBreakdownLabel(totalStock, unitsPerPack) {
+    const total = Number(totalStock) || 0;
+    const perPack = Number(unitsPerPack) || 1;
+    if (perPack <= 1) return String(total);
+
+    const packs = Math.floor(total / perPack);
+    const loose = total % perPack;
+    return `${packs} Pks + ${loose} Pcs`;
+}
+
 function renderInventoryTable() {
     const tbody = document.getElementById('inventory-body');
     if (!tbody) return;
@@ -770,7 +783,7 @@ function renderInventoryTable() {
                     <td>₦${Number(item.price).toLocaleString()}</td>
                     <td>₦${Number(item.wholesalePrice).toLocaleString()}</td>
                     <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
-                    <td>${item.stock} <br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
+                    <td>${stockBreakdownLabel(item.stock, item.unitsPerPack)} <br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
                     <td>${item.expiry}</td>
                     <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                 </tr>
@@ -803,7 +816,7 @@ function renderInventoryTable() {
                 <td>₦${Number(rPrice).toLocaleString()}</td>
                 <td>₦${Number(wPrice).toLocaleString()}</td>
                 <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
-                <td>${pStock}</td>
+                <td>${stockBreakdownLabel(pStock, item.unitsPerPack)}</td>
                 <td>${pExpiry}</td>
                 <td>
                     <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
@@ -851,7 +864,7 @@ function filterInventoryTable() {
                         <td>₦${Number(rPrice).toLocaleString()}</td>
                         <td>₦${Number(wPrice).toLocaleString()}</td>
                         <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
-                        <td>${pStock}</td>
+                        <td>${stockBreakdownLabel(pStock, item.unitsPerPack)}</td>
                         <td>${pExpiry}</td>
                         <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                     </tr>
@@ -878,7 +891,7 @@ function filterInventoryTable() {
                     <td>₦${Number(rPrice).toLocaleString()}</td>
                     <td>₦${Number(wPrice).toLocaleString()}</td>
                     <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
-                    <td>${pStock}</td>
+                    <td>${stockBreakdownLabel(pStock, item.unitsPerPack)}</td>
                     <td>${pExpiry}</td>
                     <td>
                         <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
@@ -910,6 +923,42 @@ function closeProductModal() {
     document.getElementById('product-form-modal').style.display = 'none';
 }
 
+// ==================== SPLIT STOCK INPUT (Packs + Loose Pieces) ====================
+// Shows the simple single "Stock Qty" field for whole-only products, or the
+// Packs-in-Stock / Loose-Pieces-in-Stock pair once "Pieces per Pack" > 1. Called on
+// every keystroke in the Pieces per Pack field so the form reacts live while editing.
+function toggleStockInputMode() {
+    const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
+    const simpleGroup = document.getElementById('stock-simple-group');
+    const splitGroup = document.getElementById('stock-split-group');
+    if (!simpleGroup || !splitGroup) return;
+
+    if (unitsPerPack > 1) {
+        simpleGroup.style.display = 'none';
+        splitGroup.style.display = 'block';
+    } else {
+        simpleGroup.style.display = 'block';
+        splitGroup.style.display = 'none';
+    }
+    recalcSplitStockTotal();
+}
+
+// Recomputes the read-only total shown under Packs/Loose Pieces, and keeps the
+// hidden/simple "inv-stock" field (the actual value saveProduct() reads) in sync
+// so the rest of the app can keep treating stock as one number of pieces.
+function recalcSplitStockTotal() {
+    const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
+    const totalLabel = document.getElementById('inv-stock-computed-total');
+
+    if (unitsPerPack > 1) {
+        const packs = parseInt(document.getElementById('inv-stock-packs').value) || 0;
+        const loose = parseInt(document.getElementById('inv-stock-loose').value) || 0;
+        const total = (packs * unitsPerPack) + loose;
+        if (totalLabel) totalLabel.textContent = total.toLocaleString();
+        document.getElementById('inv-stock').value = total;
+    }
+}
+
 // ==================== BULLETPROOF PRODUCT SAVER (branch-scoped) ====================
 function saveProduct() {
     if (!currentStoreId) {
@@ -931,7 +980,19 @@ function saveProduct() {
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
     const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
     const piecePrice = parseFloat(document.getElementById('inv-piece-price').value) || 0;
-    const stock = parseInt(document.getElementById('inv-stock').value) || 0;
+
+    // Stock: for split-mode products (unitsPerPack > 1), compute total pieces from
+    // Packs-in-Stock and Loose-Pieces-in-Stock. For whole-only products, use the
+    // simple Stock Qty field directly.
+    let stock;
+    if (unitsPerPack > 1) {
+        const packs = parseInt(document.getElementById('inv-stock-packs').value) || 0;
+        const loose = parseInt(document.getElementById('inv-stock-loose').value) || 0;
+        stock = (packs * unitsPerPack) + loose;
+    } else {
+        stock = parseInt(document.getElementById('inv-stock').value) || 0;
+    }
+
     const expiry = document.getElementById('inv-expiry').value;
 
     if (!name) {
@@ -992,7 +1053,23 @@ function editProduct(branchId, id) {
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
     document.getElementById('inv-units-per-pack').value = item.unitsPerPack || '';
     document.getElementById('inv-piece-price').value = item.piecePrice || '';
-    document.getElementById('inv-stock').value = item.stock !== undefined ? item.stock : (item.stockQty || '');
+
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    const totalStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
+
+    if (unitsPerPack > 1) {
+        // Decompose the stored total (always in pieces) back into whole packs +
+        // leftover loose pieces so the split fields reflect what's really on the shelf.
+        document.getElementById('inv-stock-packs').value = Math.floor(totalStock / unitsPerPack);
+        document.getElementById('inv-stock-loose').value = totalStock % unitsPerPack;
+        document.getElementById('inv-stock').value = totalStock;
+    } else {
+        document.getElementById('inv-stock').value = totalStock || '';
+        document.getElementById('inv-stock-packs').value = '';
+        document.getElementById('inv-stock-loose').value = '';
+    }
+    toggleStockInputMode();
+
     document.getElementById('inv-expiry').value = item.expiry || item.expiryDate || '';
     
     document.getElementById('inv-form-title').textContent = `Edit Product (${branchNameOf(branchId)})`;
@@ -1013,7 +1090,10 @@ function resetInventoryForm() {
     document.getElementById('inv-units-per-pack').value = '';
     document.getElementById('inv-piece-price').value = '';
     document.getElementById('inv-stock').value = '';
+    document.getElementById('inv-stock-packs').value = '';
+    document.getElementById('inv-stock-loose').value = '';
     document.getElementById('inv-expiry').value = '';
+    toggleStockInputMode();
     
     document.getElementById('inv-form-title').textContent = "Add New Product";
     document.getElementById('save-product-btn').textContent = "Save Product to Cloud";
@@ -3234,7 +3314,7 @@ function saveSupply() {
         loadSuppliesHistory();
     }).catch(err => {
         console.error("saveSupply error:", err);
-        alert("⚠ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
+        alert("⚠️ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
     });
 }
 
