@@ -1135,6 +1135,26 @@ function deleteProduct(branchId, id) {
     }
 }
 
+// ==================== SEQUENTIAL TRANSACTION ID GENERATOR ====================
+// Replaces the old random 6-digit txId with a clean, incrementing one padded to
+// at least 3 digits (WD-001, WD-002, ... WD-010, ... rolls to WD-1000+ naturally
+// once the counter exceeds 999). Uses a Firebase transaction() on a per-store
+// counter so two terminals submitting at the same moment can never be handed the
+// same number.
+function generateNextTransactionId() {
+    if (!currentStoreId || !db) {
+        return Promise.reject(new Error("No active store or database connection."));
+    }
+
+    const counterRef = firebase.database().ref(`stores/${currentStoreId}/counters/lastTxNumber`);
+    return counterRef.transaction(current => (current || 0) + 1).then(result => {
+        if (!result.committed) {
+            throw new Error("Could not reserve a transaction number, please try again.");
+        }
+        return 'WD-' + String(result.snapshot.val()).padStart(3, '0');
+    });
+}
+
 // ==================== POS & CART REGISTER (branch-scoped) ====================
 function setCustomerType(type) {
     currentCustomerType = type;
@@ -1434,36 +1454,38 @@ function submitOrderForAccountant() {
         return;
     }
 
-    const txId = 'WD-' + Math.floor(100000 + Math.random() * 900000);
-    const grandTotal = currentCart.reduce((sum, i) => sum + i.total, 0);
-    
-    const activeStaffName = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    generateNextTransactionId().then(txId => {
+        const grandTotal = currentCart.reduce((sum, i) => sum + i.total, 0);
+        const activeStaffName = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
 
-    const orderData = {
-        txId,
-        items: currentCart,
-        totalAmount: grandTotal,
-        staff: activeStaffName,
-        soldBy: activeStaffName,
-        date: new Date().toISOString(),
-        status: 'Pending Verification',
-        branchId: currentBranch,
-        customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
-        customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
-    };
+        const orderData = {
+            txId,
+            items: currentCart,
+            totalAmount: grandTotal,
+            staff: activeStaffName,
+            soldBy: activeStaffName,
+            date: new Date().toISOString(),
+            status: 'Pending Verification',
+            branchId: currentBranch,
+            customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
+            customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
+        };
 
-    saveRecordLocallyOrCloud(
-        'offline_pending_orders', 
-        orderData, 
-        `stores/${currentStoreId}/pendingOrders/${txId}`, 
-        () => {
-            alert(`Order sent to Accountant queue! Receipt ID: ${txId}`);
-            currentCart = [];
-            renderCart();
-            loadPosInventoryDropdown();
-            clearPosCustomer();
-        }
-    );
+        saveRecordLocallyOrCloud(
+            'offline_pending_orders', 
+            orderData, 
+            `stores/${currentStoreId}/pendingOrders/${txId}`, 
+            () => {
+                alert(`Order sent to Accountant queue! Receipt ID: ${txId}`);
+                currentCart = [];
+                renderCart();
+                loadPosInventoryDropdown();
+                clearPosCustomer();
+            }
+        );
+    }).catch(err => {
+        alert("Failed to generate transaction ID: " + err.message);
+    });
 }
 
 function processDirectPosPayment() {
@@ -1472,30 +1494,33 @@ function processDirectPosPayment() {
         return;
     }
 
-    const txId = 'WD-' + Math.floor(100000 + Math.random() * 900000);
-    const grandTotal = currentCart.reduce((sum, i) => sum + i.total, 0);
-    const activeStaffName = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    generateNextTransactionId().then(txId => {
+        const grandTotal = currentCart.reduce((sum, i) => sum + i.total, 0);
+        const activeStaffName = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
 
-    const orderData = {
-        txId,
-        items: currentCart,
-        totalAmount: grandTotal,
-        staff: activeStaffName,
-        soldBy: activeStaffName,
-        date: new Date().toISOString(),
-        status: 'Pending Verification',
-        branchId: currentBranch,
-        customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
-        customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
-    };
+        const orderData = {
+            txId,
+            items: currentCart,
+            totalAmount: grandTotal,
+            staff: activeStaffName,
+            soldBy: activeStaffName,
+            date: new Date().toISOString(),
+            status: 'Pending Verification',
+            branchId: currentBranch,
+            customerId: currentSelectedCustomer ? currentSelectedCustomer.id : null,
+            customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
+        };
 
-    // Temporarily push to pending/active processing so the split checkout can process it directly
-    firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).set(orderData).then(() => {
-        currentCart = [];
-        renderCart();
-        loadPosInventoryDropdown();
-        openSplitModal(txId, grandTotal);
-        clearPosCustomer();
+        // Temporarily push to pending/active processing so the split checkout can process it directly
+        firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).set(orderData).then(() => {
+            currentCart = [];
+            renderCart();
+            loadPosInventoryDropdown();
+            openSplitModal(txId, grandTotal);
+            clearPosCustomer();
+        });
+    }).catch(err => {
+        alert("Failed to generate transaction ID: " + err.message);
     });
 }
 
@@ -1697,7 +1722,7 @@ function finalizeCompleteSale() {
     }
 
     // 2. Build the transaction payload for dashboard and storage sync
-    const receiptNo = document.getElementById('modal-receipt-no') ? document.getElementById('modal-receipt-no').innerText : (currentActiveOrder ? currentActiveOrder.txId : 'WD-000000');
+    const receiptNo = document.getElementById('modal-receipt-no') ? document.getElementById('modal-receipt-no').innerText : (currentActiveOrder ? currentActiveOrder.txId : 'WD-000');
     const transactionData = {
         receiptNo,
         total: totalDue,
@@ -1768,10 +1793,6 @@ function completeSplitCheckout() {
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
             // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM (from the branch that made the sale)
-            // Deduct in PIECES: item.piecesNeeded already accounts for pack vs piece sales
-            // (piecesNeeded = qty for a piece sale, or qty * unitsPerPack for a pack sale).
-            // Older cart records saved before this feature existed won't have piecesNeeded,
-            // so we fall back to the raw qty for those (matches the old pack-only behavior).
             if (Array.isArray(orderData.items)) {
                 orderData.items.forEach(cartItem => {
                     const productId = cartItem.id;
@@ -1908,8 +1929,6 @@ function renderReceiptView(orderData, isReprint = false) {
             }
             cashierRow.innerHTML = `Cashier: ${cashierName}${orderData.branchId ? ` &middot; Branch: ${branchNameOf(orderData.branchId)}` : ''}`;
 
-            // Insert customer name row right after the cashier row when a registered
-            // customer (not Walk-In) is attached to this sale
             let custRow = printableBox.querySelector('#receipt-customer-row');
             if (orderData.customerId && orderData.customerName) {
                 if (!custRow) {
@@ -1974,8 +1993,6 @@ function renderReceiptView(orderData, isReprint = false) {
 }
 
 // ==================== DEDICATED THERMAL PRINTER IFRAME BRIDGE ====================
-// Supports both 58mm and 80mm thermal paper widths. Defaults to 80mm; pass '58mm' as
-// paperWidth when printing from a branch fitted with a 58mm printer.
 function triggerThermalPrint(htmlContent, paperWidth = '80mm') {
     let existingIframe = document.getElementById('thermal-print-iframe');
     if (existingIframe) existingIframe.remove();
@@ -2061,7 +2078,6 @@ function populateReportsBranchFilter() {
     if (!select) return;
 
     if (currentUserRole !== 'Admin') {
-        // Non-admins never reach reports-view (blocked in switchView), but guard anyway.
         select.innerHTML = `<option value="${currentBranch}">${branchNameOf(currentBranch)}</option>`;
         select.disabled = true;
         currentReportBranchFilter = currentBranch;
@@ -2087,11 +2103,6 @@ function onReportsBranchFilterChange() {
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
-    // .off() first — this is called again every time the branch filter or date
-    // filter changes (onReportsBranchFilterChange, filterSalesByDate,
-    // resetSalesDateFilter), so without clearing the old listener each filter
-    // change stacked another one, and a single future sale ended up re-rendering
-    // the whole table once per stacked listener.
     const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`);
     txRef.off();
     txRef.on('value', snapshot => {
@@ -2123,10 +2134,6 @@ function loadPastSalesHistory(selectedDateString = null) {
         startOfWeek.setHours(0, 0, 0, 0);
 
         const branchFilter = currentReportBranchFilter || 'all';
-        // Build every row as a string and join once at the end instead of appending
-        // to innerHTML per-row — appending forces a full re-parse of the growing
-        // HTML string on every iteration, which gets much slower as sales history
-        // grows into the hundreds/thousands of transactions.
         const rowsHtml = [];
 
         snapshot.forEach(child => {
@@ -2291,8 +2298,6 @@ function populateStaffBranchDropdown() {
 function loadStaffTable() {
     if (!currentStoreId) return;
 
-    // .off() first — switchView('staff-view') calls this every time the Staff sidebar
-    // button is clicked, so without clearing the old listener each visit stacked one.
     const staffRef = firebase.database().ref(`stores/${currentStoreId}/staff`);
     staffRef.off();
     staffRef.on('value', snapshot => {
@@ -2400,9 +2405,6 @@ function updateBusinessProfile() {
 function loadExpensesTable() {
     if (!currentStoreId) return;
 
-    // .off() first — switchView('expenses-view') and saveExpense()/deleteExpense()
-    // all call this again, so without clearing the old listener each call stacked
-    // another one on top of the expenses node.
     const expRef = firebase.database().ref(`stores/${currentStoreId}/expenses`);
     expRef.off();
     expRef.on('value', snapshot => {
@@ -2500,10 +2502,6 @@ function loadProfitAndLossModule() {
         firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value')
     ]).then(([txSnapshot, invSnapshot, expSnapshot]) => {
         
-        // costPriceMap keyed by "branchId_productId" (exact) and by lowercased product
-        // name (fallback, used e.g. after a stock transfer creates a new product id
-        // at the destination branch). Values are per-PIECE cost (costPrice / unitsPerPack)
-        // so COGS lines up with piecesNeeded-based sales below.
         const costPriceMap = {};
         invSnapshot.forEach(branchChild => {
             const branchId = branchChild.key;
@@ -2573,16 +2571,9 @@ function loadProfitAndLossModule() {
 }
 
 // ==================== BRANCH MANAGEMENT MODULE ====================
-// Data model (Firebase): stores/{storeId}/branches/{branchId} = { name, phone, address, isMain, createdAt }
-// Renders the Branches table straight from branchesCache — which finishBranchLoad()
-// already keeps live-synced from Firebase for the whole app (branch badge, dropdowns,
-// etc). Rendering from that shared cache instead of opening a second '.on()' listener
-// on the exact same `branches` path avoids a duplicate-listener conflict: calling
-// `.off()` on a path removes ALL listeners there, so a second listener on this path
-// would either fight with, or accidentally cancel, the one in finishBranchLoad().
 function renderBranchesTable() {
     const tbody = document.getElementById('branches-body');
-    if (!tbody) return; // Branches view isn't currently open — nothing to render
+    if (!tbody) return;
 
     const rowsHtml = [];
     Object.keys(branchesCache).forEach(id => {
@@ -2678,21 +2669,9 @@ function deleteBranch(id) {
 }
 
 // ==================== INTER-BRANCH STOCK TRANSFERS MODULE ====================
-// Data model (Firebase):
-//   stores/{storeId}/transfers/{transferId} = {
-//     fromBranch, toBranch, items: [{productId, name, qty}],
-//     status: 'In Transit' | 'Completed' | 'Cancelled',
-//     createdBy, createdAt, receivedBy, receivedAt
-//   }
-// Stock is deducted from the source branch the moment a transfer is dispatched, and
-// only added to the destination branch once the receiving side confirms receipt —
-// this keeps a truthful "goods in transit" state and avoids double-counting stock.
 function loadTransfersView() {
     if (!currentStoreId) return;
 
-    // .off() first — switchView('transfers-view') calls this on every visit, plus
-    // createTransfer()/confirmTransferReceipt()/cancelTransfer() all re-trigger it
-    // indirectly, so without clearing the old listener these stacked quickly.
     const transfersRef = firebase.database().ref(`stores/${currentStoreId}/transfers`);
     transfersRef.off();
     transfersRef.on('value', snapshot => {
@@ -2744,7 +2723,6 @@ function openCreateTransferModal() {
     fromSelect.innerHTML = options;
     toSelect.innerHTML = options;
 
-    // Default "From" to the branch the admin is currently in, "To" to a different one
     fromSelect.value = currentBranch;
     const otherBranch = Object.keys(branchesCache).find(id => id !== currentBranch);
     if (otherBranch) toSelect.value = otherBranch;
@@ -2832,8 +2810,6 @@ function createTransfer() {
         createdAt: new Date().toISOString()
     };
 
-    // Deduct stock from the source branch immediately upon dispatch
-    const updates = {};
     let deductionPromise = Promise.resolve();
     items.forEach(item => {
         deductionPromise = deductionPromise.then(() => {
@@ -2872,8 +2848,6 @@ function confirmTransferReceipt(transferId) {
         let chain = Promise.resolve();
         (t.items || []).forEach(item => {
             chain = chain.then(() => {
-                // Match by product name within the destination branch; if it doesn't
-                // exist there yet, create it (copying price fields from the source item).
                 return destRef.once('value').then(destSnap => {
                     let matchId = null;
                     destSnap.forEach(prodChild => {
@@ -2890,7 +2864,6 @@ function confirmTransferReceipt(transferId) {
                             return prodRef.update({ stock: newStock, stockQty: newStock });
                         });
                     } else {
-                        // Look up source item's pricing to carry over into the new destination record
                         return firebase.database().ref(`stores/${currentStoreId}/inventory/${t.fromBranch}/${item.productId}`).once('value').then(srcSnap => {
                             const src = srcSnap.exists() ? srcSnap.val() : {};
                             return destRef.push().set({
@@ -2994,25 +2967,9 @@ function printWaybill(transferId) {
 }
 
 // ==================== SUPPLIER MANAGEMENT MODULE ====================
-// Data model (Firebase):
-//   stores/{storeId}/suppliers/{supplierId} = {
-//     name, phone, email, address,
-//     totalSupplied, supplyCount, lastSupplyDate, createdAt
-//   }
-//   stores/{storeId}/supplies/{supplyId} = {
-//     supplyId, supplierId, supplierName, branchId,
-//     items: [{name, qty, costPrice, retailPrice, wholesalePrice}],
-//     totalCost, notes, date, recordedBy
-//   }
-// Recording a supply automatically pushes the received quantities into that branch's
-// inventory — matching an existing product by name (updating stock + cost price), or
-// creating a brand new product record if nothing matches yet.
-
 function subscribeSuppliersCache() {
     if (!currentStoreId) return;
 
-    // .off() first — called once per login, but guards against a duplicate listener
-    // stacking up if the app ever logs in again without a full page reload.
     const suppliersRef = firebase.database().ref(`stores/${currentStoreId}/suppliers`);
     suppliersRef.off();
     suppliersRef.on('value', snapshot => {
@@ -3141,7 +3098,6 @@ function deleteSupplier(id) {
     }
 }
 
-// ---------- Record a New Supply (restocking) ----------
 function populateSupplySupplierDropdown() {
     const select = document.getElementById('supply-supplier-select');
     if (!select) return;
@@ -3189,9 +3145,6 @@ function closeRecordSupplyModal() {
     document.getElementById('record-supply-modal').style.display = 'none';
 }
 
-// Refreshes the list of existing product names for the currently-selected supply
-// branch, so item rows can offer autocomplete suggestions (helps staff match an
-// existing product instead of accidentally creating a duplicate).
 function refreshSupplyBranchProducts() {
     if (!currentStoreId) return;
     const branchId = document.getElementById('supply-branch-select')?.value || currentBranch;
@@ -3272,7 +3225,7 @@ function saveSupply() {
         const retailRaw = row.querySelector('.supply-item-retail')?.value;
         const wholesaleRaw = row.querySelector('.supply-item-wholesale')?.value;
 
-        if (!name && qty === 0 && loosePieces === 0) return; // skip a fully empty row
+        if (!name && qty === 0 && loosePieces === 0) return;
 
         if (!name || (qty <= 0 && loosePieces <= 0)) {
             invalidRow = true;
@@ -3287,8 +3240,6 @@ function saveSupply() {
             retailPrice: (retailRaw !== '' && retailRaw !== undefined) ? parseFloat(retailRaw) : null,
             wholesalePrice: (wholesaleRaw !== '' && wholesaleRaw !== undefined) ? parseFloat(wholesaleRaw) : null
         });
-        // totalCost is finalized below, once each item's effective Pieces-per-Pack
-        // is known (needed to price the loose-piece portion correctly).
     });
 
     if (invalidRow) {
@@ -3300,18 +3251,12 @@ function saveSupply() {
         return;
     }
 
-    // Use Firebase's push() key instead of a random 6-digit number — random IDs can
-    // collide, and a collision silently overwrites the earlier supply record (which
-    // is why some supplies were disappearing from Supply History while the supplier's
-    // running totals still updated). push() keys are guaranteed unique.
     const supplyId = 'SUP-' + firebase.database().ref(`stores/${currentStoreId}/supplies`).push().key;
     const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
     const nowIso = new Date().toISOString();
 
     const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`);
 
-    // 1. Read current inventory (read-only) to work out what each item's stock
-    //    level will be before/after this delivery — nothing is written yet.
     invRef.once('value').then(snapshot => {
         const existingByName = {};
         snapshot.forEach(child => {
@@ -3323,10 +3268,6 @@ function saveSupply() {
         items.forEach(item => {
             const key = item.name.toLowerCase().trim();
             const match = existingByName[key];
-            // Packs Received always converts via the product's existing Pieces per
-            // Pack; Loose Pieces Received is added on top as-is. A brand-new product
-            // (no match yet) has no pack size on record, so it defaults to 1 —
-            // packs and loose pieces are simply summed as individual units.
             const effectiveUnitsPerPack = match ? (Number(match.data.unitsPerPack) || 1) : 1;
             const piecesReceived = (item.qty * effectiveUnitsPerPack) + item.loosePieces;
             const costPerPiece = item.costPrice / effectiveUnitsPerPack;
@@ -3354,20 +3295,14 @@ function saveSupply() {
             supplierId,
             supplierName: suppliersCache[supplierId].name,
             branchId,
-            items: items.map(({ _matchId, ...rest }) => rest), // internal-only field, not stored
+            items: items.map(({ _matchId, ...rest }) => rest),
             totalCost,
             notes,
             date: nowIso,
             recordedBy
         };
 
-        // 2. Save the Purchase Order / Supply record FIRST. This is the permanent
-        //    log — if this write fails for any reason (weak signal, permissions,
-        //    etc.), we stop right here and touch nothing else, so a failure can
-        //    never again look like a successful restock that's missing from history.
         return firebase.database().ref(`stores/${currentStoreId}/supplies/${supplyId}`).set(supplyData).then(() => {
-            // 3. Only after the history record is safely saved do we apply the
-            //    actual inventory changes.
             let chain = Promise.resolve();
             items.forEach(item => {
                 chain = chain.then(() => {
@@ -3403,8 +3338,6 @@ function saveSupply() {
             return chain;
         });
     }).then(() => {
-        // 4. Update the supplier's running totals — last, since it's just a
-        //    summary derived from the history record, not the source of truth.
         const supp = suppliersCache[supplierId];
         return firebase.database().ref(`stores/${currentStoreId}/suppliers/${supplierId}`).update({
             totalSupplied: (Number(supp.totalSupplied) || 0) + totalCost,
@@ -3421,12 +3354,6 @@ function saveSupply() {
     });
 }
 
-// Shows/hides the Purchase Order History panel on demand instead of always
-// cluttering the Suppliers screen. The underlying data (stores/{storeId}/supplies)
-// is already kept in sync in real time by loadSuppliesHistory()'s Firebase listener —
-// every supply submitted through "Record New Supply" pushes straight into that
-// persistent history the moment it's saved, so this button always shows the full,
-// current record with nothing extra to trigger.
 function togglePurchaseOrderHistory() {
     const section = document.getElementById('purchase-order-history-section');
     if (!section) return;
@@ -3443,7 +3370,7 @@ function loadSuppliesHistory() {
     if (!currentStoreId) return;
 
     const suppliesRef = firebase.database().ref(`stores/${currentStoreId}/supplies`);
-    suppliesRef.off(); // clear any previous listener so re-opening this view doesn't stack duplicates
+    suppliesRef.off();
     suppliesRef.on('value', snapshot => {
         const tbody = document.getElementById('supplies-history-body');
         if (!tbody) return;
@@ -3474,8 +3401,6 @@ function loadSuppliesHistory() {
     });
 }
 
-// Shows a clean breakdown of one supply delivery: stock before vs after per item,
-// so an admin can confirm exactly what changed instead of reading a crammed list.
 function viewSupplyDetails(supplyId) {
     if (!currentStoreId) return;
 
@@ -3500,9 +3425,6 @@ function viewSupplyDetails(supplyId) {
         (s.items || []).forEach(item => {
             const hasStockHistory = item.stockBefore !== undefined && item.stockAfter !== undefined;
             const upp = Number(item.unitsPerPackAtSupply) || 1;
-            // Older records (pre-loose-pieces feature) only ever had item.qty as a
-            // raw piece count; newer ones track packs + loose pieces + the computed
-            // pieceReceived total. Show whichever level of detail is available.
             const qtyAddedLabel = item.piecesReceived !== undefined
                 ? (upp > 1 ? `+${item.qty} Pks + ${item.loosePieces || 0} Pcs` : `+${item.piecesReceived}`)
                 : `+${item.qty}`;
@@ -3538,26 +3460,9 @@ function closeSupplyDetailsModal() {
 }
 
 // ==================== CUSTOMER MANAGEMENT MODULE ====================
-// Data model (Firebase):
-//   stores/{storeId}/customers/{customerId} = {
-//     name, phone, email, address, creditLimit, balance,
-//     totalSpent, visitCount, createdAt, lastVisit
-//   }
-//   stores/{storeId}/customers/{customerId}/ledger/{entryId} = {
-//     type: 'credit_sale' | 'payment' | 'adjustment',
-//     amount, balanceBefore, balanceAfter, date, txId, recordedBy, note
-//   }
-// Purchase history is derived by filtering stores/{storeId}/transactions by customerId
-// rather than duplicating sale data under each customer record. Customers are shared
-// across all branches so store credit follows the customer, not the branch.
-
-// Subscribes once per session (called right after login) so the customer directory,
-// POS autocomplete, and any open profile modal all stay live-updated together.
 function subscribeCustomersCache() {
     if (!currentStoreId) return;
 
-    // .off() first — guards against a duplicate listener stacking up if login ever
-    // runs twice in the same session without a full page reload.
     const custRef = firebase.database().ref(`stores/${currentStoreId}/customers`);
     custRef.off();
     custRef.on('value', snapshot => {
@@ -3571,7 +3476,6 @@ function subscribeCustomersCache() {
             updateCustomerStatsUI();
         }
 
-        // Keep an attached POS customer's live balance/limit in sync
         if (currentSelectedCustomer && customersCache[currentSelectedCustomer.id]) {
             const c = customersCache[currentSelectedCustomer.id];
             currentSelectedCustomer.balance = Number(c.balance) || 0;
@@ -3579,7 +3483,6 @@ function subscribeCustomersCache() {
             updatePosCustomerBadge();
         }
 
-        // Refresh an open profile modal if it's showing this customer
         if (currentProfileCustomerId && customersCache[currentProfileCustomerId] && document.getElementById('customer-profile-modal') && document.getElementById('customer-profile-modal').style.display === 'flex') {
             refreshCustomerProfileSummary(currentProfileCustomerId);
         }
@@ -3735,7 +3638,6 @@ function deleteCustomer(id) {
     firebase.database().ref(`stores/${currentStoreId}/customers/${id}`).remove();
 }
 
-// ---------- Customer Profile (ledger + purchase history + lifetime value) ----------
 function openCustomerProfile(id) {
     const c = customersCache[id];
     if (!c) return;
