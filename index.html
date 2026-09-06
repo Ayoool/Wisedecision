@@ -326,21 +326,59 @@
             <button class="menu-btn btn-action-primary btn-acc" style="width: auto; margin-bottom:0;" onclick="openManualLookupModal()">🔍 Lookup Receipt ID Manually</button>
             <button class="menu-btn btn-dash" style="width: auto; margin-bottom:0;" onclick="loadPendingOrdersQueue()">🔄 Refresh Queue</button>
         </div>
-        <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Receipt ID</th>
-                        <th>Staff / Cashier</th>
-                        <th>Total Amount</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="accountant-queue-body">
-                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue.</td></tr>
-                </tbody>
-            </table>
+
+        <!-- Tab toggle: Pending Payments / Completed Sales -->
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <button id="accountant-tab-pending-btn"
+                    class="menu-btn"
+                    style="width:auto; margin:0; padding:6px 14px; font-size:12px; font-weight:bold; background:#0284c7; color:#fff;"
+                    onclick="switchAccountantTab('pending')">
+                Pending Payments
+            </button>
+            <button id="accountant-tab-completed-btn"
+                    class="menu-btn"
+                    style="width:auto; margin:0; padding:6px 14px; font-size:12px; font-weight:bold; background:#e2e8f0; color:#1e293b;"
+                    onclick="switchAccountantTab('completed')">
+                Completed Sales
+            </button>
+        </div>
+
+        <div id="accountant-pending-section">
+            <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Receipt ID</th>
+                            <th>Staff / Cashier</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accountant-queue-body">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="accountant-completed-section" style="display:none;">
+            <div style="background: #ffffff; border-radius: var(--radius); border: 1px solid #e2e8f0; overflow-x: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Receipt ID</th>
+                            <th>Date</th>
+                            <th>Staff</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accountant-completed-body">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -1237,6 +1275,46 @@
             <div style="display: flex; gap: 10px;">
                 <button id="debt-payment-confirm-btn" class="menu-btn btn-action-primary" style="margin-bottom:0; justify-content: center; background:#16a34a;" onclick="processDebtPayment()">Confirm & Print Receipt 🖨</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeDebtPaymentModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= PENDING ORDER DETAILS MODAL ================= -->
+    <!-- Lets the Accountant/Cashier inspect the full item breakdown of a pending order
+         before committing to Process Payment, instead of only seeing the grand total. -->
+    <div id="pending-order-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0; color: var(--text);">Order Details — <span id="pending-details-tx-id">--</span></h3>
+
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.6;">
+                Staff: <strong id="pending-details-staff">--</strong><br>
+                Customer: <strong id="pending-details-customer">--</strong><br>
+                Date: <span id="pending-details-date">--</span>
+            </div>
+
+            <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Qty</th>
+                            <th>Price</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pending-details-items-body">
+                        <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="text-align: right; font-weight: bold; font-size: 15px; margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                Grand Total: <span id="pending-details-total">₦0</span>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 16px;">
+                <button id="pending-details-process-btn" class="menu-btn btn-action-primary" style="flex:1; margin-bottom:0; justify-content: center;">Process Payment 💳</button>
+                <button class="menu-btn btn-logout" style="flex:1; margin-bottom:0;" onclick="closePendingOrderDetailsModal()">Close</button>
             </div>
         </div>
     </div>
