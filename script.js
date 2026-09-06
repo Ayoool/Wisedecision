@@ -188,6 +188,9 @@ function switchView(viewId) {
                 loadPendingOrdersQueue();
                 const accBranchLabel = document.getElementById('accountant-branch-label');
                 if (accBranchLabel) accBranchLabel.textContent = branchNameOf(currentBranch);
+                // Always land on the Pending tab when the view is (re)opened, rather
+                // than remembering whatever tab was showing on a previous visit.
+                switchAccountantTab('pending');
             }
             if (viewId === 'staff-view') {
                 populateStaffBranchDropdown();
@@ -1556,6 +1559,7 @@ function loadPendingOrdersQueue() {
                         <td>₦${Number(order.totalAmount || 0).toLocaleString()}</td>
                         <td><span style="color: #d97706; font-weight: bold;">Pending Payment</span></td>
                         <td>
+                            <button class="menu-btn btn-dash" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPendingOrderDetails('${order.txId}')">View 👁</button>
                             <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="openSplitModal('${order.txId}', ${order.totalAmount})">Process Payment 💳</button>
                             <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="cancelPendingOrder('${order.txId}')">Cancel ✕</button>
                         </td>
@@ -1606,6 +1610,138 @@ function cancelPendingOrder(txId) {
             alert("Failed to cancel order: " + err.message);
         });
     });
+}
+
+// ==================== ACCOUNTANT DASHBOARD: PENDING / COMPLETED TAB TOGGLE ====================
+// Lets the Accountant/Cashier (and Admin, when standing in the accountant view) flip
+// between the live payment queue and a read-only list of already-completed sales for
+// their branch, without leaving the Accountant Dashboard.
+let currentAccountantTab = 'pending'; // 'pending' | 'completed'
+
+function switchAccountantTab(tab) {
+    currentAccountantTab = tab;
+    const pendingSection = document.getElementById('accountant-pending-section');
+    const completedSection = document.getElementById('accountant-completed-section');
+    const pendingBtn = document.getElementById('accountant-tab-pending-btn');
+    const completedBtn = document.getElementById('accountant-tab-completed-btn');
+
+    if (tab === 'completed') {
+        if (pendingSection) pendingSection.style.display = 'none';
+        if (completedSection) completedSection.style.display = 'block';
+        if (pendingBtn) { pendingBtn.style.background = '#e2e8f0'; pendingBtn.style.color = '#1e293b'; }
+        if (completedBtn) { completedBtn.style.background = '#0284c7'; completedBtn.style.color = '#fff'; }
+        loadCompletedTransactionsForAccountant();
+    } else {
+        if (completedSection) completedSection.style.display = 'none';
+        if (pendingSection) pendingSection.style.display = 'block';
+        if (completedBtn) { completedBtn.style.background = '#e2e8f0'; completedBtn.style.color = '#1e293b'; }
+        if (pendingBtn) { pendingBtn.style.background = '#0284c7'; pendingBtn.style.color = '#fff'; }
+    }
+}
+
+// Branch-scoped completed sales list for the Accountant Dashboard. Reuses the same
+// stores/{storeId}/transactions node as Reports, but Accountants/Cashiers never see
+// Reports (blocked in switchView), so this gives them read access to just their own
+// branch's history and lets them reprint via the existing viewPastReceipt().
+function loadCompletedTransactionsForAccountant() {
+    if (!currentStoreId) return;
+    if (currentUserRole !== 'Accountant' && currentUserRole !== 'Cashier' && currentUserRole !== 'Admin') return;
+
+    // .off() first — switching tabs back and forth re-triggers this, so without
+    // clearing the old listener each switch would stack another one.
+    const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`);
+    txRef.off();
+    txRef.on('value', snapshot => {
+        const tbody = document.getElementById('accountant-completed-body');
+        if (!tbody) return;
+
+        const rows = [];
+        snapshot.forEach(child => {
+            const tx = child.val();
+            if ((tx.branchId || 'main') !== currentBranch) return;
+            rows.push({ id: child.key, ...tx });
+        });
+        rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        const rowsHtml = rows.map(tx => {
+            const transactionId = tx.txId || tx.id;
+            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            return `
+                <tr>
+                    <td><strong>${transactionId}</strong>${customerTag}</td>
+                    <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
+                    <td>${tx.staff || tx.soldBy || 'Staff'}</td>
+                    <td>₦${Number(tx.totalAmount || 0).toLocaleString()}</td>
+                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button></td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = rows.length === 0
+            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No completed sales yet for ${branchNameOf(currentBranch)}.</td></tr>`
+            : rowsHtml.join('');
+    }, error => {
+        console.error("loadCompletedTransactionsForAccountant error:", error);
+    });
+}
+
+// ==================== ACCOUNTANT DASHBOARD: PENDING ORDER DETAILS MODAL ====================
+// Lets the Accountant/Cashier inspect exactly what's in a pending order (items, unit,
+// qty, price) before committing to Process Payment — instead of only ever seeing the
+// grand total in the queue row.
+function viewPendingOrderDetails(txId) {
+    firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            alert("This order is no longer in the pending queue (it may have already been processed or cancelled).");
+            return;
+        }
+        const order = snapshot.val();
+
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setText('pending-details-tx-id', order.txId || txId);
+        setText('pending-details-staff', order.staff || order.soldBy || 'Staff');
+        setText('pending-details-customer', order.customerName || 'Walk-In Customer');
+        setText('pending-details-date', order.date ? new Date(order.date).toLocaleString() : 'N/A');
+        setText('pending-details-total', '₦' + Number(order.totalAmount || 0).toLocaleString());
+
+        const tbody = document.getElementById('pending-details-items-body');
+        if (tbody) {
+            tbody.innerHTML = '';
+            (order.items || []).forEach(item => {
+                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : 'pack';
+                const qty = item.qty || 0;
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${item.name || ''}</td>
+                        <td>${qty} ${unitLabel}${qty === 1 ? '' : 's'}</td>
+                        <td>₦${Number(item.price || 0).toLocaleString()}</td>
+                        <td>₦${Number(item.total || 0).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+            if (!order.items || order.items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">No item details recorded for this order.</td></tr>`;
+            }
+        }
+
+        // Wire "Process Payment" inside the modal straight into the existing split
+        // payment flow, closing this modal first so it doesn't sit behind the next one.
+        const processBtn = document.getElementById('pending-details-process-btn');
+        if (processBtn) {
+            processBtn.onclick = () => {
+                closePendingOrderDetailsModal();
+                openSplitModal(order.txId || txId, order.totalAmount);
+            };
+        }
+
+        document.getElementById('pending-order-details-modal').style.display = 'flex';
+    }).catch(err => {
+        alert("Failed to load order details: " + err.message);
+    });
+}
+
+function closePendingOrderDetailsModal() {
+    document.getElementById('pending-order-details-modal').style.display = 'none';
 }
 
 // ==================== SPLIT PAYMENT & RECEIPT LOGIC ====================
