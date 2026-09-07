@@ -1,4 +1,4 @@
-// ==================== FIREBASE INITIALIZATION ====================
+q// ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
     const firebaseConfig = {
