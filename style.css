@@ -137,3 +137,411 @@ body {
     border: 1px solid #fde68a;
     border-left: 4px solid #f59e0b;
 }
+
+.btn-acc {
+    background: #fdf4ff;
+    color: #a21caf;
+    border: 1px solid #f5d0fe;
+    border-left: 4px solid #d946ef;
+}
+
+.btn-rep {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    border-left: 4px solid #ef4444;
+}
+
+.btn-staff {
+    background: #ecfeff;
+    color: #0e7490;
+    border: 1px solid #a5f3fc;
+    border-left: 4px solid #06b6d4;
+}
+
+.btn-cust {
+    background: #f5f3ff;
+    color: #6d28d9;
+    border: 1px solid #ddd6fe;
+    border-left: 4px solid #8b5cf6;
+}
+
+.btn-branch {
+    background: #fff7ed;
+    color: #c2410c;
+    border: 1px solid #ffedd5;
+    border-left: 4px solid #f97316;
+}
+
+.btn-exp {
+    background: #fefce8;
+    color: #a16207;
+    border: 1px solid #fef08a;
+    border-left: 4px solid #eab308;
+}
+
+.btn-supplier {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+    border-left: 4px solid #2563eb;
+}
+
+.btn-transfer {
+    background: #f0fdfa;
+    color: #0f766e;
+    border: 1px solid #99f6e4;
+    border-left: 4px solid #14b8a6;
+}
+
+.btn-sec {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #64748b;
+}
+
+.btn-action-primary {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #fff;
+    border: none;
+    text-align: center;
+    justify-content: center;
+}
+
+.btn-action-primary:hover {
+    background: linear-gradient(135deg, #0369a1 100%, #075985 100%);
+    color: #fff;
+}
+
+.btn-logout {
+    background: #fee2e2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-left: 4px solid #dc2626;
+    justify-content: center;
+}
+
+.btn-logout:hover {
+    background: #fecaca;
+    color: #b91c1c;
+}
+
+.btn-complete-sale {
+    width: 100%;
+    background-color: #16a34a;
+    color: white;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 15px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);
+}
+
+.btn-complete-sale:hover {
+    background-color: #15803d;
+    transform: translateY(-1px);
+}
+
+.btn-complete-sale:disabled {
+    background-color: #cbd5e1;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.dashboard-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+@media(min-width: 768px) {
+    .dashboard-layout {
+        flex-direction: row;
+    }
+
+    .sidebar {
+        width: 260px;
+        height: 100vh;
+        position: sticky;
+        top: 0;
+        overflow-y: auto;
+    }
+
+    .main-content-area {
+        flex: 1;
+        height: 100vh;
+        overflow-y: auto;
+    }
+}
+
+.sidebar {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border-right: 2px solid #e2e8f0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    box-shadow: 4px 0 15px rgba(0,0,0,0.03);
+}
+
+.main-content-area {
+    padding: 25px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    box-sizing: border-box;
+    width: 100%;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--text);
+    margin-top: 10px;
+}
+
+th,
+td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 12px;
+}
+
+th {
+    background: #e0f2fe;
+    color: #0369a1;
+    font-weight: 700;
+}
+
+.pos-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+@media(min-width: 768px) {
+    .pos-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.alert-card-box {
+    background: #fff;
+    border-radius: var(--radius);
+    padding: 15px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    margin-top: 20px;
+}
+
+.alert-badge-red {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 10px;
+    display: inline-block;
+}
+
+.alert-badge-orange {
+    background: #ffedd5;
+    color: #9a3412;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 10px;
+    display: inline-block;
+}
+
+.security-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.security-card h3 {
+    font-size: 1.1rem;
+    color: #1e293b;
+    margin-bottom: 5px;
+}
+
+.security-card p {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-bottom: 15px;
+}
+
+.btn-primary {
+    background-color: #0f172a;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    width: 100%;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 5px;
+}
+
+.btn-primary:hover {
+    background-color: #1e293b;
+}
+
+.form-message {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.form-message.success {
+    color: #16a34a;
+}
+
+.form-message.error {
+    color: #dc2626;
+}
+
+#dynamic-accept-print-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #94a3b8 !important;
+}
+
+#split-modal > div {
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+@media print {
+    html,
+    body {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    body * {
+        display: none !important;
+    }
+
+    #printable-receipt-box,
+    #printable-debt-receipt-box,
+    #printable-waybill-box,
+    #printable-receipt-box *,
+    #printable-debt-receipt-box *,
+    #printable-waybill-box * {
+        visibility: visible !important;
+    }
+
+    #printable-receipt-box,
+    #printable-debt-receipt-box,
+    #printable-waybill-box {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 76mm !important;
+        max-width: 76mm !important;
+        margin: 0 !important;
+        padding: 2mm !important;
+        border: none !important;
+        background: #fff !important;
+        color: #000 !important;
+        font-size: 12px !important;
+        box-sizing: border-box !important;
+    }
+
+    #printable-receipt-box table,
+    #printable-debt-receipt-box table,
+    #printable-waybill-box table {
+        display: table !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+    }
+
+    #printable-receipt-box tr,
+    #printable-debt-receipt-box tr,
+    #printable-waybill-box tr {
+        display: table-row !important;
+        width: 100% !important;
+    }
+
+    #printable-receipt-box th,
+    #printable-receipt-box td,
+    #printable-debt-receipt-box th,
+    #printable-debt-receipt-box td,
+    #printable-waybill-box th,
+    #printable-waybill-box td {
+        display: table-cell !important;
+        padding: 2px !important;
+        font-size: 11px !important;
+        word-break: break-word !important;
+    }
+
+    #printable-receipt-box div,
+    #printable-debt-receipt-box div,
+    #printable-waybill-box div {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    @page {
+        size: 80mm auto;
+        margin: 0;
+    }
+}
+
+iframe,
+div[class*="mimo"],
+div[id*="mimo"] {
+    pointer-events: none !important;
+}
+
+/* ================= ACCOUNTANT DASHBOARD: PENDING / COMPLETED TAB TOGGLE ================= */
+
+.accountant-tab-btn {
+    width: auto;
+    margin: 0;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    background: #e2e8f0;
+    color: #1e293b;
+    border: none;
+    box-shadow: none;
+}
+
+.accountant-tab-btn:hover {
+    transform: none;
+    filter: brightness(0.96);
+}
+
+.accountant-tab-btn.active {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #fff;
+}
+
+/* ================= ACCOUNTANT DASHBOARD: PENDING ORDER DETAILS MODAL ================= */
+
+#pending-order-details-modal table th {
+    text-align: left;
+}
+
+#pending-order-details-modal #pending-details-total {
+    color: var(--accent);
+}
