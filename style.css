@@ -246,3 +246,32 @@ iframe, div[class*="mimo"], div[id*="mimo"] {
 .pos-grid > div:last-child button:nth-of-type(2) {
     display: none !important;
 }
+
+/* ================= ACCOUNTANT DASHBOARD: PENDING / COMPLETED TAB TOGGLE ================= */
+.accountant-tab-btn {
+    width: auto;
+    margin: 0;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    background: #e2e8f0;
+    color: #1e293b;
+    border: none;
+    box-shadow: none;
+}
+.accountant-tab-btn:hover {
+    transform: none;
+    filter: brightness(0.96);
+}
+.accountant-tab-btn.active {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    color: #fff;
+}
+
+/* ================= ACCOUNTANT DASHBOARD: PENDING ORDER DETAILS MODAL ================= */
+#pending-order-details-modal table th {
+    text-align: left;
+}
+#pending-order-details-modal #pending-details-total {
+    color: var(--accent);
+}
