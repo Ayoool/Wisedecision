@@ -1628,14 +1628,14 @@ function switchAccountantTab(tab) {
     if (tab === 'completed') {
         if (pendingSection) pendingSection.style.display = 'none';
         if (completedSection) completedSection.style.display = 'block';
-        if (pendingBtn) { pendingBtn.style.background = '#e2e8f0'; pendingBtn.style.color = '#1e293b'; }
-        if (completedBtn) { completedBtn.style.background = '#0284c7'; completedBtn.style.color = '#fff'; }
+        if (pendingBtn) pendingBtn.classList.remove('active');
+        if (completedBtn) completedBtn.classList.add('active');
         loadCompletedTransactionsForAccountant();
     } else {
         if (completedSection) completedSection.style.display = 'none';
         if (pendingSection) pendingSection.style.display = 'block';
-        if (completedBtn) { completedBtn.style.background = '#e2e8f0'; completedBtn.style.color = '#1e293b'; }
-        if (pendingBtn) { pendingBtn.style.background = '#0284c7'; pendingBtn.style.color = '#fff'; }
+        if (completedBtn) completedBtn.classList.remove('active');
+        if (pendingBtn) pendingBtn.classList.add('active');
     }
 }
 
