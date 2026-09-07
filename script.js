@@ -1,4 +1,4 @@
-// ==================== FIREBASE INITIALIZATION ====================
+e// ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
     const firebaseConfig = {
@@ -179,6 +179,7 @@ function switchView(viewId) {
                 const posBranchLabel = document.getElementById('pos-branch-label');
                 if (posBranchLabel) posBranchLabel.textContent = branchNameOf(currentBranch);
                 applySaleUnitUI();
+                loadHeldCartsBadge();
             }
             if (viewId === 'inventory-view') {
                 populateInventoryBranchFilter();
@@ -4119,4 +4120,156 @@ function updatePosCustomerBadge() {
     } else {
         badge.textContent = 'Selling to: Walk-In Customer';
     }
+}
+
+// ==================== HELD / PARKED CARTS (POS) ====================
+// Lets staff temporarily set aside an in-progress cart (customer steps away, or
+// another customer needs serving urgently) and resume it later without losing
+// items, the attached customer, or the Retail/Wholesale + Pack/Piece selections.
+// Stored flat at stores/{storeId}/heldCarts with a branchId field on each record —
+// same pattern as pendingOrders/expenses — so switching branches never leaves a
+// stale listener attached to an old per-branch path.
+
+function holdCurrentCart() {
+    if (currentCart.length === 0) {
+        alert("Cart is empty — nothing to hold.");
+        return;
+    }
+    if (!currentStoreId) return;
+
+    const label = prompt("Optional label for this held cart (e.g. customer name or note):", currentSelectedCustomer ? currentSelectedCustomer.name : "");
+    if (label === null) return; // user cancelled the prompt
+
+    const heldBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    const heldCartData = {
+        items: currentCart,
+        customerType: currentCustomerType,
+        saleUnit: currentSaleUnit,
+        customer: currentSelectedCustomer ? { ...currentSelectedCustomer } : null,
+        label: (label && label.trim()) || (currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'),
+        heldBy,
+        heldAt: new Date().toISOString(),
+        branchId: currentBranch
+    };
+
+    firebase.database().ref(`stores/${currentStoreId}/heldCarts`).push(heldCartData).then(() => {
+        currentCart = [];
+        renderCart();
+        clearPosCustomer();
+        loadPosInventoryDropdown();
+        alert("Cart held. You can resume it anytime from 'Held Carts'.");
+    }).catch(err => {
+        alert("Failed to hold cart: " + err.message);
+    });
+}
+
+// Live badge count of held carts for the branch currently open in POS. Also keeps
+// an already-open Held Carts modal in sync if another terminal holds/resumes a
+// cart on the same branch while it's showing.
+function loadHeldCartsBadge() {
+    if (!currentStoreId) return;
+
+    const heldRef = firebase.database().ref(`stores/${currentStoreId}/heldCarts`);
+    heldRef.off();
+    heldRef.on('value', snapshot => {
+        const rows = [];
+        snapshot.forEach(child => {
+            const hc = child.val();
+            if ((hc.branchId || 'main') !== currentBranch) return;
+            rows.push({ id: child.key, ...hc });
+        });
+
+        const badge = document.getElementById('held-carts-count');
+        if (badge) badge.textContent = rows.length;
+
+        const modal = document.getElementById('held-carts-modal');
+        if (modal && modal.style.display === 'flex') {
+            renderHeldCartsList(rows);
+        }
+    }, error => {
+        console.error("loadHeldCartsBadge error:", error);
+    });
+}
+
+function openHeldCartsModal() {
+    if (!currentStoreId) return;
+    document.getElementById('held-carts-modal').style.display = 'flex';
+
+    firebase.database().ref(`stores/${currentStoreId}/heldCarts`).once('value').then(snapshot => {
+        const rows = [];
+        snapshot.forEach(child => {
+            const hc = child.val();
+            if ((hc.branchId || 'main') !== currentBranch) return;
+            rows.push({ id: child.key, ...hc });
+        });
+        renderHeldCartsList(rows);
+    });
+}
+
+function closeHeldCartsModal() {
+    document.getElementById('held-carts-modal').style.display = 'none';
+}
+
+function renderHeldCartsList(rows) {
+    const tbody = document.getElementById('held-carts-body');
+    if (!tbody) return;
+
+    rows.sort((a, b) => new Date(b.heldAt || 0) - new Date(a.heldAt || 0));
+
+    const rowsHtml = rows.map(hc => {
+        const itemCount = Array.isArray(hc.items) ? hc.items.length : 0;
+        const total = Array.isArray(hc.items) ? hc.items.reduce((sum, i) => sum + (Number(i.total) || 0), 0) : 0;
+        return `
+            <tr>
+                <td><strong>${hc.label || 'Held Cart'}</strong><br><small style="color:var(--text-muted);">${hc.heldAt ? new Date(hc.heldAt).toLocaleString() : ''} · ${hc.heldBy || ''}</small></td>
+                <td>${itemCount} item${itemCount === 1 ? '' : 's'}</td>
+                <td>₦${total.toLocaleString()}</td>
+                <td>
+                    <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="resumeHeldCart('${hc.id}')">Resume ▶</button>
+                    <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="discardHeldCart('${hc.id}')">Discard ✕</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = rows.length === 0
+        ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">No held carts for ${branchNameOf(currentBranch)}.</td></tr>`
+        : rowsHtml.join('');
+}
+
+// Resuming replaces whatever's currently in the active cart, so we confirm first
+// if the active cart isn't empty — no silently losing in-progress work.
+function resumeHeldCart(holdId) {
+    if (currentCart.length > 0) {
+        if (!confirm("Your current cart isn't empty. Resuming this held cart will replace it. Continue?")) return;
+    }
+
+    firebase.database().ref(`stores/${currentStoreId}/heldCarts/${holdId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            alert("This held cart is no longer available (it may have already been resumed elsewhere).");
+            return;
+        }
+        const hc = snapshot.val();
+
+        currentCart = Array.isArray(hc.items) ? hc.items : [];
+        currentSelectedCustomer = hc.customer || null;
+
+        return firebase.database().ref(`stores/${currentStoreId}/heldCarts/${holdId}`).remove().then(() => {
+            renderCart();
+            setCustomerType(hc.customerType || 'Retail');
+            setSaleUnit(hc.saleUnit || 'Pack');
+            updatePosCustomerBadge();
+            closeHeldCartsModal();
+        });
+    }).catch(err => {
+        alert("Failed to resume held cart: " + err.message);
+    });
+}
+
+function discardHeldCart(holdId) {
+    if (!confirm("Discard this held cart permanently? This cannot be undone.")) return;
+
+    firebase.database().ref(`stores/${currentStoreId}/heldCarts/${holdId}`).remove().catch(err => {
+        alert("Failed to discard held cart: " + err.message);
+    });
 }
