@@ -441,15 +441,18 @@ th {
 
     #printable-receipt-box,
     #printable-debt-receipt-box,
+    #printable-refund-receipt-box,
     #printable-waybill-box,
     #printable-receipt-box *,
     #printable-debt-receipt-box *,
+    #printable-refund-receipt-box *,
     #printable-waybill-box * {
         visibility: visible !important;
     }
 
     #printable-receipt-box,
     #printable-debt-receipt-box,
+    #printable-refund-receipt-box,
     #printable-waybill-box {
         display: block !important;
         position: absolute;
@@ -468,6 +471,7 @@ th {
 
     #printable-receipt-box table,
     #printable-debt-receipt-box table,
+    #printable-refund-receipt-box table,
     #printable-waybill-box table {
         display: table !important;
         width: 100% !important;
@@ -476,6 +480,7 @@ th {
 
     #printable-receipt-box tr,
     #printable-debt-receipt-box tr,
+    #printable-refund-receipt-box tr,
     #printable-waybill-box tr {
         display: table-row !important;
         width: 100% !important;
@@ -485,6 +490,8 @@ th {
     #printable-receipt-box td,
     #printable-debt-receipt-box th,
     #printable-debt-receipt-box td,
+    #printable-refund-receipt-box th,
+    #printable-refund-receipt-box td,
     #printable-waybill-box th,
     #printable-waybill-box td {
         display: table-cell !important;
@@ -495,6 +502,7 @@ th {
 
     #printable-receipt-box div,
     #printable-debt-receipt-box div,
+    #printable-refund-receipt-box div,
     #printable-waybill-box div {
         display: block !important;
         width: 100% !important;
@@ -545,3 +553,21 @@ div[id*="mimo"] {
 #pending-order-details-modal #pending-details-total {
     color: var(--accent);
 }
+
+/* ================= REFUND MODAL & REFUND RECEIPT ================= */
+
+#refund-modal > div {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+#refund-confirm-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: #94a3b8 !important;
+}
+
+/* Refund receipts print via the same thermal-width rules as the other three
+   printable boxes above — see the shared @media print block. */
