@@ -48,6 +48,9 @@ let suppliersCache = {};
 let supplyBranchProductNames = []; // product names in the currently-selected supply branch, for autocomplete
 let supplyItemRowCounter = 0;
 
+// Refund module state
+let currentActiveRefund = null; // { txId, transaction, branchId, customerId, customerName } for the order currently open in the Refund modal
+
 // Initialize application on load
 window.onload = function() {
     console.log("Wise Decision Enterprise Suite Initialized.");
@@ -138,7 +141,8 @@ function switchView(viewId) {
             'settings-view', 'settings-view-template',
             'pos-view', 'pos-view-template',
             'customers-view', 'customers-view-template',
-            'debt-receipt-view', 'debt-receipt-view-template'
+            'debt-receipt-view', 'debt-receipt-view-template',
+            'refund-receipt-view', 'refund-receipt-view-template'
         ];
         if (!allowedAccountantViews.includes(viewId)) {
             alert(`Access Restricted: ${currentUserRole}s are permitted to accept payments, manage the queue, print receipts, and manage customers for their assigned branch.`);
@@ -1159,6 +1163,22 @@ function generateNextTransactionId() {
     });
 }
 
+// Same pattern as generateNextTransactionId(), but for refund receipt IDs (RF-001,
+// RF-002, ...) so refunds get a clean sequential identifier instead of a random one.
+function generateNextRefundId() {
+    if (!currentStoreId || !db) {
+        return Promise.reject(new Error("No active store or database connection."));
+    }
+
+    const counterRef = firebase.database().ref(`stores/${currentStoreId}/counters/lastRefundNumber`);
+    return counterRef.transaction(current => (current || 0) + 1).then(result => {
+        if (!result.committed) {
+            throw new Error("Could not reserve a refund number, please try again.");
+        }
+        return 'RF-' + String(result.snapshot.val()).padStart(3, '0');
+    });
+}
+
 // ==================== POS & CART REGISTER (branch-scoped) ====================
 function setCustomerType(type) {
     currentCustomerType = type;
@@ -1664,16 +1684,21 @@ function loadCompletedTransactionsForAccountant() {
         });
         rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
+        const canRefund = (currentUserRole === 'Admin' || currentUserRole === 'Accountant');
+
         const rowsHtml = rows.map(tx => {
             const transactionId = tx.txId || tx.id;
             const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
+                ? `<button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${transactionId}')">↩ Refund</button>`
+                : '';
             return `
                 <tr>
                     <td><strong>${transactionId}</strong>${customerTag}</td>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
                     <td>${tx.staff || tx.soldBy || 'Staff'}</td>
-                    <td>₦${Number(tx.totalAmount || 0).toLocaleString()}</td>
-                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button></td>
+                    <td>₦${Number(tx.totalAmount || 0).toLocaleString()}${refundStatusBadge(tx)}</td>
+                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button> ${refundBtn}</td>
                 </tr>
             `;
         });
@@ -2038,6 +2063,7 @@ function renderReceiptView(orderData, isReprint = false) {
         if (breakdownEl) {
             let breakdownText = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: ₦${transfer.toLocaleString()}`;
             if (credit > 0) breakdownText += ` | Credit: ₦${credit.toLocaleString()}`;
+            if (Number(orderData.refundedAmount) > 0) breakdownText += ` | Refunded: ₦${Number(orderData.refundedAmount).toLocaleString()}`;
             breakdownEl.textContent = breakdownText;
         }
 
@@ -2078,6 +2104,19 @@ function renderReceiptView(orderData, isReprint = false) {
             } else if (custRow) {
                 custRow.remove();
             }
+
+            let statusRow = printableBox.querySelector('#receipt-refund-status-row');
+            if (orderData.refundStatus && orderData.refundStatus !== 'Completed') {
+                if (!statusRow) {
+                    statusRow = document.createElement('div');
+                    statusRow.id = 'receipt-refund-status-row';
+                    statusRow.style.cssText = 'font-size: 11px; font-weight: bold; color: #991b1b; margin-bottom: 5px;';
+                    printableBox.insertBefore(statusRow, printableBox.querySelector('hr'));
+                }
+                statusRow.textContent = orderData.refundStatus === 'Refunded' ? '⚠ FULLY REFUNDED' : '⚠ PARTIALLY REFUNDED';
+            } else if (statusRow) {
+                statusRow.remove();
+            }
         }
 
         const receiptItemsContainer = workspace.querySelector('#receipt-items-body');
@@ -2088,9 +2127,10 @@ function renderReceiptView(orderData, isReprint = false) {
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
                 const unitLabel = item.saleUnit === 'Piece' ? 'pc' : (item.saleUnit === 'Pack' ? 'pack' : '');
                 const qtyDisplay = unitLabel ? `${item.qty || 0} ${unitLabel}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
+                const refundedTag = Number(item.refundedQty) > 0 ? ` <small style="color:#991b1b;">(${item.refundedQty} refunded)</small>` : '';
                 receiptItemsContainer.innerHTML += `
                     <tr>
-                        <td style="font-weight: bold;">${item.name || ''}</td>
+                        <td style="font-weight: bold;">${item.name || ''}${refundedTag}</td>
                         <td>${qtyDisplay}</td>
                         <td>₦${safeItemTotal}</td>
                     </tr>
@@ -2237,6 +2277,16 @@ function onReportsBranchFilterChange() {
     loadProfitAndLossModule();
 }
 
+// Small helper so both Reports and the Accountant "Completed Sales" tab can show a
+// consistent inline badge next to a transaction's amount when it's been refunded.
+function refundStatusBadge(tx) {
+    if (!tx || !tx.refundStatus || tx.refundStatus === 'Completed') return '';
+    const isFull = tx.refundStatus === 'Refunded';
+    const color = isFull ? '#991b1b' : '#b45309';
+    const label = isFull ? 'Refunded' : 'Partial Refund';
+    return `<br><small style="color:${color}; font-weight:bold;">${label} (₦${Number(tx.refundedAmount || 0).toLocaleString()})</small>`;
+}
+
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
@@ -2271,6 +2321,7 @@ function loadPastSalesHistory(selectedDateString = null) {
         startOfWeek.setHours(0, 0, 0, 0);
 
         const branchFilter = currentReportBranchFilter || 'all';
+        const canRefund = (currentUserRole === 'Admin' || currentUserRole === 'Accountant');
         const rowsHtml = [];
 
         snapshot.forEach(child => {
@@ -2311,6 +2362,11 @@ function loadPastSalesHistory(selectedDateString = null) {
             const transactionId = tx.txId || child.key;
             const sellerName = tx.staff || tx.soldBy || 'Staff';
             const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            const statusLabel = tx.refundStatus && tx.refundStatus !== 'Completed' ? (tx.refundStatus === 'Refunded' ? 'Refunded' : 'Partially Refunded') : (tx.status || 'Completed');
+            const statusColor = tx.refundStatus === 'Refunded' ? '#991b1b' : (tx.refundStatus === 'Partially Refunded' ? '#b45309' : 'green');
+            const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
+                ? `<button class="menu-btn btn-logout" style="padding: 5px 10px; font-size: 11px; width: auto; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${transactionId}')">↩ Refund</button>`
+                : '';
 
             rowsHtml.push(`
                 <tr>
@@ -2318,11 +2374,12 @@ function loadPastSalesHistory(selectedDateString = null) {
                     <td>${branchNameOf(txBranch)}</td>
                     <td>${dateStr}</td>
                     <td>${sellerName}</td>
-                    <td>₦${txTotal.toLocaleString()}</td>
+                    <td>₦${txTotal.toLocaleString()}${refundStatusBadge(tx)}</td>
                     <td>Cash: ₦${cashPaid.toLocaleString()}<br>Transfer: ₦${transferPaid.toLocaleString()}</td>
-                    <td><span style="color: green; font-weight: bold;">${tx.status || 'Completed'}</span></td>
+                    <td><span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span></td>
                     <td>
                         <button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button>
+                        ${refundBtn}
                     </td>
                 </tr>
             `);
@@ -2346,6 +2403,40 @@ function loadPastSalesHistory(selectedDateString = null) {
 
         const monthEl = document.getElementById('total-revenue-month-label');
         if (monthEl) monthEl.textContent = '₦' + monthRevenue.toLocaleString();
+    });
+
+    // Refunds total for the selected day, shown in its own summary card. Kept as a
+    // separate read (rather than folded into the transactions listener above) since
+    // refunds live in their own node.
+    loadRefundsSummaryForDate(selectedDateString);
+}
+
+// Sums refunds.totalRefund for the selected day (defaults to today), respecting the
+// current branch filter, and updates the "Total Refunds (Selected Day)" card.
+function loadRefundsSummaryForDate(selectedDateString = null) {
+    if (!currentStoreId) return;
+    const card = document.getElementById('total-refunds-card');
+    if (!card) return;
+
+    const targetDate = selectedDateString ? new Date(selectedDateString) : new Date();
+    const targetYear = targetDate.getUTCFullYear();
+    const targetMonth = targetDate.getUTCMonth();
+    const targetDay = targetDate.getUTCDate();
+    const branchFilter = currentReportBranchFilter || 'all';
+
+    firebase.database().ref(`stores/${currentStoreId}/refunds`).once('value').then(snapshot => {
+        let total = 0;
+        snapshot.forEach(child => {
+            const r = child.val();
+            if (branchFilter !== 'all' && (r.branchId || 'main') !== branchFilter) return;
+            const rDate = r.date ? new Date(r.date) : null;
+            if (rDate && rDate.getUTCFullYear() === targetYear && rDate.getUTCMonth() === targetMonth && rDate.getUTCDate() === targetDay) {
+                total += Number(r.totalRefund) || 0;
+            }
+        });
+        card.textContent = '₦' + total.toLocaleString();
+    }).catch(() => {
+        card.textContent = '₦0';
     });
 }
 
@@ -2636,8 +2727,9 @@ function loadProfitAndLossModule() {
     Promise.all([
         firebase.database().ref(`stores/${currentStoreId}/transactions`).once('value'),
         firebase.database().ref(`stores/${currentStoreId}/inventory`).once('value'),
-        firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value')
-    ]).then(([txSnapshot, invSnapshot, expSnapshot]) => {
+        firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value'),
+        firebase.database().ref(`stores/${currentStoreId}/refunds`).once('value')
+    ]).then(([txSnapshot, invSnapshot, expSnapshot, refundSnapshot]) => {
         
         const costPriceMap = {};
         invSnapshot.forEach(branchChild => {
@@ -2655,7 +2747,7 @@ function loadProfitAndLossModule() {
             });
         });
 
-        let monthRevenue = 0, monthCost = 0, monthExpenses = 0;
+        let monthRevenue = 0, monthCost = 0, monthExpenses = 0, monthRefunds = 0, monthRefundCost = 0;
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
@@ -2696,7 +2788,23 @@ function loadProfitAndLossModule() {
             }
         });
 
-        const monthGross = monthRevenue - monthCost;
+        // Refunds reduce both revenue (money given back) and COGS (restocked items are no
+        // longer "sold" from a cost-accounting standpoint) for the month they were issued in.
+        refundSnapshot.forEach(child => {
+            const r = child.val();
+            const rBranch = r.branchId || 'main';
+            if (plBranchFilter !== 'all' && rBranch !== plBranchFilter) return;
+
+            const rDate = r.date ? new Date(r.date) : null;
+            if (rDate && rDate.getFullYear() === currentYear && rDate.getMonth() === currentMonth) {
+                monthRefunds += Number(r.totalRefund) || 0;
+                if (Array.isArray(r.items)) {
+                    r.items.forEach(ri => { monthRefundCost += Number(ri.totalCost) || 0; });
+                }
+            }
+        });
+
+        const monthGross = (monthRevenue - monthRefunds) - (monthCost - monthRefundCost);
         const monthNet = monthGross - monthExpenses;
 
         const netProfitDisplay = document.getElementById('net-profit-display');
@@ -3823,9 +3931,10 @@ function loadCustomerLedger(id) {
 
         const rowsHtml = entries.map(entry => {
             const isPayment = entry.type === 'payment';
-            const typeLabel = isPayment ? '💵 Payment' : (entry.type === 'credit_sale' ? '🛒 Credit Sale' : '✏ Adjustment');
-            const amtColor = isPayment ? '#166534' : '#b91c1c';
-            const amtSign = isPayment ? '-' : '+';
+            const isRefund = entry.type === 'refund_adjustment';
+            const typeLabel = isPayment ? '💵 Payment' : (entry.type === 'credit_sale' ? '🛒 Credit Sale' : (isRefund ? '↩ Refund Adjustment' : '✏ Adjustment'));
+            const amtColor = (isPayment || isRefund) ? '#166534' : '#b91c1c';
+            const amtSign = (isPayment || isRefund) ? '-' : '+';
 
             return `
                 <tr>
@@ -4041,6 +4150,391 @@ function downloadDebtReceiptPDF() {
     const opt = {
         margin: 5,
         filename: 'Payment-' + (document.getElementById('debt-receipt-tx-id')?.textContent || 'receipt') + '.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a6', orientation: 'portrait' }
+    };
+    html2pdf().from(element).set(opt).save();
+}
+
+// ==================== REFUNDS MODULE ====================
+// Restricted to Admin + Accountant (checked in openRefundModal). A refund can cover
+// the whole order or just a subset of items/quantities. It always:
+//   1. Restocks the refunded pieces back into the branch's inventory.
+//   2. Marks the original transaction's items with a cumulative refundedQty, and
+//      sets transaction.refundStatus to 'Partially Refunded' or 'Refunded'.
+//   3. Writes a standalone record under stores/{storeId}/refunds/{refundId} for
+//      audit history and for the Reports "Total Refunds" card / P&L adjustment.
+//   4. Optionally reduces the attached customer's outstanding balance (and their
+//      lifetime totalSpent) if "Reduce Customer's Outstanding Balance" is chosen.
+//   5. Prints a refund receipt.
+
+function openRefundModal(txId) {
+    if (currentUserRole !== 'Admin' && currentUserRole !== 'Accountant') {
+        alert("Access Restricted: Only an Admin or Accountant can process refunds.");
+        return;
+    }
+
+    firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).once('value').then(snapshot => {
+        if (!snapshot.exists()) {
+            alert("Transaction record not found.");
+            return;
+        }
+        const tx = snapshot.val();
+
+        if (tx.refundStatus === 'Refunded') {
+            alert("This order has already been fully refunded.");
+            return;
+        }
+
+        currentActiveRefund = {
+            txId,
+            transaction: tx,
+            branchId: tx.branchId || 'main',
+            customerId: tx.customerId || null,
+            customerName: tx.customerName || 'Walk-In Customer'
+        };
+
+        document.getElementById('refund-modal-tx-id').textContent = txId;
+        document.getElementById('refund-reason').value = '';
+
+        const custInfoEl = document.getElementById('refund-modal-customer-info');
+        const custBalanceOption = document.getElementById('refund-method-customer-balance-option');
+        const methodSelect = document.getElementById('refund-method');
+        methodSelect.value = 'Cash';
+
+        if (tx.customerId && customersCache[tx.customerId]) {
+            const c = customersCache[tx.customerId];
+            const balance = Number(c.balance) || 0;
+            custInfoEl.innerHTML = `Customer: <strong>${c.name}</strong> &nbsp;|&nbsp; Outstanding Balance: ₦${balance.toLocaleString()} &nbsp;|&nbsp; Branch: <strong>${branchNameOf(currentActiveRefund.branchId)}</strong>`;
+            if (custBalanceOption) custBalanceOption.style.display = balance > 0 ? 'block' : 'none';
+        } else {
+            custInfoEl.innerHTML = `Customer: <strong>${currentActiveRefund.customerName}</strong> &nbsp;|&nbsp; Branch: <strong>${branchNameOf(currentActiveRefund.branchId)}</strong>`;
+            if (custBalanceOption) custBalanceOption.style.display = 'none';
+        }
+
+        renderRefundModalItems(tx);
+        document.getElementById('refund-modal').style.display = 'flex';
+        recalcRefundTotal();
+    }).catch(err => {
+        alert("Failed to load transaction for refund: " + err.message);
+    });
+}
+
+function closeRefundModal() {
+    document.getElementById('refund-modal').style.display = 'none';
+    currentActiveRefund = null;
+}
+
+// Builds one row per sold item, with a quantity input capped at whatever hasn't
+// already been refunded on a prior partial refund (item.refundedQty).
+function renderRefundModalItems(tx) {
+    const container = document.getElementById('refund-items-container');
+    if (!container) return;
+
+    const items = Array.isArray(tx.items) ? tx.items : [];
+    if (items.length === 0) {
+        container.innerHTML = `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No item details recorded for this order.</div>`;
+        return;
+    }
+
+    const rowsHtml = items.map((item, idx) => {
+        const alreadyRefunded = Number(item.refundedQty) || 0;
+        const remaining = Math.max(0, (Number(item.qty) || 0) - alreadyRefunded);
+        const unitLabel = item.saleUnit === 'Piece' ? 'pc' : 'pack';
+        const refundedNote = alreadyRefunded > 0 ? `<br><small style="color:#991b1b;">${alreadyRefunded} already refunded</small>` : '';
+
+        return `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid #f1f5f9; font-size:13px;" data-refund-row="${idx}">
+                <div style="flex:1;">
+                    <strong>${item.name || 'Item'}</strong><br>
+                    <small style="color:var(--text-muted);">Sold: ${item.qty} ${unitLabel}${item.qty === 1 ? '' : 's'} @ ₦${Number(item.price || 0).toLocaleString()}${refundedNote}</small>
+                </div>
+                <input type="number" min="0" max="${remaining}" step="${item.saleUnit === 'Piece' || item.qty % 1 !== 0 ? '0.5' : '1'}" value="0"
+                    data-max-refundable="${remaining}"
+                    data-unit-price="${item.price || 0}"
+                    data-item-name="${(item.name || '').replace(/"/g, '&quot;')}"
+                    data-item-id="${item.id || ''}"
+                    data-sale-unit="${item.saleUnit || 'Pack'}"
+                    data-units-per-pack="${item.unitsPerPack || 1}"
+                    class="refund-qty-input"
+                    style="width:80px; padding:6px; border:1px solid #cbd5e1; border-radius:6px;"
+                    oninput="recalcRefundTotal()"
+                    ${remaining <= 0 ? 'disabled' : ''}>
+            </div>
+        `;
+    });
+
+    container.innerHTML = rowsHtml.join('');
+}
+
+// Quick-fills every quantity input to its maximum refundable amount (full order refund).
+function setFullRefundQuantities() {
+    document.querySelectorAll('.refund-qty-input').forEach(input => {
+        input.value = input.getAttribute('data-max-refundable');
+    });
+    recalcRefundTotal();
+}
+
+// Recomputes the total from whatever quantities are currently entered, and
+// enables/disables the Confirm button accordingly.
+function recalcRefundTotal() {
+    const inputs = document.querySelectorAll('.refund-qty-input');
+    let total = 0;
+    let anyQty = false;
+    let invalid = false;
+
+    inputs.forEach(input => {
+        const qty = parseFloat(input.value) || 0;
+        const max = parseFloat(input.getAttribute('data-max-refundable')) || 0;
+        const price = parseFloat(input.getAttribute('data-unit-price')) || 0;
+
+        if (qty < 0 || qty > max) invalid = true;
+        if (qty > 0) anyQty = true;
+        total += qty * price;
+    });
+
+    total = Math.round(total * 100) / 100;
+
+    const totalEl = document.getElementById('refund-modal-total');
+    if (totalEl) totalEl.textContent = total.toLocaleString();
+
+    const confirmBtn = document.getElementById('refund-confirm-btn');
+    if (confirmBtn) confirmBtn.disabled = !(anyQty && !invalid && total > 0);
+
+    return total;
+}
+
+function processRefund() {
+    if (!currentActiveRefund) return;
+    if (currentUserRole !== 'Admin' && currentUserRole !== 'Accountant') {
+        alert("Access Restricted: Only an Admin or Accountant can process refunds.");
+        return;
+    }
+
+    const inputs = document.querySelectorAll('.refund-qty-input');
+    const method = document.getElementById('refund-method').value;
+    const reason = document.getElementById('refund-reason').value.trim();
+    const { txId, transaction, branchId, customerId, customerName } = currentActiveRefund;
+
+    const refundLines = [];
+    let invalid = false;
+
+    inputs.forEach((input, idx) => {
+        const qty = parseFloat(input.value) || 0;
+        if (qty <= 0) return;
+        const max = parseFloat(input.getAttribute('data-max-refundable')) || 0;
+        if (qty > max) { invalid = true; return; }
+
+        const price = parseFloat(input.getAttribute('data-unit-price')) || 0;
+        const saleUnit = input.getAttribute('data-sale-unit') || 'Pack';
+        const unitsPerPack = parseFloat(input.getAttribute('data-units-per-pack')) || 1;
+        const piecesToRestock = Math.round((saleUnit === 'Piece' ? qty : qty * unitsPerPack) * 100) / 100;
+
+        refundLines.push({
+            itemIndex: idx,
+            id: input.getAttribute('data-item-id'),
+            name: input.getAttribute('data-item-name'),
+            qty,
+            saleUnit,
+            unitsPerPack,
+            unitPrice: price,
+            amount: Math.round(qty * price * 100) / 100,
+            piecesToRestock
+        });
+    });
+
+    if (invalid) {
+        alert("One or more refund quantities exceed what's still refundable. Please review and try again.");
+        return;
+    }
+    if (refundLines.length === 0) {
+        alert("Select at least one item and quantity to refund.");
+        return;
+    }
+
+    const totalRefund = Math.round(refundLines.reduce((sum, l) => sum + l.amount, 0) * 100) / 100;
+
+    if (method === 'Customer Balance') {
+        if (!customerId || !customersCache[customerId] || (Number(customersCache[customerId].balance) || 0) <= 0) {
+            alert("This customer has no outstanding balance to reduce. Choose Cash or Transfer instead.");
+            return;
+        }
+    }
+
+    generateNextRefundId().then(refundId => {
+        const processedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+        const nowIso = new Date().toISOString();
+
+        // 1. Restock each refunded line, and look up its per-piece cost for P&L
+        const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`);
+        const restockChain = refundLines.map(line => {
+            if (!line.id) return Promise.resolve(line);
+            return invRef.child(line.id).once('value').then(prodSnap => {
+                if (prodSnap.exists()) {
+                    const prod = prodSnap.val();
+                    const currentStock = Number(prod.stock !== undefined ? prod.stock : (prod.stockQty || 0));
+                    const newStock = currentStock + line.piecesToRestock;
+                    return invRef.child(line.id).update({ stock: newStock, stockQty: newStock }).then(() => {
+                        const upp = Number(prod.unitsPerPack) || 1;
+                        const costPerPiece = (Number(prod.costPrice) || 0) / upp;
+                        line.totalCost = Math.round(costPerPiece * line.piecesToRestock * 100) / 100;
+                        if (inventoryCache[branchId] && inventoryCache[branchId][line.id]) {
+                            inventoryCache[branchId][line.id].stock = newStock;
+                            inventoryCache[branchId][line.id].stockQty = newStock;
+                        }
+                        return line;
+                    });
+                }
+                line.totalCost = 0;
+                return line;
+            });
+        });
+
+        return Promise.all(restockChain).then(() => {
+            // 2. Update the original transaction: per-item refundedQty + overall status
+            const updatedItems = Array.isArray(transaction.items) ? transaction.items.map(it => ({ ...it })) : [];
+            refundLines.forEach(line => {
+                if (updatedItems[line.itemIndex]) {
+                    updatedItems[line.itemIndex].refundedQty = Math.round(((Number(updatedItems[line.itemIndex].refundedQty) || 0) + line.qty) * 100) / 100;
+                }
+            });
+
+            const newRefundedAmount = Math.round(((Number(transaction.refundedAmount) || 0) + totalRefund) * 100) / 100;
+            const fullyRefunded = newRefundedAmount >= (Number(transaction.totalAmount) || 0) - 0.5;
+            const newRefundStatus = fullyRefunded ? 'Refunded' : 'Partially Refunded';
+
+            return firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).update({
+                items: updatedItems,
+                refundedAmount: newRefundedAmount,
+                refundStatus: newRefundStatus
+            }).then(() => ({ updatedItems, newRefundedAmount, newRefundStatus }));
+        }).then(({ newRefundedAmount, newRefundStatus }) => {
+            // 3. Write the standalone refund record
+            const refundData = {
+                refundId,
+                txId,
+                branchId,
+                customerId: customerId || null,
+                customerName: customerName || 'Walk-In Customer',
+                items: refundLines.map(({ itemIndex, piecesToRestock, ...rest }) => rest),
+                totalRefund,
+                method,
+                reason,
+                processedBy,
+                date: nowIso
+            };
+
+            return firebase.database().ref(`stores/${currentStoreId}/refunds/${refundId}`).set(refundData).then(() => refundData);
+        }).then(refundData => {
+            // 4. Customer balance / lifetime spend adjustments
+            if (customerId && customersCache[customerId]) {
+                const custRef = firebase.database().ref(`stores/${currentStoreId}/customers/${customerId}`);
+                return custRef.once('value').then(custSnap => {
+                    if (!custSnap.exists()) return refundData;
+                    const c = custSnap.val();
+                    const updates = {
+                        totalSpent: Math.max(0, (Number(c.totalSpent) || 0) - totalRefund)
+                    };
+
+                    let ledgerPromise = Promise.resolve();
+                    if (method === 'Customer Balance') {
+                        const balanceBefore = Number(c.balance) || 0;
+                        const balanceAfter = Math.max(0, balanceBefore - totalRefund);
+                        updates.balance = balanceAfter;
+                        ledgerPromise = firebase.database().ref(`stores/${currentStoreId}/customers/${customerId}/ledger`).push({
+                            type: 'refund_adjustment',
+                            amount: totalRefund,
+                            balanceBefore,
+                            balanceAfter,
+                            date: nowIso,
+                            recordedBy: processedBy,
+                            note: `Refund ${refundId} applied to balance (order ${txId})`
+                        });
+                    }
+
+                    return custRef.update(updates).then(() => ledgerPromise).then(() => refundData);
+                });
+            }
+            return refundData;
+        }).then(refundData => {
+            closeRefundModal();
+            renderRefundReceiptView(refundData);
+        });
+    }).catch(err => {
+        console.error("processRefund error:", err);
+        alert("Failed to process refund: " + err.message);
+    });
+}
+
+// ---------- Refund Receipt (thermal-compatible) ----------
+function renderRefundReceiptView(refundData) {
+    const mainWrapper = document.getElementById('dashboard-main-wrapper');
+    if (mainWrapper) {
+        mainWrapper.classList.add('active');
+        mainWrapper.style.display = 'block';
+    }
+
+    const workspace = document.getElementById('workspace-content');
+    const template = document.getElementById('refund-receipt-view-template');
+    if (!workspace || !template) return;
+
+    workspace.innerHTML = template.innerHTML;
+
+    setTimeout(() => {
+        const setText = (sel, val) => {
+            const el = workspace.querySelector(sel);
+            if (el) el.textContent = val;
+        };
+
+        setText('#refund-receipt-id', refundData.refundId || '--');
+        setText('#refund-receipt-tx-id', refundData.txId || '--');
+        setText('#refund-receipt-date', refundData.date ? new Date(refundData.date).toLocaleString() : new Date().toLocaleString());
+        setText('#refund-receipt-customer-name', refundData.customerName || 'Walk-In Customer');
+        setText('#refund-receipt-staff', refundData.processedBy || '');
+        setText('#refund-receipt-method', refundData.method || 'Cash');
+        setText('#refund-receipt-total', Number(refundData.totalRefund || 0).toLocaleString());
+
+        const itemsBody = workspace.querySelector('#refund-receipt-items-body');
+        if (itemsBody) {
+            itemsBody.innerHTML = '';
+            (refundData.items || []).forEach(item => {
+                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : 'pack';
+                itemsBody.innerHTML += `
+                    <tr>
+                        <td>${item.name || ''}</td>
+                        <td>${item.qty} ${unitLabel}${item.qty === 1 ? '' : 's'}</td>
+                        <td style="text-align:right;">₦${Number(item.amount || 0).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        const reasonEl = workspace.querySelector('#refund-receipt-reason');
+        if (reasonEl) reasonEl.textContent = refundData.reason ? `Reason: ${refundData.reason}` : '';
+
+        const printableBox = workspace.querySelector('#printable-refund-receipt-box');
+
+        if (currentStoreId && printableBox) {
+            firebase.database().ref(`stores/${currentStoreId}`).once('value').then(snapshot => {
+                if (snapshot.exists()) {
+                    const storeData = snapshot.val();
+                    setText('#refund-receipt-store-name', storeData.businessName || "");
+                    setText('#refund-receipt-store-address', storeData.address || "");
+                    setText('#refund-receipt-store-phone', storeData.phone ? `Tel: ${storeData.phone}` : "");
+                }
+                triggerThermalPrint(printableBox.innerHTML);
+            }).catch(() => triggerThermalPrint(printableBox.innerHTML));
+        }
+    }, 150);
+}
+
+function downloadRefundReceiptPDF() {
+    const element = document.getElementById('printable-refund-receipt-box');
+    if (!element) return;
+    const opt = {
+        margin: 5,
+        filename: 'Refund-' + (document.getElementById('refund-receipt-id')?.textContent || 'receipt') + '.pdf',
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a6', orientation: 'portrait' }
