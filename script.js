@@ -3718,6 +3718,16 @@ function closeSupplyDetailsModal() {
 // with one click from the product's own row instead of going through Suppliers
 // and re-typing the product name.
 function openQuickRestockModal(branchId, productId) {
+    // Defensive check: if index.html wasn't updated/deployed alongside script.js
+    // (or the browser is serving a cached copy), the quick-restock-modal markup
+    // won't exist yet and every getElementById below would silently fail. Fail
+    // loudly here instead so it's obvious what's wrong rather than nothing happening.
+    if (!document.getElementById('quick-restock-modal')) {
+        alert("Restock modal is missing from the page (index.html may be out of date or cached). Please make sure you've deployed the latest index.html and hard-refresh the page (Ctrl/Cmd+Shift+R).");
+        console.error("openQuickRestockModal: #quick-restock-modal not found in the DOM.");
+        return;
+    }
+
     if (Object.keys(suppliersCache).length === 0) {
         alert("Please add at least one supplier first (Suppliers → + Add Supplier) before restocking.");
         return;
