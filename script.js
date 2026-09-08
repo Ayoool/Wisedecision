@@ -2545,7 +2545,10 @@ function loadStaffTable() {
                     <td>${staff.name}</td>
                     <td>${staff.role}</td>
                     <td>${branchNameOf(staff.branchId || 'main')}</td>
-                    <td><button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto;" onclick="deleteStaff('${id}')">Remove</button></td>
+                    <td>
+                        <button class="menu-btn" style="padding: 3px 8px; font-size:11px; width:auto; display:inline-block; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;" onclick="changeStaffPin('${id}', '${(staff.name || '').replace(/'/g, "\\'")}')">🔑 Change PIN</button>
+                        <button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteStaff('${id}')">Remove</button>
+                    </td>
                 </tr>
             `);
         });
@@ -2589,6 +2592,29 @@ function deleteStaff(id) {
     if (confirm("Remove this staff member?")) {
         firebase.database().ref(`stores/${currentStoreId}/staff/${id}`).remove();
     }
+}
+
+// Lets the Admin reset a staff member's login PIN — e.g. if they forgot it or a
+// device with it saved was lost. Same prompt()-based pattern already used for
+// resetting a store's Admin PIN from the Super Admin dashboard.
+function changeStaffPin(id, name) {
+    if (currentUserRole !== 'Admin') {
+        alert("Access Restricted: Only the Admin can change a staff member's PIN.");
+        return;
+    }
+
+    const newPin = prompt(`Enter a new login PIN for ${name || 'this staff member'}:`);
+    if (newPin === null) return; // user cancelled the prompt
+    if (newPin.trim() === '') {
+        alert("PIN cannot be empty. No changes were made.");
+        return;
+    }
+
+    firebase.database().ref(`stores/${currentStoreId}/staff/${id}`).update({ pin: newPin.trim() }).then(() => {
+        alert(`PIN updated successfully for ${name || 'this staff member'}.`);
+    }).catch(err => {
+        alert("Failed to update PIN: " + err.message);
+    });
 }
 
 // ==================== BUSINESS SETTINGS & PROFILE ====================
