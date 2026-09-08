@@ -840,7 +840,7 @@ function renderInventoryTable() {
         const pExpiry = item.expiry || item.expiryDate || 'N/A';
 
         rowsHtml.push(`
-            <tr>
+            <tr id="inv-row-${branchId}-${id}">
                 <td>${pName}</td>
                 <td>₦${Number(cPrice).toLocaleString()}</td>
                 <td>₦${Number(rPrice).toLocaleString()}</td>
@@ -850,6 +850,8 @@ function renderInventoryTable() {
                 <td>${pExpiry}</td>
                 <td>
                     <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
+                    <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block; background:#ecfdf5; color:#166534; border:1px solid #a7f3d0;" onclick="openQuickRestockModal('${branchId}','${id}')">🔄 Restock</button>
+                    <button class="menu-btn btn-dash" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="toggleProductRestockHistory('${branchId}','${id}')">📜 History</button>
                     <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${branchId}','${id}')">Delete</button>
                 </td>
             </tr>
@@ -912,7 +914,7 @@ function filterInventoryTable() {
             const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
             const pExpiry = item.expiry || item.expiryDate || 'N/A';
             rowsHtml.push(`
-                <tr>
+                <tr id="inv-row-${branchId}-${id}">
                     <td>${pName}</td>
                     <td>₦${Number(cPrice).toLocaleString()}</td>
                     <td>₦${Number(rPrice).toLocaleString()}</td>
@@ -922,6 +924,8 @@ function filterInventoryTable() {
                     <td>${pExpiry}</td>
                     <td>
                         <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
+                        <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block; background:#ecfdf5; color:#166534; border:1px solid #a7f3d0;" onclick="openQuickRestockModal('${branchId}','${id}')">🔄 Restock</button>
+                        <button class="menu-btn btn-dash" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="toggleProductRestockHistory('${branchId}','${id}')">📜 History</button>
                         <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteProduct('${branchId}','${id}')">Delete</button>
                     </td>
                 </tr>
@@ -3540,7 +3544,10 @@ function saveSupply() {
             supplierId,
             supplierName: suppliersCache[supplierId].name,
             branchId,
-            items: items.map(({ _matchId, ...rest }) => rest),
+            // productId is kept (when matched to an existing item) so per-product
+            // restock history can look supplies up directly by id instead of only
+            // by name — see toggleProductRestockHistory().
+            items: items.map(({ _matchId, ...rest }) => ({ ...rest, productId: _matchId || null })),
             totalCost,
             notes,
             date: nowIso,
@@ -3702,6 +3709,262 @@ function viewSupplyDetails(supplyId) {
 
 function closeSupplyDetailsModal() {
     document.getElementById('supply-details-modal').style.display = 'none';
+}
+
+// ==================== QUICK RESTOCK (per-product, from Inventory) ====================
+// Same underlying effect as "Record New Supply" — creates a real supply record
+// (so it also shows up in Suppliers → Purchase Order History), updates the
+// product's stock/cost price, and updates the supplier's totals — just reachable
+// with one click from the product's own row instead of going through Suppliers
+// and re-typing the product name.
+function openQuickRestockModal(branchId, productId) {
+    if (Object.keys(suppliersCache).length === 0) {
+        alert("Please add at least one supplier first (Suppliers → + Add Supplier) before restocking.");
+        return;
+    }
+
+    const item = inventoryCache[branchId] && inventoryCache[branchId][productId];
+    if (!item) {
+        alert("Product not found. Try refreshing the Inventory page.");
+        return;
+    }
+
+    document.getElementById('restock-branch-id').value = branchId;
+    document.getElementById('restock-product-id').value = productId;
+    document.getElementById('restock-product-name').textContent = item.name || item.productName || 'Unnamed Item';
+
+    const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    document.getElementById('restock-current-stock-note').textContent = `Current stock: ${stockBreakdownLabel(currentStock, unitsPerPack)}`;
+
+    const supplierSelect = document.getElementById('restock-supplier-select');
+    let options = '<option value="">-- Select Supplier --</option>';
+    Object.keys(suppliersCache).forEach(id => {
+        options += `<option value="${id}">${suppliersCache[id].name}</option>`;
+    });
+    supplierSelect.innerHTML = options;
+
+    document.getElementById('restock-qty-packs').value = '';
+    document.getElementById('restock-qty-loose').value = '';
+    document.getElementById('restock-cost-price').value = item.costPrice || '';
+    document.getElementById('restock-notes').value = '';
+
+    const looseGroup = document.getElementById('restock-loose-group');
+    looseGroup.style.display = unitsPerPack > 1 ? 'block' : 'none';
+
+    recalcQuickRestockPreview();
+    document.getElementById('quick-restock-modal').style.display = 'flex';
+}
+
+function closeQuickRestockModal() {
+    document.getElementById('quick-restock-modal').style.display = 'none';
+}
+
+// Live "Stock before -> Stock after" preview as the packs/loose fields are edited.
+function recalcQuickRestockPreview() {
+    const branchId = document.getElementById('restock-branch-id').value;
+    const productId = document.getElementById('restock-product-id').value;
+    const item = inventoryCache[branchId] && inventoryCache[branchId][productId];
+    const previewEl = document.getElementById('restock-preview');
+    if (!item || !previewEl) return;
+
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
+    const packs = parseInt(document.getElementById('restock-qty-packs').value) || 0;
+    const loose = unitsPerPack > 1 ? (parseInt(document.getElementById('restock-qty-loose').value) || 0) : 0;
+    const piecesReceived = (packs * unitsPerPack) + loose;
+    const newStock = currentStock + piecesReceived;
+
+    previewEl.textContent = `Stock before: ${stockBreakdownLabel(currentStock, unitsPerPack)} → Stock after: ${stockBreakdownLabel(newStock, unitsPerPack)} (+${piecesReceived} pcs)`;
+}
+
+function saveQuickRestock() {
+    if (!currentStoreId) return;
+
+    const branchId = document.getElementById('restock-branch-id').value;
+    const productId = document.getElementById('restock-product-id').value;
+    const supplierId = document.getElementById('restock-supplier-select').value;
+    const notes = document.getElementById('restock-notes').value.trim();
+
+    if (!supplierId || !suppliersCache[supplierId]) {
+        alert("Please select a supplier.");
+        return;
+    }
+
+    const item = inventoryCache[branchId] && inventoryCache[branchId][productId];
+    if (!item) {
+        alert("Product not found. Try refreshing the Inventory page.");
+        return;
+    }
+
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    const packs = parseInt(document.getElementById('restock-qty-packs').value) || 0;
+    const loose = unitsPerPack > 1 ? (parseInt(document.getElementById('restock-qty-loose').value) || 0) : 0;
+    const costPrice = parseFloat(document.getElementById('restock-cost-price').value) || 0;
+
+    if (packs <= 0 && loose <= 0) {
+        alert("Enter a quantity received greater than zero.");
+        return;
+    }
+
+    const piecesReceived = (packs * unitsPerPack) + loose;
+    const costPerPiece = unitsPerPack > 1 ? (costPrice / unitsPerPack) : costPrice;
+    const lineCost = (costPrice * packs) + (costPerPiece * loose);
+
+    const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
+    const newStock = currentStock + piecesReceived;
+    const productName = item.name || item.productName || 'Unnamed Item';
+
+    const supplyId = 'SUP-' + firebase.database().ref(`stores/${currentStoreId}/supplies`).push().key;
+    const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
+    const nowIso = new Date().toISOString();
+
+    const supplyData = {
+        supplyId,
+        supplierId,
+        supplierName: suppliersCache[supplierId].name,
+        branchId,
+        items: [{
+            name: productName,
+            productId,
+            qty: packs,
+            loosePieces: loose,
+            costPrice,
+            unitsPerPackAtSupply: unitsPerPack,
+            piecesReceived,
+            lineCost,
+            stockBefore: currentStock,
+            stockAfter: newStock,
+            retailPrice: null,
+            wholesalePrice: null
+        }],
+        totalCost: lineCost,
+        notes,
+        date: nowIso,
+        recordedBy
+    };
+
+    firebase.database().ref(`stores/${currentStoreId}/supplies/${supplyId}`).set(supplyData).then(() => {
+        return firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}/${productId}`).update({
+            stock: newStock,
+            stockQty: newStock,
+            costPrice
+        });
+    }).then(() => {
+        const supp = suppliersCache[supplierId];
+        return firebase.database().ref(`stores/${currentStoreId}/suppliers/${supplierId}`).update({
+            totalSupplied: (Number(supp.totalSupplied) || 0) + lineCost,
+            supplyCount: (Number(supp.supplyCount) || 0) + 1,
+            lastSupplyDate: nowIso
+        });
+    }).then(() => {
+        alert(`Restocked "${productName}" — stock is now ${stockBreakdownLabel(newStock, unitsPerPack)}.`);
+        closeQuickRestockModal();
+        // Refresh an already-open history panel for this product, if any
+        const historyRow = document.getElementById(`inv-history-${branchId}-${productId}`);
+        if (historyRow) {
+            historyRow.remove();
+            toggleProductRestockHistory(branchId, productId);
+        }
+    }).catch(err => {
+        alert("Failed to save restock: " + err.message);
+    });
+}
+
+// ---------- Per-product Restock History (expandable row in Inventory) ----------
+// Toggling shows every past supply line for this exact product (matched by
+// productId, falling back to a case-insensitive name match for older supply
+// records saved before productId was tracked) — each with stock before, qty
+// added, stock after, supplier, and date, newest first.
+function toggleProductRestockHistory(branchId, productId) {
+    const existing = document.getElementById(`inv-history-${branchId}-${productId}`);
+    if (existing) {
+        existing.remove();
+        return;
+    }
+
+    const anchorRow = document.getElementById(`inv-row-${branchId}-${productId}`);
+    if (!anchorRow) return;
+
+    const item = inventoryCache[branchId] && inventoryCache[branchId][productId];
+    const productName = (item && (item.name || item.productName) || '').toLowerCase().trim();
+
+    const loadingRow = document.createElement('tr');
+    loadingRow.id = `inv-history-${branchId}-${productId}`;
+    loadingRow.innerHTML = `<td colspan="8" style="background:#f8fafc; padding:12px; text-align:center; color:var(--text-muted);">Loading restock history...</td>`;
+    anchorRow.parentNode.insertBefore(loadingRow, anchorRow.nextSibling);
+
+    firebase.database().ref(`stores/${currentStoreId}/supplies`).once('value').then(snapshot => {
+        const entries = [];
+        snapshot.forEach(child => {
+            const s = child.val();
+            if ((s.branchId || 'main') !== branchId) return;
+            (s.items || []).forEach(line => {
+                const matches = line.productId ? line.productId === productId : (line.name || '').toLowerCase().trim() === productName;
+                if (!matches) return;
+                entries.push({
+                    date: s.date,
+                    supplierName: s.supplierName,
+                    recordedBy: s.recordedBy,
+                    stockBefore: line.stockBefore,
+                    stockAfter: line.stockAfter,
+                    piecesReceived: line.piecesReceived,
+                    qty: line.qty,
+                    loosePieces: line.loosePieces || 0,
+                    unitsPerPackAtSupply: line.unitsPerPackAtSupply || 1
+                });
+            });
+        });
+        entries.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        const row = document.getElementById(`inv-history-${branchId}-${productId}`);
+        if (!row) return; // panel was closed again before the fetch resolved
+
+        if (entries.length === 0) {
+            row.innerHTML = `<td colspan="8" style="background:#f8fafc; padding:12px; text-align:center; color:var(--text-muted);">No restock history recorded for this product yet.</td>`;
+            return;
+        }
+
+        const innerRows = entries.map(e => {
+            const hasHistory = e.stockBefore !== undefined && e.stockAfter !== undefined;
+            const upp = Number(e.unitsPerPackAtSupply) || 1;
+            const addedLabel = upp > 1 ? `+${e.qty} Pks + ${e.loosePieces} Pcs` : `+${e.piecesReceived}`;
+            return `
+                <tr>
+                    <td style="padding:6px 10px; font-size:12px;">${e.date ? new Date(e.date).toLocaleString() : 'N/A'}</td>
+                    <td style="padding:6px 10px; font-size:12px;">${hasHistory ? stockBreakdownLabel(e.stockBefore, upp) : '—'}</td>
+                    <td style="padding:6px 10px; font-size:12px; color:#166534; font-weight:bold;">${addedLabel}</td>
+                    <td style="padding:6px 10px; font-size:12px;">${hasHistory ? stockBreakdownLabel(e.stockAfter, upp) : '—'}</td>
+                    <td style="padding:6px 10px; font-size:12px;">${e.supplierName || 'N/A'}</td>
+                    <td style="padding:6px 10px; font-size:12px;">${e.recordedBy || ''}</td>
+                </tr>
+            `;
+        }).join('');
+
+        row.innerHTML = `
+            <td colspan="8" style="background:#f8fafc; padding:10px;">
+                <div style="font-size:11px; font-weight:bold; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">📜 Restock History</div>
+                <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; overflow-x:auto;">
+                    <table style="width:100%;">
+                        <thead>
+                            <tr style="background:#f1f5f9;">
+                                <th style="padding:6px 10px; font-size:11px;">Date</th>
+                                <th style="padding:6px 10px; font-size:11px;">Stock Before</th>
+                                <th style="padding:6px 10px; font-size:11px;">Qty Added</th>
+                                <th style="padding:6px 10px; font-size:11px;">Stock After</th>
+                                <th style="padding:6px 10px; font-size:11px;">Supplier</th>
+                                <th style="padding:6px 10px; font-size:11px;">Recorded By</th>
+                            </tr>
+                        </thead>
+                        <tbody>${innerRows}</tbody>
+                    </table>
+                </div>
+            </td>
+        `;
+    }).catch(err => {
+        const row = document.getElementById(`inv-history-${branchId}-${productId}`);
+        if (row) row.innerHTML = `<td colspan="8" style="background:#f8fafc; padding:12px; text-align:center; color:#991b1b;">Failed to load history: ${err.message}</td>`;
+    });
 }
 
 // ==================== CUSTOMER MANAGEMENT MODULE ====================
