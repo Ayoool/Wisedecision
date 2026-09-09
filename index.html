@@ -18,7 +18,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=9">
+    <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -116,7 +116,10 @@
                         <h2 style="margin: 0; color: #fff; font-size: 20px;">👑 Wise Decision Master Control</h2>
                         <p style="margin: 3px 0 0 0; font-size: 12px; color: #94a3b8;">Manage all registered businesses, subscription statuses, and payment notices.</p>
                     </div>
-                    <button class="menu-btn btn-logout" style="width: auto; margin: 0; background: #ef4444; color: #fff;" onclick="switchView('login-view')">Logout / Exit</button>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <button class="menu-btn" style="width: auto; margin: 0; background: #0284c7; color: #fff;" onclick="changeSuperAdminMasterPin()">🔑 Change Master PIN</button>
+                        <button class="menu-btn btn-logout" style="width: auto; margin: 0; background: #ef4444; color: #fff;" onclick="switchView('login-view')">Logout / Exit</button>
+                    </div>
                 </div>
                 
                 <div style="background: #ffffff; color: #0f172a; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
@@ -1567,6 +1570,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=9"></script>
+    <script src="script.js?v=10"></script>
 </body>
 </html>
