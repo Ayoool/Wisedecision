@@ -18,7 +18,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -160,22 +160,26 @@
         </div>
 
         <div class="alert-card-box">
-            <h3 style="margin-top: 0; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px;">
-                ⚠ Inventory Health Alerts (Low Stock & Expiry Warnings)
-            </h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom: 4px;">
+                <h3 style="margin: 0; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px;">
+                    ⚠ Inventory Health Alerts (Low Stock & Expiry Warnings)
+                </h3>
+                <select id="dashboard-alerts-category-filter" onchange="onDashboardAlertsCategoryFilterChange()" style="padding:5px 8px; border-radius:6px; border:1px solid #cbd5e1; font-size:12px;"><option value="all">All Categories</option></select>
+            </div>
             <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">Items running low (Stock &le; 5) or expiring within 30 days, for your current branch.</p>
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
                         <tr>
                             <th>Product Name</th>
+                            <th>Category</th>
                             <th>Current Stock</th>
                             <th>Expiry Date</th>
                             <th>Alert Warning Status</th>
                         </tr>
                     </thead>
                     <tbody id="dashboard-alerts-tbody">
-                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Checking inventory metrics...</td></tr>
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Checking inventory metrics...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1540,6 +1544,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=4"></script>
+    <script src="script.js?v=5"></script>
 </body>
 </html>
