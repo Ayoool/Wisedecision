@@ -1,10 +1,10 @@
-// ==================== BUILD VERSION MARKER ====================
+q// ==================== BUILD VERSION MARKER ====================
 // Prints to the browser console on every page load so it's possible to confirm
 // which copy of script.js is actually running (vs. a stale cached one) — open
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v9 (idle timeout now 4 min)");
+console.log("Wise Decision script.js — build v10 (adds: Change Super Admin PIN)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -610,6 +610,39 @@ function logout() {
 }
 
 // ==================== SUPER ADMIN DASHBOARD CONTROL ====================
+
+// Changes the Master PIN used to log in as "superadmin" (see handleStoreLogin()).
+// Requires typing the new PIN twice to guard against a mistyped PIN locking the
+// Super Admin out of their own dashboard — there's no "forgot password" recovery
+// for this account, so a typo here has no other way back in.
+function changeSuperAdminMasterPin() {
+    if (currentUserRole !== 'SuperAdmin') {
+        alert("Access Restricted: Only the Super Admin can change the Master PIN.");
+        return;
+    }
+
+    const newPin = prompt("Enter the new Super Admin Master PIN:");
+    if (newPin === null) return; // cancelled
+    if (newPin.trim() === '') {
+        alert("Master PIN cannot be empty. No changes were made.");
+        return;
+    }
+
+    const confirmPin = prompt("Re-enter the new Master PIN to confirm:");
+    if (confirmPin === null) return; // cancelled
+
+    if (newPin.trim() !== confirmPin.trim()) {
+        alert("The two entries didn't match. Master PIN was not changed — please try again.");
+        return;
+    }
+
+    firebase.database().ref('superAdmin/masterPin').set(newPin.trim()).then(() => {
+        alert("Super Admin Master PIN updated successfully. Use the new PIN next time you log in as 'superadmin'.");
+    }).catch(err => {
+        alert("Failed to update Master PIN: " + err.message);
+    });
+}
+
 function loadSuperAdminDashboard() {
     // .off() first — the "🔄 Refresh List" button calls this function directly, so
     // without clearing the previous listener each click stacked another one on top,
