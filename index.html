@@ -18,7 +18,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 
@@ -398,6 +398,10 @@
         <div style="background: #ffffff; padding: 12px 15px; border-radius: var(--radius); border: 1px solid #e2e8f0; margin: 15px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.02); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <label style="font-size: 12px; font-weight: bold; color: var(--text-muted);">📦 Viewing Stock For:</label>
             <select id="inventory-branch-filter" onchange="onInventoryBranchFilterChange()" style="padding:6px 10px; border-radius:6px; border:1px solid #cbd5e1; font-size:13px;"></select>
+
+            <label style="font-size: 12px; font-weight: bold; color: var(--text-muted); margin-left: 8px;">🏷 Category:</label>
+            <select id="inventory-category-filter" onchange="onInventoryCategoryFilterChange()" style="padding:6px 10px; border-radius:6px; border:1px solid #cbd5e1; font-size:13px;"><option value="all">All Categories</option></select>
+
             <span id="inventory-mode-note" style="font-size: 11px; color: #b45309; background:#fffbeb; border:1px solid #fde68a; padding:4px 10px; border-radius:6px; display:none;">Viewing combined enterprise stock — select a single branch to add or edit products.</span>
             <button id="add-product-trigger-btn" class="menu-btn btn-action-primary btn-inv" style="width:auto; margin:0 0 0 auto; padding:8px 16px;" onclick="openAddProductModal()">+ Add New Product</button>
         </div>
@@ -415,6 +419,7 @@
                 <thead id="inventory-table-head">
                     <tr>
                         <th>Product Name</th>
+                        <th>Category</th>
                         <th>Cost Price</th>
                         <th>Retail Price</th>
                         <th>Wholesale Price</th>
@@ -425,11 +430,12 @@
                     </tr>
                 </thead>
                 <tbody id="inventory-body">
-                    <tr><td colspan="8" style="text-align: center;">Loading inventory...</td></tr>
+                    <tr><td colspan="9" style="text-align: center;">Loading inventory...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
+
 
     <div id="staff-view-template" style="display: none;">
         <h2>Staff Management</h2>
@@ -1023,6 +1029,10 @@
             <input type="hidden" id="edit-product-id" value="">
             <input type="hidden" id="edit-product-branch" value="">
             <div class="form-group"><input type="text" id="inv-name" placeholder="Product / Drug Name"></div>
+            <div class="form-group">
+                <input type="text" id="inv-category" list="inv-category-datalist" placeholder="Category (e.g. Medicine, Cosmetics, Drinks)">
+                <datalist id="inv-category-datalist"></datalist>
+            </div>
 
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div class="form-group">
@@ -1530,6 +1540,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=4"></script>
 </body>
 </html>
