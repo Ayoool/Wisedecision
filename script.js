@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v12 (re-added: Change Super Admin PIN)");
+console.log("Wise Decision script.js — build v13 (adds: Admin change own PIN in Settings)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -2938,6 +2938,17 @@ function loadBusinessSettings() {
         if (phoneInput) phoneInput.value = storeData.phone || '';
         if (addressInput) addressInput.value = storeData.address || '';
     });
+
+    // "Change My PIN" is the store Admin's own PIN (stores/{storeId}/adminPin) —
+    // Accountants/Cashiers also reach this Business Settings view, but they don't
+    // own this PIN, so the section stays hidden for anyone but the Admin.
+    const pinSection = document.getElementById('settings-pin-change-section');
+    if (pinSection) pinSection.style.display = (currentUserRole === 'Admin') ? 'block' : 'none';
+
+    ['settings-current-pin', 'settings-new-pin', 'settings-confirm-pin'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
 }
 
 function updateBusinessProfile() {
@@ -2961,6 +2972,53 @@ function updateBusinessProfile() {
         document.getElementById('dashboard-store-title').textContent = businessName;
     }).catch(error => {
         alert("Failed to update profile. Please try again.");
+    });
+}
+
+// Lets the store Admin change their own login PIN (stores/{storeId}/adminPin)
+// from Business Settings, without needing Super Admin to reset it for them.
+// Requires the current PIN to match (so someone briefly at an unlocked Admin
+// session can't silently lock the real Admin out) and the new PIN entered twice.
+function changeAdminOwnPin() {
+    if (!currentStoreId) return;
+    if (currentUserRole !== 'Admin') {
+        alert("Access Restricted: Only the Admin can change this PIN.");
+        return;
+    }
+
+    const currentPinEntered = document.getElementById('settings-current-pin').value.trim();
+    const newPin = document.getElementById('settings-new-pin').value.trim();
+    const confirmPin = document.getElementById('settings-confirm-pin').value.trim();
+
+    if (!currentPinEntered || !newPin || !confirmPin) {
+        alert("Please fill in all three PIN fields.");
+        return;
+    }
+
+    if (newPin !== confirmPin) {
+        alert("New PIN and Confirm PIN don't match. Please try again.");
+        return;
+    }
+
+    const storeRef = firebase.database().ref(`stores/${currentStoreId}`);
+    storeRef.once('value').then(snapshot => {
+        if (!snapshot.exists()) return;
+        const storeData = snapshot.val();
+
+        if (currentPinEntered !== storeData.adminPin) {
+            alert("Current PIN is incorrect. Your PIN was not changed.");
+            return;
+        }
+
+        return storeRef.update({ adminPin: newPin }).then(() => {
+            alert("Your PIN has been updated successfully. Use the new PIN next time you log in.");
+            ['settings-current-pin', 'settings-new-pin', 'settings-confirm-pin'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+        });
+    }).catch(err => {
+        alert("Failed to update PIN: " + err.message);
     });
 }
 
