@@ -1,4 +1,4 @@
-q// ==================== BUILD VERSION MARKER ====================
+// ==================== BUILD VERSION MARKER ====================
 // Prints to the browser console on every page load so it's possible to confirm
 // which copy of script.js is actually running (vs. a stale cached one) — open
 // DevTools > Console and look for this line. Bump the number whenever you deploy
