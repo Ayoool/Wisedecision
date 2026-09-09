@@ -35,6 +35,7 @@ let currentSaleUnit = "Pack";       // "Pack" or "Piece" — which unit the next
 // ==================== BRANCH MODULE STATE ====================
 let branchesCache = {};               // { branchId: { name, phone, address, isMain, createdAt } }
 let currentInventoryBranchFilter = "main"; // "all" (Admin aggregate view) or a specific branchId
+let currentInventoryCategoryFilter = "all"; // "all" or a specific category string (free-text, set on products)
 let currentReportBranchFilter = "all";     // "all" or a specific branchId, Admin-only reports scope
 let currentActiveTransfer = null;
 
@@ -637,12 +638,8 @@ function loadDashboardMetrics() {
     });
 
     firebase.database().ref(`stores/${currentStoreId}/inventory/${currentBranch}`).once('value').then(snapshot => {
-        const tbody = document.getElementById('dashboard-alerts-tbody');
-        if (!tbody) return;
-        
-        tbody.innerHTML = '';
-        let alertCount = 0;
         const now = new Date();
+        const alerts = [];
 
         snapshot.forEach(child => {
             const item = child.val();
@@ -650,30 +647,84 @@ function loadDashboardMetrics() {
             const expiryVal = item.expiry || item.expiryDate;
             const expiryDate = expiryVal ? new Date(expiryVal) : null;
             const itemName = item.name || item.productName || 'Unnamed Item';
-            
-            let isLowStock = stock <= 5;
-            let isExpiringSoon = expiryDate && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
+            const category = item.category || '';
+
+            const isLowStock = stock <= 5;
+            const isExpiringSoon = expiryDate && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
 
             if (isLowStock || isExpiringSoon) {
-                alertCount++;
-                let badge = isLowStock ? '<span style="color:red; font-weight:bold;">Low Stock</span> ' : '';
-                if (isExpiringSoon) badge += '<span style="color:orange; font-weight:bold;">Expiring Soon</span>';
-
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${itemName}</td>
-                        <td>${stock}</td>
-                        <td>${expiryVal || 'N/A'}</td>
-                        <td>${badge}</td>
-                    </tr>
-                `;
+                alerts.push({ name: itemName, category, stock, expiryVal, isLowStock, isExpiringSoon });
             }
         });
 
-        if (alertCount === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No stock or expiry alerts. Inventory is healthy!</td></tr>`;
-        }
+        dashboardAlertsCache = alerts;
+        renderDashboardAlerts();
     });
+}
+
+// Cached raw alert list built by loadDashboardMetrics() — kept separately from the
+// rendered table so the category filter can re-slice it instantly without another
+// Firebase read every time the dropdown changes.
+let dashboardAlertsCache = [];
+let currentDashboardAlertsCategoryFilter = 'all';
+
+function onDashboardAlertsCategoryFilterChange() {
+    const select = document.getElementById('dashboard-alerts-category-filter');
+    if (!select) return;
+    currentDashboardAlertsCategoryFilter = select.value;
+    renderDashboardAlerts();
+}
+
+function renderDashboardAlerts() {
+    const tbody = document.getElementById('dashboard-alerts-tbody');
+    if (!tbody) return;
+
+    // Keep the category dropdown in sync with whatever categories actually show up
+    // among current alerts (not the whole branch's inventory — an "All Categories"
+    // list scoped to just what's alerting is more useful here than every category
+    // in the store, most of which won't have anything to flag).
+    const categorySelect = document.getElementById('dashboard-alerts-category-filter');
+    if (categorySelect) {
+        const categories = Array.from(new Set(dashboardAlertsCache.map(a => a.category).filter(c => c && c.trim()))).sort((a, b) => a.localeCompare(b));
+        const previousValue = currentDashboardAlertsCategoryFilter;
+        let options = '<option value="all">All Categories</option>';
+        categories.forEach(cat => {
+            options += `<option value="${cat}" ${cat === previousValue ? 'selected' : ''}>${cat}</option>`;
+        });
+        categorySelect.innerHTML = options;
+        if (previousValue !== 'all' && !categories.includes(previousValue)) {
+            currentDashboardAlertsCategoryFilter = 'all';
+            categorySelect.value = 'all';
+        }
+    }
+
+    const categoryFilter = currentDashboardAlertsCategoryFilter || 'all';
+    const filtered = categoryFilter === 'all' ? dashboardAlertsCache : dashboardAlertsCache.filter(a => a.category === categoryFilter);
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = dashboardAlertsCache.length === 0
+            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No stock or expiry alerts. Inventory is healthy!</td></tr>`
+            : `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No alerts in category "${categoryFilter}".</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(a => {
+        let badge = a.isLowStock ? '<span style="color:red; font-weight:bold;">Low Stock</span> ' : '';
+        if (a.isExpiringSoon) badge += '<span style="color:orange; font-weight:bold;">Expiring Soon</span>';
+        const categoryTag = a.category
+            ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${a.category}</span>`
+            : '<span style="color:var(--text-muted);">—</span>';
+
+        return `
+            <tr>
+                <td>${a.name}</td>
+                <td>${categoryTag}</td>
+                <td>${a.stock}</td>
+                <td>${a.expiryVal || 'N/A'}</td>
+                <td>${badge}</td>
+            </tr>
+        `;
+    }).join('');
 }
 
 // ==================== BULLETPROOF INVENTORY LOADER (branch-aware) ====================
@@ -702,6 +753,8 @@ function loadInventoryTable() {
             });
         });
         renderInventoryTable();
+        populateInventoryCategoryFilter();
+        updateCategoryDatalist();
     });
 }
 
@@ -729,7 +782,73 @@ function onInventoryBranchFilterChange() {
     const select = document.getElementById('inventory-branch-filter');
     if (!select) return;
     currentInventoryBranchFilter = select.value;
+    // Categories differ per branch (and the aggregate view spans all of them), so
+    // a category selected under the old scope may no longer exist here — reset
+    // rather than silently filtering to something that isn't shown in the dropdown.
+    currentInventoryCategoryFilter = 'all';
     resetInventoryForm();
+    populateInventoryCategoryFilter();
+    updateCategoryDatalist();
+    renderInventoryTable();
+}
+
+// Builds the "All Categories" + one option per distinct category dropdown, scoped
+// to whatever the branch filter currently shows (a single branch, or every branch
+// combined in the aggregate "All Branches" view). Categories are free text set on
+// each product, so this list is derived from the data rather than a fixed set.
+function populateInventoryCategoryFilter() {
+    const select = document.getElementById('inventory-category-filter');
+    if (!select) return;
+
+    const categories = new Set();
+    if (currentInventoryBranchFilter === 'all') {
+        Object.values(inventoryCache).forEach(branchItems => {
+            Object.values(branchItems || {}).forEach(item => {
+                if (item.category && item.category.trim()) categories.add(item.category.trim());
+            });
+        });
+    } else {
+        Object.values(inventoryCache[currentInventoryBranchFilter] || {}).forEach(item => {
+            if (item.category && item.category.trim()) categories.add(item.category.trim());
+        });
+    }
+
+    const sorted = Array.from(categories).sort((a, b) => a.localeCompare(b));
+    const previousValue = currentInventoryCategoryFilter;
+    let options = '<option value="all">All Categories</option>';
+    sorted.forEach(cat => {
+        options += `<option value="${cat}" ${cat === previousValue ? 'selected' : ''}>${cat}</option>`;
+    });
+    select.innerHTML = options;
+
+    // If the previously selected category no longer exists in this scope, fall back to "all"
+    if (previousValue !== 'all' && !sorted.includes(previousValue)) {
+        currentInventoryCategoryFilter = 'all';
+        select.value = 'all';
+    }
+}
+
+// Refreshes the <datalist> the Add/Edit Product "Category" field autocompletes
+// against, so typing starts suggesting categories already used in this branch
+// instead of staff having to remember/retype exact spelling each time.
+function updateCategoryDatalist() {
+    const datalist = document.getElementById('inv-category-datalist');
+    if (!datalist) return;
+
+    const categories = new Set();
+    Object.values(inventoryCache).forEach(branchItems => {
+        Object.values(branchItems || {}).forEach(item => {
+            if (item.category && item.category.trim()) categories.add(item.category.trim());
+        });
+    });
+
+    datalist.innerHTML = Array.from(categories).sort((a, b) => a.localeCompare(b)).map(cat => `<option value="${cat}">`).join('');
+}
+
+function onInventoryCategoryFilterChange() {
+    const select = document.getElementById('inventory-category-filter');
+    if (!select) return;
+    currentInventoryCategoryFilter = select.value;
     renderInventoryTable();
 }
 
@@ -775,20 +894,21 @@ function renderInventoryTable() {
     const modeNote = document.getElementById('inventory-mode-note');
     const addProductBtn = document.getElementById('add-product-trigger-btn');
     const isAggregate = currentInventoryBranchFilter === 'all';
+    const categoryFilter = currentInventoryCategoryFilter || 'all';
 
     if (modeNote) modeNote.style.display = isAggregate ? 'inline-block' : 'none';
     if (addProductBtn) addProductBtn.style.opacity = isAggregate ? '0.6' : '1';
 
     if (isAggregate) {
         // Combined enterprise view: sum stock for matching product names across all branches
-        const combined = {}; // name -> { costPrice, price, wholesalePrice, stock, expiry, branches: {branchName: stock} }
+        const combined = {}; // name -> { costPrice, price, wholesalePrice, stock, expiry, category, branches: {branchName: stock} }
         Object.keys(inventoryCache).forEach(branchId => {
             const branchName = branchNameOf(branchId);
             Object.values(inventoryCache[branchId] || {}).forEach(item => {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                    combined[key] = { name, category: item.category || '', costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -800,7 +920,7 @@ function renderInventoryTable() {
         // innerHTML += inside the loop forces the browser to re-parse the whole
         // accumulated HTML on every iteration, which gets quadratically slower as the
         // product list grows. A single join()/assignment is one parse regardless of size.
-        const keys = Object.keys(combined);
+        const keys = Object.keys(combined).filter(key => categoryFilter === 'all' || combined[key].category === categoryFilter);
         const rowsHtml = [];
         keys.forEach(key => {
             const item = combined[key];
@@ -808,6 +928,7 @@ function renderInventoryTable() {
             rowsHtml.push(`
                 <tr>
                     <td>${item.name}</td>
+                    <td>${item.category ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${item.category}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                     <td>₦${Number(item.costPrice).toLocaleString()}</td>
                     <td>₦${Number(item.price).toLocaleString()}</td>
                     <td>₦${Number(item.wholesalePrice).toLocaleString()}</td>
@@ -820,19 +941,20 @@ function renderInventoryTable() {
         });
 
         tbody.innerHTML = keys.length === 0
-            ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in any branch yet.</td></tr>`
+            ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found${categoryFilter !== 'all' ? ` in category "${categoryFilter}"` : ' in any branch yet'}.</td></tr>`
             : rowsHtml.join('');
         return;
     }
 
     const branchId = currentInventoryBranchFilter;
     const branchItems = inventoryCache[branchId] || {};
-    const ids = Object.keys(branchItems);
+    const ids = Object.keys(branchItems).filter(id => categoryFilter === 'all' || (branchItems[id].category || '') === categoryFilter);
     const rowsHtml = [];
 
     ids.forEach(id => {
         const item = branchItems[id];
         const pName = item.name || item.productName || item.title || item.itemName || 'Unnamed Item';
+        const pCategory = item.category || '';
         const cPrice = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
         const rPrice = item.price !== undefined ? item.price : (item.retailPrice || 0);
         const wPrice = item.wholesalePrice !== undefined ? item.wholesalePrice : 0;
@@ -842,6 +964,7 @@ function renderInventoryTable() {
         rowsHtml.push(`
             <tr id="inv-row-${branchId}-${id}">
                 <td>${pName}</td>
+                <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${pCategory}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                 <td>₦${Number(cPrice).toLocaleString()}</td>
                 <td>₦${Number(rPrice).toLocaleString()}</td>
                 <td>₦${Number(wPrice).toLocaleString()}</td>
@@ -859,7 +982,7 @@ function renderInventoryTable() {
     });
 
     tbody.innerHTML = ids.length === 0
-        ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found in ${branchNameOf(branchId)}. Add your first item above!</td></tr>`
+        ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found${categoryFilter !== 'all' ? ` in category "${categoryFilter}"` : ` in ${branchNameOf(branchId)}. Add your first item above!`}.</td></tr>`
         : rowsHtml.join('');
 }
 
@@ -874,6 +997,7 @@ function filterInventoryTable() {
     if (!tbody) return;
 
     const isAggregate = currentInventoryBranchFilter === 'all';
+    const categoryFilter = currentInventoryCategoryFilter || 'all';
     const rowsHtml = [];
 
     if (isAggregate) {
@@ -882,6 +1006,8 @@ function filterInventoryTable() {
             Object.values(inventoryCache[branchId] || {}).forEach(item => {
                 const pName = item.name || item.productName || 'Unnamed Item';
                 if (!pName.toLowerCase().includes(query)) return;
+                const pCategory = item.category || '';
+                if (categoryFilter !== 'all' && pCategory !== categoryFilter) return;
                 const cPrice = item.costPrice || 0;
                 const rPrice = item.price || item.retailPrice || 0;
                 const wPrice = item.wholesalePrice || 0;
@@ -890,6 +1016,7 @@ function filterInventoryTable() {
                 rowsHtml.push(`
                     <tr>
                         <td>${pName} <br><small style="color:var(--text-muted);">${branchName}</small></td>
+                        <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${pCategory}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                         <td>₦${Number(cPrice).toLocaleString()}</td>
                         <td>₦${Number(rPrice).toLocaleString()}</td>
                         <td>₦${Number(wPrice).toLocaleString()}</td>
@@ -908,6 +1035,8 @@ function filterInventoryTable() {
             const item = branchItems[id];
             const pName = item.name || item.productName || 'Unnamed Item';
             if (!pName.toLowerCase().includes(query)) return;
+            const pCategory = item.category || '';
+            if (categoryFilter !== 'all' && pCategory !== categoryFilter) return;
             const cPrice = item.costPrice || 0;
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
@@ -916,6 +1045,7 @@ function filterInventoryTable() {
             rowsHtml.push(`
                 <tr id="inv-row-${branchId}-${id}">
                     <td>${pName}</td>
+                    <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${pCategory}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                     <td>₦${Number(cPrice).toLocaleString()}</td>
                     <td>₦${Number(rPrice).toLocaleString()}</td>
                     <td>₦${Number(wPrice).toLocaleString()}</td>
@@ -934,7 +1064,7 @@ function filterInventoryTable() {
     }
 
     tbody.innerHTML = rowsHtml.length === 0
-        ? `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`
+        ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No matching products found.</td></tr>`
         : rowsHtml.join('');
 }
 
@@ -1015,6 +1145,7 @@ function saveProduct() {
     const editId = document.getElementById('edit-product-id').value;
     const editBranch = document.getElementById('edit-product-branch').value || targetBranch;
     const name = document.getElementById('inv-name').value.trim();
+    const category = document.getElementById('inv-category').value.trim();
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
@@ -1045,6 +1176,7 @@ function saveProduct() {
     const prodData = { 
         name,
         productName: name,
+        category,
         costPrice, 
         price, 
         retailPrice: price,
@@ -1090,6 +1222,7 @@ function editProduct(branchId, id) {
     document.getElementById('edit-product-id').value = id;
     document.getElementById('edit-product-branch').value = branchId;
     document.getElementById('inv-name').value = item.name || item.productName || '';
+    document.getElementById('inv-category').value = item.category || '';
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
@@ -1126,6 +1259,7 @@ function resetInventoryForm() {
     document.getElementById('edit-product-id').value = '';
     document.getElementById('edit-product-branch').value = '';
     document.getElementById('inv-name').value = '';
+    document.getElementById('inv-category').value = '';
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
