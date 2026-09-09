@@ -1,3 +1,11 @@
+// ==================== BUILD VERSION MARKER ====================
+// Prints to the browser console on every page load so it's possible to confirm
+// which copy of script.js is actually running (vs. a stale cached one) — open
+// DevTools > Console and look for this line. Bump the number whenever you deploy
+// a change, alongside the ?v= query string on the <script>/<link> tags in
+// index.html (see the comment there).
+console.log("Wise Decision script.js — build v7 (adds: Dashboard alert type toggle)");
+
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
 try {
@@ -667,6 +675,27 @@ function loadDashboardMetrics() {
 // Firebase read every time the dropdown changes.
 let dashboardAlertsCache = [];
 let currentDashboardAlertsCategoryFilter = 'all';
+let currentDashboardAlertsTypeFilter = 'all'; // 'all' | 'low_stock' | 'expiring_soon'
+
+// Toggles which kind of alert the table shows — asked up front via the three
+// buttons above the table, rather than mixing both kinds together by default.
+function setDashboardAlertsTypeFilter(type) {
+    currentDashboardAlertsTypeFilter = type;
+
+    ['all', 'low_stock', 'expiring_soon'].forEach(t => {
+        const btn = document.getElementById(`dash-alert-type-${t}`);
+        if (!btn) return;
+        if (t === type) {
+            btn.style.background = '#0284c7';
+            btn.style.color = '#fff';
+        } else {
+            btn.style.background = '#e2e8f0';
+            btn.style.color = '#1e293b';
+        }
+    });
+
+    renderDashboardAlerts();
+}
 
 function onDashboardAlertsCategoryFilterChange() {
     const select = document.getElementById('dashboard-alerts-category-filter');
@@ -679,13 +708,35 @@ function renderDashboardAlerts() {
     const tbody = document.getElementById('dashboard-alerts-tbody');
     if (!tbody) return;
 
+    const typeFilter = currentDashboardAlertsTypeFilter || 'all';
+
+    // Sync the three toggle buttons' styling with the active filter — needed
+    // because switchView() re-injects this template's HTML fresh every time the
+    // Dashboard is opened, which would otherwise reset the buttons to their
+    // default "All Alerts" look even if a different filter was left selected.
+    ['all', 'low_stock', 'expiring_soon'].forEach(t => {
+        const btn = document.getElementById(`dash-alert-type-${t}`);
+        if (!btn) return;
+        if (t === typeFilter) {
+            btn.style.background = '#0284c7';
+            btn.style.color = '#fff';
+        } else {
+            btn.style.background = '#e2e8f0';
+            btn.style.color = '#1e293b';
+        }
+    });
+
+    const byType = typeFilter === 'all'
+        ? dashboardAlertsCache
+        : dashboardAlertsCache.filter(a => typeFilter === 'low_stock' ? a.isLowStock : a.isExpiringSoon);
+
     // Keep the category dropdown in sync with whatever categories actually show up
-    // among current alerts (not the whole branch's inventory — an "All Categories"
-    // list scoped to just what's alerting is more useful here than every category
-    // in the store, most of which won't have anything to flag).
+    // among alerts of the currently selected type (not the whole branch's
+    // inventory, and not alerts of the other type) — an "All Categories" list
+    // scoped to what's actually visible right now is more useful than a fixed list.
     const categorySelect = document.getElementById('dashboard-alerts-category-filter');
     if (categorySelect) {
-        const categories = Array.from(new Set(dashboardAlertsCache.map(a => a.category).filter(c => c && c.trim()))).sort((a, b) => a.localeCompare(b));
+        const categories = Array.from(new Set(byType.map(a => a.category).filter(c => c && c.trim()))).sort((a, b) => a.localeCompare(b));
         const previousValue = currentDashboardAlertsCategoryFilter;
         let options = '<option value="all">All Categories</option>';
         categories.forEach(cat => {
@@ -699,12 +750,19 @@ function renderDashboardAlerts() {
     }
 
     const categoryFilter = currentDashboardAlertsCategoryFilter || 'all';
-    const filtered = categoryFilter === 'all' ? dashboardAlertsCache : dashboardAlertsCache.filter(a => a.category === categoryFilter);
+    const filtered = categoryFilter === 'all' ? byType : byType.filter(a => a.category === categoryFilter);
 
     if (filtered.length === 0) {
-        tbody.innerHTML = dashboardAlertsCache.length === 0
-            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No stock or expiry alerts. Inventory is healthy!</td></tr>`
-            : `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No alerts in category "${categoryFilter}".</td></tr>`;
+        const typeLabel = typeFilter === 'low_stock' ? 'low stock' : (typeFilter === 'expiring_soon' ? 'expiring soon' : '');
+        if (dashboardAlertsCache.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No stock or expiry alerts. Inventory is healthy!</td></tr>`;
+        } else if (categoryFilter !== 'all' && typeLabel) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No ${typeLabel} alerts in category "${categoryFilter}".</td></tr>`;
+        } else if (typeLabel) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No ${typeLabel} alerts right now.</td></tr>`;
+        } else {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No alerts in category "${categoryFilter}".</td></tr>`;
+        }
         return;
     }
 
@@ -1076,6 +1134,9 @@ function openAddProductModal() {
         alert("Please select a specific branch before adding a new product — stock is tracked per branch.");
         return;
     }
+    if (!document.getElementById('inv-category')) {
+        console.warn("openAddProductModal: #inv-category field not found — index.html appears to be an older cached version (missing the Category feature markup). Hard-refresh or redeploy the latest index.html.");
+    }
     resetInventoryForm();
     document.getElementById('product-form-modal').style.display = 'flex';
 }
@@ -1145,7 +1206,7 @@ function saveProduct() {
     const editId = document.getElementById('edit-product-id').value;
     const editBranch = document.getElementById('edit-product-branch').value || targetBranch;
     const name = document.getElementById('inv-name').value.trim();
-    const category = document.getElementById('inv-category').value.trim();
+    const category = document.getElementById('inv-category')?.value.trim() || '';
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
@@ -1222,7 +1283,8 @@ function editProduct(branchId, id) {
     document.getElementById('edit-product-id').value = id;
     document.getElementById('edit-product-branch').value = branchId;
     document.getElementById('inv-name').value = item.name || item.productName || '';
-    document.getElementById('inv-category').value = item.category || '';
+    const editCategoryField = document.getElementById('inv-category');
+    if (editCategoryField) editCategoryField.value = item.category || '';
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
@@ -1259,7 +1321,8 @@ function resetInventoryForm() {
     document.getElementById('edit-product-id').value = '';
     document.getElementById('edit-product-branch').value = '';
     document.getElementById('inv-name').value = '';
-    document.getElementById('inv-category').value = '';
+    const resetCategoryField = document.getElementById('inv-category');
+    if (resetCategoryField) resetCategoryField.value = '';
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
