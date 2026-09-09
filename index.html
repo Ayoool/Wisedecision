@@ -18,7 +18,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=12">
+    <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -517,6 +517,31 @@
             </div>
 
             <button class="menu-btn btn-action-primary" onclick="updateBusinessProfile()" style="width: 100%; padding: 12px; font-size: 14px; font-weight: bold; background: #0284c7; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Save Profile Changes</button>
+        </div>
+
+        <!-- Admin-only: lets the store Admin change their own login PIN without
+             needing Super Admin to reset it. Hidden for Accountant/Cashier, who
+             also land on this Business Settings view but don't own this PIN.
+             See loadBusinessSettings() / changeAdminOwnPin() in script.js. -->
+        <div id="settings-pin-change-section" class="card" style="display:none; max-width: 600px; margin: 20px 0; padding: 25px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+            <h3 style="margin-top: 0; margin-bottom: 20px; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; font-size: 16px;">🔑 Change My PIN</h3>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">Current PIN</label>
+                <input type="password" id="settings-current-pin" placeholder="Enter your current PIN" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">New PIN</label>
+                <input type="password" id="settings-new-pin" placeholder="Enter a new PIN" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">Confirm New PIN</label>
+                <input type="password" id="settings-confirm-pin" placeholder="Re-enter the new PIN" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+            </div>
+
+            <button class="menu-btn btn-action-primary" onclick="changeAdminOwnPin()" style="width: 100%; padding: 12px; font-size: 14px; font-weight: bold; background: #16a34a; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Update PIN</button>
         </div>
     </div>
 
@@ -1570,6 +1595,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=12"></script>
+    <script src="script.js?v=13"></script>
 </body>
 </html>
