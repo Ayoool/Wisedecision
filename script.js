@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v7 (adds: Dashboard alert type toggle)");
+console.log("Wise Decision script.js — build v9 (idle timeout now 4 min)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -59,6 +59,76 @@ let supplyItemRowCounter = 0;
 
 // Refund module state
 let currentActiveRefund = null; // { txId, transaction, branchId, customerId, customerName } for the order currently open in the Refund modal
+
+// ==================== SESSION IDLE TIMEOUT ====================
+// Auto-logs out an unattended, logged-in session — protects an unlocked terminal
+// (PINs, customer balances, cash handling) from anyone who walks up after the
+// cashier/admin steps away. Warns with a countdown first so a genuinely-present
+// user isn't logged out mid-task.
+const IDLE_TIMEOUT_MINUTES = 4;    // total inactivity allowed before logout
+const IDLE_WARNING_SECONDS = 60;   // how long the "Still there?" countdown runs, counted out of the total above
+
+let idleTimer = null;              // fires once inactivity reaches (timeout - warning)
+let idleCountdownInterval = null;  // ticks the visible countdown once the warning is showing
+let idleSecondsRemaining = IDLE_WARNING_SECONDS;
+
+// Called on every tracked user interaction. Clears any pending idle timer/warning
+// and starts counting down again from zero — the normal "user is active" path.
+function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    hideIdleWarningModal();
+
+    if (!currentStoreId) return; // nothing to protect on the login/register screens
+
+    const msUntilWarning = Math.max(0, (IDLE_TIMEOUT_MINUTES * 60 - IDLE_WARNING_SECONDS) * 1000);
+    idleTimer = setTimeout(showIdleWarningModal, msUntilWarning);
+}
+
+function showIdleWarningModal() {
+    const modal = document.getElementById('idle-warning-modal');
+    if (!modal) return; // stale/cached index.html without this modal — fail quietly rather than break the app
+
+    idleSecondsRemaining = IDLE_WARNING_SECONDS;
+    const counterEl = document.getElementById('idle-countdown-seconds');
+    if (counterEl) counterEl.textContent = idleSecondsRemaining;
+    modal.style.display = 'flex';
+
+    if (idleCountdownInterval) clearInterval(idleCountdownInterval);
+    idleCountdownInterval = setInterval(() => {
+        idleSecondsRemaining -= 1;
+        if (counterEl) counterEl.textContent = Math.max(0, idleSecondsRemaining);
+
+        if (idleSecondsRemaining <= 0) {
+            clearInterval(idleCountdownInterval);
+            idleCountdownInterval = null;
+            hideIdleWarningModal();
+            if (currentStoreId) {
+                alert("You've been logged out due to inactivity. Please log back in.");
+                logout();
+            }
+        }
+    }, 1000);
+}
+
+function hideIdleWarningModal() {
+    const modal = document.getElementById('idle-warning-modal');
+    if (modal) modal.style.display = 'none';
+    if (idleCountdownInterval) {
+        clearInterval(idleCountdownInterval);
+        idleCountdownInterval = null;
+    }
+}
+
+// "Stay Logged In" button in the warning modal
+function extendSession() {
+    resetIdleTimer();
+}
+
+// Any of these count as "the user is here" and push the idle clock back to zero.
+// Passive listeners since none of these need to block/alter the native behavior.
+['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+    window.addEventListener(evt, resetIdleTimer, { passive: true });
+});
 
 // Initialize application on load
 window.onload = function() {
@@ -397,6 +467,7 @@ function handleStoreLogin() {
                 adjustSidebarForRole("SuperAdmin");
                 loadSuperAdminDashboard();
                 switchView('super-admin-view');
+                resetIdleTimer();
             } else {
                 alert("Invalid Super Admin Master PIN.");
             }
@@ -432,6 +503,7 @@ function handleStoreLogin() {
             syncOfflineQueueToFirebase();
             subscribeCustomersCache();
             subscribeSuppliersCache();
+            resetIdleTimer();
             return;
         }
 
@@ -452,6 +524,7 @@ function handleStoreLogin() {
                     syncOfflineQueueToFirebase();
                     subscribeCustomersCache();
                     subscribeSuppliersCache();
+                    resetIdleTimer();
                 }
             });
         }
@@ -519,6 +592,8 @@ function logout() {
     if (currentStoreId) {
         firebase.database().ref(`stores/${currentStoreId}/branches`).off();
     }
+    if (idleTimer) clearTimeout(idleTimer);
+    hideIdleWarningModal();
     currentStoreId = null;
     currentUserRole = "Admin";
     currentBranch = "main";
