@@ -1,10 +1,10 @@
-// ==================== BUILD VERSION MARKER ====================
+q// ==================== BUILD VERSION MARKER ====================
 // Prints to the browser console on every page load so it's possible to confirm
 // which copy of script.js is actually running (vs. a stale cached one) — open
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v14 (adds: sell products by weight/Kg)");
+console.log("Wise Decision script.js — build v15 (adds: gram unit, package-weight label, hardened weight toggle)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -1021,7 +1021,8 @@ function onInventoryCategoryFilterChange() {
 // Builds the small "1 pack = N pcs · Piece: ₦X" helper string used in the inventory
 // table and the POS dropdown so staff can see the piece breakdown at a glance.
 function packPieceInfoLabel(item) {
-    if (item.soldByWeight) return '<span style="color:#1e40af; font-weight:bold;">⚖️ Sold by weight (Kg)</span>';
+    if (item.soldByWeight) return `<span style="color:#1e40af; font-weight:bold;">⚖️ Sold by weight (${item.weightUnit || 'Kg'})</span>`;
+    if (item.packageWeightLabel) return `<span style="color:#166534; font-weight:bold;">📦 ${item.packageWeightLabel}</span>`;
     const unitsPerPack = Number(item.unitsPerPack) || 1;
     if (unitsPerPack <= 1) return '<span style="color:var(--text-muted);">Sold whole only</span>';
     const piecePrice = getPiecePrice(item, 'Retail');
@@ -1054,14 +1055,16 @@ function stockBreakdownLabel(totalStock, unitsPerPack) {
     return `${packs} Pks + ${loose} Pcs`;
 }
 
-// Stock display for a full product/item object — routes to a "12.5 kg" format for
-// weight-based products, or the existing Packs/Pieces breakdown otherwise. Prefer
-// this over calling stockBreakdownLabel() directly wherever the full item is at hand.
+// Stock display for a full product/item object — routes to a "12.5 kg" / "500 g"
+// format for weight-based products, or the existing Packs/Pieces breakdown
+// otherwise. Prefer this over calling stockBreakdownLabel() directly wherever the
+// full item is at hand.
 function formatStockLabel(item) {
     const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     if (item.soldByWeight) {
-        const kg = Math.round((Number(stock) || 0) * 100) / 100;
-        return `${kg.toLocaleString()} kg`;
+        const unit = item.weightUnit || 'Kg';
+        const amount = Math.round((Number(stock) || 0) * 100) / 100;
+        return `${amount.toLocaleString()} ${unit.toLowerCase()}`;
     }
     return stockBreakdownLabel(stock, item.unitsPerPack);
 }
@@ -1087,7 +1090,7 @@ function renderInventoryTable() {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', packageWeightLabel: item.packageWeightLabel || '', costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -1266,13 +1269,31 @@ function closeProductModal() {
     document.getElementById('product-form-modal').style.display = 'none';
 }
 
-// ==================== SOLD-BY-WEIGHT (Kg) MODE ====================
-// For goods priced and stocked by weight (rice, sugar, flour, etc.) rather than as
-// whole packs/pieces. When enabled: hides the "Sell in Pieces" block (doesn't
-// apply — there's no pack), relabels Cost/Retail/Wholesale Price as "per Kg", and
-// switches the Stock field to a decimal Kg amount instead of a pack count.
+// ==================== SOLD-BY-WEIGHT (Kg / g) MODE ====================
+// For goods priced and stocked by weight (rice, sugar, flour, etc.) sold loose off
+// a scale, rather than as whole packs/pieces. When enabled: hides the "Sell in
+// Pieces" block (doesn't apply — there's no pack) and the package-weight-label
+// field (redundant — this mode already tracks its own unit), relabels Cost/
+// Retail/Wholesale Price as "per Kg" or "per g" (whichever is chosen), and
+// switches the Stock field to a decimal amount in that unit instead of a pack count.
 function toggleSoldByWeightMode() {
-    const isWeight = document.getElementById('inv-sold-by-weight').checked;
+    // Defensive: if index.html is stale/cached (missing this checkbox), fail
+    // quietly instead of throwing and silently breaking the caller — this exact
+    // function was reached via openAddProductModal() -> resetInventoryForm(), so
+    // an uncaught error here used to prevent "+ Add New Product" from opening
+    // the modal at all, with no visible error.
+    const weightCheckbox = document.getElementById('inv-sold-by-weight');
+    if (!weightCheckbox) {
+        console.warn("toggleSoldByWeightMode: #inv-sold-by-weight not found — index.html appears to be an older cached version. Hard-refresh or redeploy the latest index.html.");
+        return;
+    }
+    const isWeight = weightCheckbox.checked;
+    const weightUnitGroup = document.getElementById('inv-weight-unit-group');
+    if (weightUnitGroup) weightUnitGroup.style.display = isWeight ? 'block' : 'none';
+    const weightUnit = document.getElementById('inv-weight-unit')?.value || 'Kg';
+
+    const packageLabelGroup = document.getElementById('package-weight-label-group');
+    if (packageLabelGroup) packageLabelGroup.style.display = isWeight ? 'none' : 'block';
 
     const piecesBlock = document.getElementById('sell-in-pieces-block');
     if (piecesBlock) piecesBlock.style.display = isWeight ? 'none' : 'block';
@@ -1284,15 +1305,18 @@ function toggleSoldByWeightMode() {
     const stockInput = document.getElementById('inv-stock');
 
     if (isWeight) {
-        if (costLabel) costLabel.textContent = 'Cost Price (₦ per Kg)';
-        if (retailLabel) retailLabel.textContent = 'Retail Selling Price (₦ / Kg)';
-        if (wholesaleLabel) wholesaleLabel.textContent = 'Wholesale Price (₦ / Kg)';
-        if (stockLabel) stockLabel.textContent = 'Stock Qty (Kg)';
-        if (stockInput) { stockInput.placeholder = 'e.g. 25.5 kg'; stockInput.step = '0.01'; }
+        if (costLabel) costLabel.textContent = `Cost Price (₦ per ${weightUnit})`;
+        if (retailLabel) retailLabel.textContent = `Retail Selling Price (₦ / ${weightUnit})`;
+        if (wholesaleLabel) wholesaleLabel.textContent = `Wholesale Price (₦ / ${weightUnit})`;
+        if (stockLabel) stockLabel.textContent = `Stock Qty (${weightUnit})`;
+        if (stockInput) {
+            stockInput.placeholder = weightUnit === 'g' ? 'e.g. 500 g' : 'e.g. 25.5 kg';
+            stockInput.step = weightUnit === 'g' ? '1' : '0.01';
+        }
 
         // Pieces-per-pack doesn't apply to weight-based stock — force it to 1 so
         // saveProduct()'s existing math (stock = packs × unitsPerPack) stays correct
-        // (i.e. the Kg figure is stored as-is, unmultiplied), and the split
+        // (i.e. the Kg/g figure is stored as-is, unmultiplied), and the split
         // Packs/Loose-Pieces stock entry never applies to weight products.
         const unitsField = document.getElementById('inv-units-per-pack');
         if (unitsField) unitsField.value = '';
@@ -1373,6 +1397,8 @@ function saveProduct() {
     const name = document.getElementById('inv-name').value.trim();
     const category = document.getElementById('inv-category')?.value.trim() || '';
     const soldByWeight = document.getElementById('inv-sold-by-weight')?.checked || false;
+    const weightUnit = soldByWeight ? (document.getElementById('inv-weight-unit')?.value || 'Kg') : null;
+    const packageWeightLabel = soldByWeight ? '' : (document.getElementById('inv-package-weight-label')?.value.trim() || '');
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
@@ -1412,6 +1438,8 @@ function saveProduct() {
         productName: name,
         category,
         soldByWeight,
+        weightUnit,
+        packageWeightLabel,
         costPrice, 
         price, 
         retailPrice: price,
@@ -1461,6 +1489,10 @@ function editProduct(branchId, id) {
     if (editCategoryField) editCategoryField.value = item.category || '';
     const soldByWeightField = document.getElementById('inv-sold-by-weight');
     if (soldByWeightField) soldByWeightField.checked = !!item.soldByWeight;
+    const weightUnitField = document.getElementById('inv-weight-unit');
+    if (weightUnitField) weightUnitField.value = item.weightUnit || 'Kg';
+    const packageLabelField = document.getElementById('inv-package-weight-label');
+    if (packageLabelField) packageLabelField.value = item.packageWeightLabel || '';
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
@@ -1506,6 +1538,10 @@ function resetInventoryForm() {
     if (resetCategoryField) resetCategoryField.value = '';
     const resetWeightField = document.getElementById('inv-sold-by-weight');
     if (resetWeightField) resetWeightField.checked = false;
+    const resetWeightUnitField = document.getElementById('inv-weight-unit');
+    if (resetWeightUnitField) resetWeightUnitField.value = 'Kg';
+    const resetPackageLabelField = document.getElementById('inv-package-weight-label');
+    if (resetPackageLabelField) resetPackageLabelField.value = '';
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
@@ -1684,14 +1720,16 @@ function onPosProductChange() {
         const wPrice = item.wholesalePrice || rPrice;
         const packPrice = (currentCustomerType === 'Wholesale') ? wPrice : rPrice;
 
-        // Weight-based products (rice, sugar, flour, etc.) always sell by Kg,
-        // regardless of the global Pack/Piece toggle — the Retail/Wholesale Price
-        // fields on this product mean "per Kg", so no piece-price conversion applies.
+        // Weight-based products (rice, sugar, flour, etc.) always sell by their
+        // configured weight unit (Kg or g), regardless of the global Pack/Piece
+        // toggle — the Retail/Wholesale Price fields on this product mean "per
+        // Kg"/"per g", so no piece-price conversion applies.
         if (item.soldByWeight) {
+            const wUnit = item.weightUnit || 'Kg';
             priceInput.value = packPrice;
-            if (qtyLabel) qtyLabel.textContent = 'Quantity (Kg)';
-            if (priceLabel) priceLabel.textContent = 'Selling Price (₦ / Kg)';
-            if (unitInfoEl) unitInfoEl.textContent = '⚖️ Sold by weight — enter the quantity in Kg (e.g. 1.5).';
+            if (qtyLabel) qtyLabel.textContent = `Quantity (${wUnit})`;
+            if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${wUnit})`;
+            if (unitInfoEl) unitInfoEl.textContent = `⚖️ Sold by weight — enter the quantity in ${wUnit} (e.g. ${wUnit === 'g' ? '250' : '1.5'}).`;
         } else if (currentSaleUnit === 'Piece') {
             priceInput.value = getPiecePrice(item, currentCustomerType);
             if (qtyLabel) qtyLabel.textContent = 'Quantity (Pieces)';
@@ -1739,18 +1777,21 @@ function addToCart() {
     const rPrice = item.price || item.retailPrice || 0;
     const wPrice = item.wholesalePrice || rPrice;
     const unitsPerPack = Number(item.unitsPerPack) || 1;
-    // Weight-based products always sell as 'Kg', overriding the global Pack/Piece
-    // toggle — there's no pack/piece concept for something sold by weight.
-    const saleUnit = item.soldByWeight ? 'Kg' : currentSaleUnit;
+    // Weight-based products always sell in their configured weight unit (Kg or g),
+    // overriding the global Pack/Piece toggle — there's no pack/piece concept for
+    // something sold by weight.
+    const saleUnit = item.soldByWeight ? (item.weightUnit || 'Kg') : currentSaleUnit;
+    const isWeightSale = saleUnit === 'Kg' || saleUnit === 'g';
 
     // piecesNeeded = how many individual pieces this line item will draw down from
-    // stock (stock is always tracked in pieces — or, for weight-based products, Kg).
-    // Selling by Pack converts qty*unitsPerPack; Kg products always have
-    // unitsPerPack=1, so qty (Kg) passes through unchanged either way.
+    // stock (stock is always tracked in pieces — or, for weight-based products, in
+    // that product's own weight unit). Selling by Pack converts qty*unitsPerPack;
+    // weight-based products always have unitsPerPack=1, so qty passes through
+    // unchanged either way.
     // Also account for pieces of this same product already sitting in the cart from
     // an earlier line, so a second add can't push the combined total past stock.
     // Rounded to 2dp to avoid floating-point artifacts (e.g. 0.1 + 0.2 = 0.30000000000000004).
-    const piecesNeeded = Math.round(((saleUnit === 'Piece' || saleUnit === 'Kg') ? qty : (qty * unitsPerPack)) * 100) / 100;
+    const piecesNeeded = Math.round(((saleUnit === 'Piece' || isWeightSale) ? qty : (qty * unitsPerPack)) * 100) / 100;
     const piecesAlreadyInCart = currentCart
         .filter(ci => ci.id === id)
         .reduce((sum, ci) => sum + (Number(ci.piecesNeeded) || 0), 0);
@@ -1760,7 +1801,7 @@ function addToCart() {
     // stock, the item is rejected outright rather than being added anyway.
     if (piecesAlreadyInCart + piecesNeeded > pStock) {
         const remaining = Math.max(0, pStock - piecesAlreadyInCart);
-        const unitWord = saleUnit === 'Kg' ? 'kg' : 'piece(s)';
+        const unitWord = isWeightSale ? saleUnit.toLowerCase() : 'piece(s)';
         alert(`Cannot add to cart: only ${remaining} ${unitWord} of "${pName}" left in stock (you requested ${piecesNeeded}). Please reduce the quantity.`);
         return;
     }
@@ -1800,7 +1841,7 @@ function renderCart() {
 
     currentCart.forEach((cartItem, index) => {
         grandTotal += cartItem.total;
-        const unitLabel = cartItem.saleUnit === 'Piece' ? 'pcs' : (cartItem.saleUnit === 'Kg' ? 'kg' : 'pack(s)');
+        const unitLabel = cartItem.saleUnit === 'Piece' ? 'pcs' : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : 'pack(s)');
         tbody.innerHTML += `
             <tr>
                 <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType} · ${unitLabel}]</small></td>
@@ -2138,7 +2179,7 @@ function viewPendingOrderDetails(txId) {
         if (tbody) {
             tbody.innerHTML = '';
             (order.items || []).forEach(item => {
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : (item.saleUnit === 'Kg' ? 'kg' : 'pack');
+                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
                 const qty = item.qty || 0;
                 tbody.innerHTML += `
                     <tr>
@@ -2529,7 +2570,7 @@ function renderReceiptView(orderData, isReprint = false) {
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : (item.saleUnit === 'Kg' ? 'kg' : (item.saleUnit === 'Pack' ? 'pack' : ''));
+                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? 'pack' : ''));
                 const qtyDisplay = unitLabel ? `${item.qty || 0} ${unitLabel}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
                 const refundedTag = Number(item.refundedQty) > 0 ? ` <small style="color:#991b1b;">(${item.refundedQty} refunded)</small>` : '';
                 receiptItemsContainer.innerHTML += `
@@ -4247,13 +4288,14 @@ function openQuickRestockModal(branchId, productId) {
     document.getElementById('restock-notes').value = '';
 
     // Weight-based products: no loose-pieces concept, and the "Packs Received"
-    // field is repurposed as a decimal Kg amount.
+    // field is repurposed as a decimal amount in the product's own weight unit.
     const packsLabel = document.querySelector('#restock-simple-group label');
     const packsInput = document.getElementById('restock-qty-packs');
     const looseGroup = document.getElementById('restock-loose-group');
     if (item.soldByWeight) {
-        if (packsLabel) packsLabel.textContent = 'Kg Received';
-        if (packsInput) { packsInput.placeholder = 'e.g. 12.5'; packsInput.step = '0.01'; }
+        const wUnit = item.weightUnit || 'Kg';
+        if (packsLabel) packsLabel.textContent = `${wUnit} Received`;
+        if (packsInput) { packsInput.placeholder = wUnit === 'g' ? 'e.g. 500' : 'e.g. 12.5'; packsInput.step = wUnit === 'g' ? '1' : '0.01'; }
         looseGroup.style.display = 'none';
     } else {
         if (packsLabel) packsLabel.textContent = 'Packs Received';
@@ -4281,9 +4323,10 @@ function recalcQuickRestockPreview() {
     const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
 
     if (item.soldByWeight) {
-        const kgReceived = parseFloat(document.getElementById('restock-qty-packs').value) || 0;
-        const newStock = Math.round((currentStock + kgReceived) * 100) / 100;
-        previewEl.textContent = `Stock before: ${currentStock.toLocaleString()} kg → Stock after: ${newStock.toLocaleString()} kg (+${kgReceived} kg)`;
+        const wUnit = (item.weightUnit || 'Kg').toLowerCase();
+        const received = parseFloat(document.getElementById('restock-qty-packs').value) || 0;
+        const newStock = Math.round((currentStock + received) * 100) / 100;
+        previewEl.textContent = `Stock before: ${currentStock.toLocaleString()} ${wUnit} → Stock after: ${newStock.toLocaleString()} ${wUnit} (+${received} ${wUnit})`;
         return;
     }
 
@@ -4378,7 +4421,7 @@ function saveQuickRestock() {
             lastSupplyDate: nowIso
         });
     }).then(() => {
-        alert(`Restocked "${productName}" — stock is now ${item.soldByWeight ? newStock.toLocaleString() + ' kg' : stockBreakdownLabel(newStock, unitsPerPack)}.`);
+        alert(`Restocked "${productName}" — stock is now ${item.soldByWeight ? newStock.toLocaleString() + ' ' + (item.weightUnit || 'Kg').toLowerCase() : stockBreakdownLabel(newStock, unitsPerPack)}.`);
         closeQuickRestockModal();
         // Refresh an already-open history modal for this product, if any
         const historyModal = document.getElementById('restock-history-modal');
@@ -5013,7 +5056,7 @@ function renderRefundModalItems(tx) {
     const rowsHtml = items.map((item, idx) => {
         const alreadyRefunded = Number(item.refundedQty) || 0;
         const remaining = Math.max(0, (Number(item.qty) || 0) - alreadyRefunded);
-        const unitLabel = item.saleUnit === 'Piece' ? 'pc' : (item.saleUnit === 'Kg' ? 'kg' : 'pack');
+        const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
         const refundedNote = alreadyRefunded > 0 ? `<br><small style="color:#991b1b;">${alreadyRefunded} already refunded</small>` : '';
 
         return `
@@ -5022,7 +5065,7 @@ function renderRefundModalItems(tx) {
                     <strong>${item.name || 'Item'}</strong><br>
                     <small style="color:var(--text-muted);">Sold: ${item.qty} ${unitLabel}${item.qty === 1 ? '' : 's'} @ ₦${Number(item.price || 0).toLocaleString()}${refundedNote}</small>
                 </div>
-                <input type="number" min="0" max="${remaining}" step="${item.saleUnit === 'Kg' ? '0.01' : (item.saleUnit === 'Piece' || item.qty % 1 !== 0 ? '0.5' : '1')}" value="0"
+                <input type="number" min="0" max="${remaining}" step="${item.saleUnit === 'Kg' ? '0.01' : (item.saleUnit === 'g' ? '1' : (item.saleUnit === 'Piece' || item.qty % 1 !== 0 ? '0.5' : '1'))}" value="0"
                     data-max-refundable="${remaining}"
                     data-unit-price="${item.price || 0}"
                     data-item-name="${(item.name || '').replace(/"/g, '&quot;')}"
@@ -5271,7 +5314,7 @@ function renderRefundReceiptView(refundData) {
         if (itemsBody) {
             itemsBody.innerHTML = '';
             (refundData.items || []).forEach(item => {
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : (item.saleUnit === 'Kg' ? 'kg' : 'pack');
+                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
                 itemsBody.innerHTML += `
                     <tr>
                         <td>${item.name || ''}</td>
