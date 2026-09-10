@@ -18,7 +18,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=13">
+    <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -241,7 +241,7 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group">
                         <label id="pos-qty-label">Quantity (Packs)</label>
-                        <input type="number" id="pos-qty" value="1" min="1">
+                        <input type="number" id="pos-qty" value="1" min="0.01" step="0.01">
                     </div>
                     <div class="form-group">
                         <label id="pos-price-label">Selling Price (₦ / Pack)</label>
@@ -1072,25 +1072,34 @@
                 <datalist id="inv-category-datalist"></datalist>
             </div>
 
+            <!-- Sold-by-weight toggle: for goods like rice, sugar, flour, etc. sold in
+                 Kg rather than as whole packs/pieces. When checked, Cost/Retail/
+                 Wholesale Price mean "per Kg", stock is a decimal Kg amount, and the
+                 separate "SELL IN PIECES" block (which doesn't apply here) is hidden. -->
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="inv-sold-by-weight" onchange="toggleSoldByWeightMode()" style="width:16px; height:16px; margin:0;">
+                <label for="inv-sold-by-weight" style="margin:0; font-size:12px; font-weight:bold; color:#1e40af; cursor:pointer;">⚖️ This product is sold by weight (Kg) — e.g. rice, sugar, flour</label>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Cost Price (₦ per Pack)</label>
+                    <label id="inv-cost-price-label">Cost Price (₦ per Pack)</label>
                     <input type="number" id="inv-cost-price" placeholder="Cost Price">
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Retail Selling Price (₦ / Pack)</label>
+                    <label id="inv-retail-price-label">Retail Selling Price (₦ / Pack)</label>
                     <input type="number" id="inv-price" placeholder="Retail Price">
                 </div>
                 <div class="form-group">
-                    <label>Wholesale Price (₦ / Pack)</label>
+                    <label id="inv-wholesale-price-label">Wholesale Price (₦ / Pack)</label>
                     <input type="number" id="inv-wholesale-price" placeholder="Wholesale Price">
                 </div>
             </div>
 
-            <div style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px; margin-bottom:12px;">
+            <div id="sell-in-pieces-block" style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:8px; padding:10px; margin-bottom:12px;">
                 <div style="font-size:11px; font-weight:bold; color:#6d28d9; margin-bottom:8px;">🔹 SELL IN PIECES (optional)</div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group" style="margin-bottom:0;">
@@ -1105,10 +1114,10 @@
                 <div style="font-size:10px; color:var(--text-muted); margin-top:6px;">Leave "Pieces per Pack" as 1 (or blank) if this product is only ever sold whole.</div>
             </div>
 
-            <!-- Simple stock entry — used when Pieces per Pack is 1/blank (product sold whole only) -->
+            <!-- Simple stock entry — used when Pieces per Pack is 1/blank (product sold whole only), and repurposed for Kg stock when "sold by weight" is checked -->
             <div id="stock-simple-group" class="form-group">
-                <label>Stock Qty (Packs)</label>
-                <input type="number" id="inv-stock" placeholder="e.g. 50 packs" oninput="recalcSplitStockTotal()">
+                <label id="inv-stock-label">Stock Qty (Packs)</label>
+                <input type="number" id="inv-stock" placeholder="e.g. 50 packs" step="1" oninput="recalcSplitStockTotal()">
             </div>
 
             <!-- Split stock entry — used when Pieces per Pack > 1 (sell-in-pieces enabled) -->
@@ -1595,6 +1604,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=13"></script>
+    <script src="script.js?v=14"></script>
 </body>
 </html>
