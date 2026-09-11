@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v15 (adds: gram unit, package-weight label, hardened weight toggle)");
+console.log("Wise Decision script.js — build v16 (adds: Bags × Weight-per-Bag restocking)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -4284,20 +4284,36 @@ function openQuickRestockModal(branchId, productId) {
 
     document.getElementById('restock-qty-packs').value = '';
     document.getElementById('restock-qty-loose').value = '';
+    document.getElementById('restock-weight-bags').value = '';
+    document.getElementById('restock-weight-per-bag').value = '';
     document.getElementById('restock-cost-price').value = item.costPrice || '';
     document.getElementById('restock-notes').value = '';
 
-    // Weight-based products: no loose-pieces concept, and the "Packs Received"
-    // field is repurposed as a decimal amount in the product's own weight unit.
-    const packsLabel = document.querySelector('#restock-simple-group label');
-    const packsInput = document.getElementById('restock-qty-packs');
+    // Weight-based products: restocked as (Number of Bags) × (Weight per Bag),
+    // entered fresh each time since bag weight varies delivery to delivery — see
+    // restock-weight-bag-group. Non-weight products keep the existing
+    // Packs/Loose-Pieces fields.
+    const simpleGroup = document.getElementById('restock-simple-group');
     const looseGroup = document.getElementById('restock-loose-group');
+    const weightBagGroup = document.getElementById('restock-weight-bag-group');
+    const costLabel = document.getElementById('restock-cost-price-label');
+    const perBagLabel = document.getElementById('restock-weight-per-bag-label');
+
     if (item.soldByWeight) {
         const wUnit = item.weightUnit || 'Kg';
-        if (packsLabel) packsLabel.textContent = `${wUnit} Received`;
-        if (packsInput) { packsInput.placeholder = wUnit === 'g' ? 'e.g. 500' : 'e.g. 12.5'; packsInput.step = wUnit === 'g' ? '1' : '0.01'; }
+        simpleGroup.style.display = 'none';
         looseGroup.style.display = 'none';
+        weightBagGroup.style.display = 'block';
+        if (perBagLabel) perBagLabel.textContent = `Weight per Bag (${wUnit})`;
+        const perBagInput = document.getElementById('restock-weight-per-bag');
+        if (perBagInput) { perBagInput.placeholder = wUnit === 'g' ? 'e.g. 500' : 'e.g. 30'; perBagInput.step = wUnit === 'g' ? '1' : '0.01'; }
+        if (costLabel) costLabel.textContent = `Cost Price (₦ per ${wUnit})`;
     } else {
+        simpleGroup.style.display = 'block';
+        weightBagGroup.style.display = 'none';
+        if (costLabel) costLabel.textContent = 'Cost Price (₦ per Pack)';
+        const packsLabel = document.querySelector('#restock-simple-group label');
+        const packsInput = document.getElementById('restock-qty-packs');
         if (packsLabel) packsLabel.textContent = 'Packs Received';
         if (packsInput) { packsInput.placeholder = 'e.g. 5'; packsInput.step = '1'; }
         looseGroup.style.display = unitsPerPack > 1 ? 'block' : 'none';
@@ -4311,7 +4327,7 @@ function closeQuickRestockModal() {
     document.getElementById('quick-restock-modal').style.display = 'none';
 }
 
-// Live "Stock before -> Stock after" preview as the packs/loose fields are edited.
+// Live "Stock before -> Stock after" preview as the input fields are edited.
 function recalcQuickRestockPreview() {
     const branchId = document.getElementById('restock-branch-id').value;
     const productId = document.getElementById('restock-product-id').value;
@@ -4324,9 +4340,12 @@ function recalcQuickRestockPreview() {
 
     if (item.soldByWeight) {
         const wUnit = (item.weightUnit || 'Kg').toLowerCase();
-        const received = parseFloat(document.getElementById('restock-qty-packs').value) || 0;
+        const bags = parseFloat(document.getElementById('restock-weight-bags').value) || 0;
+        const perBag = parseFloat(document.getElementById('restock-weight-per-bag').value) || 0;
+        const received = Math.round((bags * perBag) * 100) / 100;
         const newStock = Math.round((currentStock + received) * 100) / 100;
-        previewEl.textContent = `Stock before: ${currentStock.toLocaleString()} ${wUnit} → Stock after: ${newStock.toLocaleString()} ${wUnit} (+${received} ${wUnit})`;
+        const bagsNote = bags > 0 && perBag > 0 ? ` (${bags} bag${bags === 1 ? '' : 's'} × ${perBag}${wUnit})` : '';
+        previewEl.textContent = `Stock before: ${currentStock.toLocaleString()} ${wUnit} → Stock after: ${newStock.toLocaleString()} ${wUnit} (+${received} ${wUnit}${bagsNote})`;
         return;
     }
 
@@ -4358,21 +4377,39 @@ function saveQuickRestock() {
     }
 
     const unitsPerPack = Number(item.unitsPerPack) || 1;
-    // parseFloat (not parseInt) so weight-based products can receive a decimal Kg
-    // amount here (e.g. 12.5) without truncation — for normal pack-based products
-    // this behaves identically to parseInt since whole numbers parse the same way.
-    const packs = parseFloat(document.getElementById('restock-qty-packs').value) || 0;
-    const loose = (!item.soldByWeight && unitsPerPack > 1) ? (parseInt(document.getElementById('restock-qty-loose').value) || 0) : 0;
     const costPrice = parseFloat(document.getElementById('restock-cost-price').value) || 0;
 
-    if (packs <= 0 && loose <= 0) {
-        alert("Enter a quantity received greater than zero.");
-        return;
-    }
+    // parseFloat (not parseInt) so weight-based products / bag counts can carry a
+    // decimal amount (e.g. 12.5 Kg) without truncation — for normal pack-based
+    // products this behaves identically to parseInt since whole numbers parse the
+    // same way either way.
+    let packs, loose, piecesReceived, lineCost, bagsReceived, weightPerBag;
 
-    const piecesReceived = Math.round(((packs * unitsPerPack) + loose) * 100) / 100;
-    const costPerPiece = unitsPerPack > 1 ? (costPrice / unitsPerPack) : costPrice;
-    const lineCost = Math.round(((costPrice * packs) + (costPerPiece * loose)) * 100) / 100;
+    if (item.soldByWeight) {
+        bagsReceived = parseFloat(document.getElementById('restock-weight-bags').value) || 0;
+        weightPerBag = parseFloat(document.getElementById('restock-weight-per-bag').value) || 0;
+        piecesReceived = Math.round((bagsReceived * weightPerBag) * 100) / 100;
+        packs = piecesReceived; // kept for the shared supply-record shape below
+        loose = 0;
+        lineCost = Math.round((costPrice * piecesReceived) * 100) / 100; // costPrice is already "per Kg/g"
+
+        if (piecesReceived <= 0) {
+            alert("Enter both the number of bags and the weight per bag (or the total weight received).");
+            return;
+        }
+    } else {
+        packs = parseFloat(document.getElementById('restock-qty-packs').value) || 0;
+        loose = (unitsPerPack > 1) ? (parseInt(document.getElementById('restock-qty-loose').value) || 0) : 0;
+
+        if (packs <= 0 && loose <= 0) {
+            alert("Enter a quantity received greater than zero.");
+            return;
+        }
+
+        piecesReceived = Math.round(((packs * unitsPerPack) + loose) * 100) / 100;
+        const costPerPiece = unitsPerPack > 1 ? (costPrice / unitsPerPack) : costPrice;
+        lineCost = Math.round(((costPrice * packs) + (costPerPiece * loose)) * 100) / 100;
+    }
 
     const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
     const newStock = Math.round((currentStock + piecesReceived) * 100) / 100;
@@ -4392,6 +4429,10 @@ function saveQuickRestock() {
             productId,
             qty: packs,
             loosePieces: loose,
+            // Recorded for weight-based restocks specifically, so restock history
+            // can show "3 bags × 30kg" instead of just a raw total.
+            bagsReceived: item.soldByWeight ? bagsReceived : null,
+            weightPerBag: item.soldByWeight ? weightPerBag : null,
             costPrice,
             unitsPerPackAtSupply: unitsPerPack,
             piecesReceived,
@@ -4475,7 +4516,9 @@ function openProductRestockHistory(branchId, productId) {
                     piecesReceived: line.piecesReceived,
                     qty: line.qty,
                     loosePieces: line.loosePieces || 0,
-                    unitsPerPackAtSupply: line.unitsPerPackAtSupply || 1
+                    unitsPerPackAtSupply: line.unitsPerPackAtSupply || 1,
+                    bagsReceived: line.bagsReceived || null,
+                    weightPerBag: line.weightPerBag || null
                 });
             });
         });
@@ -4490,16 +4533,28 @@ function openProductRestockHistory(branchId, productId) {
             return;
         }
 
+        const isWeight = !!(item && item.soldByWeight);
+        const wUnit = ((item && item.weightUnit) || 'Kg').toLowerCase();
+
         tbody.innerHTML = entries.map(e => {
             const hasHistory = e.stockBefore !== undefined && e.stockAfter !== undefined;
             const upp = Number(e.unitsPerPackAtSupply) || 1;
-            const addedLabel = upp > 1 ? `+${e.qty} Pks + ${e.loosePieces} Pcs` : `+${e.piecesReceived}`;
+            let addedLabel;
+            if (isWeight) {
+                addedLabel = e.bagsReceived && e.weightPerBag
+                    ? `+${e.piecesReceived} ${wUnit} (${e.bagsReceived} bag${e.bagsReceived === 1 ? '' : 's'} × ${e.weightPerBag}${wUnit})`
+                    : `+${e.piecesReceived} ${wUnit}`;
+            } else {
+                addedLabel = upp > 1 ? `+${e.qty} Pks + ${e.loosePieces} Pcs` : `+${e.piecesReceived}`;
+            }
+            const beforeLabel = hasHistory ? (isWeight ? `${e.stockBefore} ${wUnit}` : stockBreakdownLabel(e.stockBefore, upp)) : '—';
+            const afterLabel = hasHistory ? (isWeight ? `${e.stockAfter} ${wUnit}` : stockBreakdownLabel(e.stockAfter, upp)) : '—';
             return `
                 <tr>
                     <td>${e.date ? new Date(e.date).toLocaleString() : 'N/A'}</td>
-                    <td>${hasHistory ? stockBreakdownLabel(e.stockBefore, upp) : '—'}</td>
+                    <td>${beforeLabel}</td>
                     <td style="color:#166534; font-weight:bold;">${addedLabel}</td>
-                    <td>${hasHistory ? stockBreakdownLabel(e.stockAfter, upp) : '—'}</td>
+                    <td>${afterLabel}</td>
                     <td>${e.supplierName || 'N/A'}</td>
                     <td>${e.recordedBy || ''}</td>
                 </tr>
