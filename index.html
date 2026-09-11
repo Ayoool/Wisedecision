@@ -18,7 +18,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=14">
+    <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 
@@ -1072,13 +1072,33 @@
                 <datalist id="inv-category-datalist"></datalist>
             </div>
 
-            <!-- Sold-by-weight toggle: for goods like rice, sugar, flour, etc. sold in
-                 Kg rather than as whole packs/pieces. When checked, Cost/Retail/
-                 Wholesale Price mean "per Kg", stock is a decimal Kg amount, and the
-                 separate "SELL IN PIECES" block (which doesn't apply here) is hidden. -->
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                <input type="checkbox" id="inv-sold-by-weight" onchange="toggleSoldByWeightMode()" style="width:16px; height:16px; margin:0;">
-                <label for="inv-sold-by-weight" style="margin:0; font-size:12px; font-weight:bold; color:#1e40af; cursor:pointer;">⚖️ This product is sold by weight (Kg) — e.g. rice, sugar, flour</label>
+            <!-- Optional, purely descriptive: for whole-unit products whose package
+                 happens to be named by weight (e.g. "Sugar 10kg bag", "Milo 400g tin").
+                 Stock for these is still a plain pack COUNT (how many bags/tins) — this
+                 just labels the pack size in Inventory/POS instead of leaving staff to
+                 guess it from the product name. Hidden when "Sold by weight" is checked,
+                 since that mode already tracks its own weight unit continuously. -->
+            <div id="package-weight-label-group" class="form-group">
+                <input type="text" id="inv-package-weight-label" placeholder="Package weight (optional, e.g. 10kg bag, 400g tin, 22g sachet)">
+            </div>
+
+            <!-- Sold-by-weight toggle: for goods like rice, sugar, flour, etc. sold
+                 loose off a scale, by Kg or by gram, rather than as whole packs/pieces.
+                 When checked, Cost/Retail/Wholesale Price mean "per Kg/g", stock is a
+                 decimal amount in that unit, and the separate "SELL IN PIECES" block
+                 (which doesn't apply here) is hidden. -->
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px; margin-bottom:12px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="inv-sold-by-weight" onchange="toggleSoldByWeightMode()" style="width:16px; height:16px; margin:0;">
+                    <label for="inv-sold-by-weight" style="margin:0; font-size:12px; font-weight:bold; color:#1e40af; cursor:pointer;">⚖️ This product is sold loose by weight — e.g. rice, sugar, flour from a scale</label>
+                </div>
+                <div id="inv-weight-unit-group" style="display:none; margin-top:8px;">
+                    <label style="display:block; font-size:11px; font-weight:bold; color:#1e40af; margin-bottom:4px;">Weight Unit</label>
+                    <select id="inv-weight-unit" onchange="toggleSoldByWeightMode()" style="padding:6px 10px; border-radius:6px; border:1px solid #bfdbfe; font-size:13px; width:100%;">
+                        <option value="Kg">Kilograms (Kg) — e.g. rice, beans, sugar</option>
+                        <option value="g">Grams (g) — e.g. spices, small quantities</option>
+                    </select>
+                </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
@@ -1604,6 +1624,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=14"></script>
+    <script src="script.js?v=15"></script>
 </body>
 </html>
