@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v16 (adds: Bags × Weight-per-Bag restocking)");
+console.log("Wise Decision script.js — build v17 (moved Weight per Bag into weight-mode, added Price-per-Bag preview)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -1021,8 +1021,11 @@ function onInventoryCategoryFilterChange() {
 // Builds the small "1 pack = N pcs · Piece: ₦X" helper string used in the inventory
 // table and the POS dropdown so staff can see the piece breakdown at a glance.
 function packPieceInfoLabel(item) {
-    if (item.soldByWeight) return `<span style="color:#1e40af; font-weight:bold;">⚖️ Sold by weight (${item.weightUnit || 'Kg'})</span>`;
-    if (item.packageWeightLabel) return `<span style="color:#166534; font-weight:bold;">📦 ${item.packageWeightLabel}</span>`;
+    if (item.soldByWeight) {
+        const wUnit = item.weightUnit || 'Kg';
+        const bagNote = item.weightPerBag ? ` · ${item.weightPerBag}${wUnit}/bag` : '';
+        return `<span style="color:#1e40af; font-weight:bold;">⚖️ Sold by weight (${wUnit})${bagNote}</span>`;
+    }
     const unitsPerPack = Number(item.unitsPerPack) || 1;
     if (unitsPerPack <= 1) return '<span style="color:var(--text-muted);">Sold whole only</span>';
     const piecePrice = getPiecePrice(item, 'Retail');
@@ -1090,7 +1093,7 @@ function renderInventoryTable() {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', packageWeightLabel: item.packageWeightLabel || '', costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', weightPerBag: item.weightPerBag || 0, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -1292,9 +1295,6 @@ function toggleSoldByWeightMode() {
     if (weightUnitGroup) weightUnitGroup.style.display = isWeight ? 'block' : 'none';
     const weightUnit = document.getElementById('inv-weight-unit')?.value || 'Kg';
 
-    const packageLabelGroup = document.getElementById('package-weight-label-group');
-    if (packageLabelGroup) packageLabelGroup.style.display = isWeight ? 'none' : 'block';
-
     const piecesBlock = document.getElementById('sell-in-pieces-block');
     if (piecesBlock) piecesBlock.style.display = isWeight ? 'none' : 'block';
 
@@ -1303,12 +1303,14 @@ function toggleSoldByWeightMode() {
     const wholesaleLabel = document.getElementById('inv-wholesale-price-label');
     const stockLabel = document.getElementById('inv-stock-label');
     const stockInput = document.getElementById('inv-stock');
+    const weightPerBagLabel = document.getElementById('inv-weight-per-bag-label');
 
     if (isWeight) {
         if (costLabel) costLabel.textContent = `Cost Price (₦ per ${weightUnit})`;
         if (retailLabel) retailLabel.textContent = `Retail Selling Price (₦ / ${weightUnit})`;
         if (wholesaleLabel) wholesaleLabel.textContent = `Wholesale Price (₦ / ${weightUnit})`;
         if (stockLabel) stockLabel.textContent = `Stock Qty (${weightUnit})`;
+        if (weightPerBagLabel) weightPerBagLabel.textContent = `Total Weight per Bag/Sack (optional, e.g. ${weightUnit === 'g' ? '500' : '50'})`;
         if (stockInput) {
             stockInput.placeholder = weightUnit === 'g' ? 'e.g. 500 g' : 'e.g. 25.5 kg';
             stockInput.step = weightUnit === 'g' ? '1' : '0.01';
@@ -1324,6 +1326,7 @@ function toggleSoldByWeightMode() {
         if (stockSplitGroup) stockSplitGroup.style.display = 'none';
         const stockSimpleGroup = document.getElementById('stock-simple-group');
         if (stockSimpleGroup) stockSimpleGroup.style.display = 'block';
+        recalcBagPricePreview();
     } else {
         if (costLabel) costLabel.textContent = 'Cost Price (₦ per Pack)';
         if (retailLabel) retailLabel.textContent = 'Retail Selling Price (₦ / Pack)';
@@ -1332,6 +1335,33 @@ function toggleSoldByWeightMode() {
         if (stockInput) { stockInput.placeholder = 'e.g. 50 packs'; stockInput.step = '1'; }
         toggleStockInputMode();
     }
+}
+
+// Live "Price per Bag" preview shown under the Weight per Bag field — purely
+// informational (Weight per Bag × the per-Kg/g Retail/Wholesale Price above).
+// Doesn't change how POS sells (still loose by weight); just answers "so what
+// does a whole bag of this cost" without needing separate bag pricing fields.
+function recalcBagPricePreview() {
+    const previewEl = document.getElementById('inv-bag-price-preview');
+    if (!previewEl) return;
+
+    const weightPerBag = parseFloat(document.getElementById('inv-weight-per-bag')?.value) || 0;
+    const retailPrice = parseFloat(document.getElementById('inv-price')?.value) || 0;
+    const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price')?.value) || 0;
+    const weightUnit = document.getElementById('inv-weight-unit')?.value || 'Kg';
+
+    if (weightPerBag <= 0 || retailPrice <= 0) {
+        previewEl.textContent = 'Fill in Weight per Bag and Retail Price to see the price per bag here.';
+        return;
+    }
+
+    const retailBagPrice = Math.round(weightPerBag * retailPrice * 100) / 100;
+    let text = `≈ ₦${retailBagPrice.toLocaleString()} per ${weightPerBag}${weightUnit} bag (Retail)`;
+    if (wholesalePrice > 0) {
+        const wholesaleBagPrice = Math.round(weightPerBag * wholesalePrice * 100) / 100;
+        text += ` · ₦${wholesaleBagPrice.toLocaleString()} (Wholesale)`;
+    }
+    previewEl.textContent = text;
 }
 
 
@@ -1398,7 +1428,7 @@ function saveProduct() {
     const category = document.getElementById('inv-category')?.value.trim() || '';
     const soldByWeight = document.getElementById('inv-sold-by-weight')?.checked || false;
     const weightUnit = soldByWeight ? (document.getElementById('inv-weight-unit')?.value || 'Kg') : null;
-    const packageWeightLabel = soldByWeight ? '' : (document.getElementById('inv-package-weight-label')?.value.trim() || '');
+    const weightPerBag = soldByWeight ? (parseFloat(document.getElementById('inv-weight-per-bag')?.value) || 0) : 0;
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
@@ -1439,7 +1469,7 @@ function saveProduct() {
         category,
         soldByWeight,
         weightUnit,
-        packageWeightLabel,
+        weightPerBag,
         costPrice, 
         price, 
         retailPrice: price,
@@ -1491,8 +1521,8 @@ function editProduct(branchId, id) {
     if (soldByWeightField) soldByWeightField.checked = !!item.soldByWeight;
     const weightUnitField = document.getElementById('inv-weight-unit');
     if (weightUnitField) weightUnitField.value = item.weightUnit || 'Kg';
-    const packageLabelField = document.getElementById('inv-package-weight-label');
-    if (packageLabelField) packageLabelField.value = item.packageWeightLabel || '';
+    const weightPerBagField = document.getElementById('inv-weight-per-bag');
+    if (weightPerBagField) weightPerBagField.value = item.weightPerBag || '';
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
@@ -1540,8 +1570,8 @@ function resetInventoryForm() {
     if (resetWeightField) resetWeightField.checked = false;
     const resetWeightUnitField = document.getElementById('inv-weight-unit');
     if (resetWeightUnitField) resetWeightUnitField.value = 'Kg';
-    const resetPackageLabelField = document.getElementById('inv-package-weight-label');
-    if (resetPackageLabelField) resetPackageLabelField.value = '';
+    const resetWeightPerBagField = document.getElementById('inv-weight-per-bag');
+    if (resetWeightPerBagField) resetWeightPerBagField.value = '';
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
@@ -4306,7 +4336,14 @@ function openQuickRestockModal(branchId, productId) {
         weightBagGroup.style.display = 'block';
         if (perBagLabel) perBagLabel.textContent = `Weight per Bag (${wUnit})`;
         const perBagInput = document.getElementById('restock-weight-per-bag');
-        if (perBagInput) { perBagInput.placeholder = wUnit === 'g' ? 'e.g. 500' : 'e.g. 30'; perBagInput.step = wUnit === 'g' ? '1' : '0.01'; }
+        if (perBagInput) {
+            perBagInput.placeholder = wUnit === 'g' ? 'e.g. 500' : 'e.g. 30';
+            perBagInput.step = wUnit === 'g' ? '1' : '0.01';
+            // Pre-fill from the product's own Weight per Bag if one was set when
+            // adding/editing it — still editable, since this delivery's bags might
+            // weigh a bit more or less than usual.
+            if (item.weightPerBag) perBagInput.value = item.weightPerBag;
+        }
         if (costLabel) costLabel.textContent = `Cost Price (₦ per ${wUnit})`;
     } else {
         simpleGroup.style.display = 'block';
