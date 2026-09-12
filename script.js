@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v17 (moved Weight per Bag into weight-mode, added Price-per-Bag preview)");
+console.log("Wise Decision script.js — build v18 (fixed: POS unit label, per-product low-stock threshold)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -765,11 +765,16 @@ function loadDashboardMetrics() {
             const itemName = item.name || item.productName || 'Unnamed Item';
             const category = item.category || '';
 
-            const isLowStock = stock <= 5;
+            // Falls back to 5 when no per-product threshold is set — but a fixed "5"
+            // only makes sense for pack/piece counts, so weight-based products really
+            // should have their own threshold set (see the product form) since 5kg
+            // and 5g mean very different things depending on the product.
+            const threshold = (item.lowStockThreshold !== null && item.lowStockThreshold !== undefined) ? Number(item.lowStockThreshold) : 5;
+            const isLowStock = stock <= threshold;
             const isExpiringSoon = expiryDate && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
 
             if (isLowStock || isExpiringSoon) {
-                alerts.push({ name: itemName, category, stock, expiryVal, isLowStock, isExpiringSoon });
+                alerts.push({ name: itemName, category, stock, soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', expiryVal, isLowStock, isExpiringSoon });
             }
         });
 
@@ -885,7 +890,7 @@ function renderDashboardAlerts() {
             <tr>
                 <td>${a.name}</td>
                 <td>${categoryTag}</td>
-                <td>${a.stock}</td>
+                <td>${a.soldByWeight ? `${a.stock} ${a.weightUnit.toLowerCase()}` : a.stock}</td>
                 <td>${a.expiryVal || 'N/A'}</td>
                 <td>${badge}</td>
             </tr>
@@ -1304,6 +1309,8 @@ function toggleSoldByWeightMode() {
     const stockLabel = document.getElementById('inv-stock-label');
     const stockInput = document.getElementById('inv-stock');
     const weightPerBagLabel = document.getElementById('inv-weight-per-bag-label');
+    const lowStockLabel = document.getElementById('inv-low-stock-threshold-label');
+    const lowStockInput = document.getElementById('inv-low-stock-threshold');
 
     if (isWeight) {
         if (costLabel) costLabel.textContent = `Cost Price (₦ per ${weightUnit})`;
@@ -1311,6 +1318,8 @@ function toggleSoldByWeightMode() {
         if (wholesaleLabel) wholesaleLabel.textContent = `Wholesale Price (₦ / ${weightUnit})`;
         if (stockLabel) stockLabel.textContent = `Stock Qty (${weightUnit})`;
         if (weightPerBagLabel) weightPerBagLabel.textContent = `Total Weight per Bag/Sack (optional, e.g. ${weightUnit === 'g' ? '500' : '50'})`;
+        if (lowStockLabel) lowStockLabel.textContent = `Low Stock Alert Threshold (optional, e.g. ${weightUnit === 'g' ? '200' : '2'} ${weightUnit} — no default, since a sensible amount varies a lot by product)`;
+        if (lowStockInput) lowStockInput.placeholder = weightUnit === 'g' ? 'e.g. 200' : 'e.g. 2';
         if (stockInput) {
             stockInput.placeholder = weightUnit === 'g' ? 'e.g. 500 g' : 'e.g. 25.5 kg';
             stockInput.step = weightUnit === 'g' ? '1' : '0.01';
@@ -1332,6 +1341,8 @@ function toggleSoldByWeightMode() {
         if (retailLabel) retailLabel.textContent = 'Retail Selling Price (₦ / Pack)';
         if (wholesaleLabel) wholesaleLabel.textContent = 'Wholesale Price (₦ / Pack)';
         if (stockLabel) stockLabel.textContent = 'Stock Qty (Packs)';
+        if (lowStockLabel) lowStockLabel.textContent = 'Low Stock Alert Threshold (optional, default 5 packs)';
+        if (lowStockInput) lowStockInput.placeholder = 'e.g. 5';
         if (stockInput) { stockInput.placeholder = 'e.g. 50 packs'; stockInput.step = '1'; }
         toggleStockInputMode();
     }
@@ -1429,6 +1440,8 @@ function saveProduct() {
     const soldByWeight = document.getElementById('inv-sold-by-weight')?.checked || false;
     const weightUnit = soldByWeight ? (document.getElementById('inv-weight-unit')?.value || 'Kg') : null;
     const weightPerBag = soldByWeight ? (parseFloat(document.getElementById('inv-weight-per-bag')?.value) || 0) : 0;
+    const lowStockThresholdRaw = document.getElementById('inv-low-stock-threshold')?.value;
+    const lowStockThreshold = (lowStockThresholdRaw !== '' && lowStockThresholdRaw !== undefined) ? (parseFloat(lowStockThresholdRaw) || 0) : null;
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
@@ -1470,6 +1483,7 @@ function saveProduct() {
         soldByWeight,
         weightUnit,
         weightPerBag,
+        lowStockThreshold,
         costPrice, 
         price, 
         retailPrice: price,
@@ -1523,6 +1537,8 @@ function editProduct(branchId, id) {
     if (weightUnitField) weightUnitField.value = item.weightUnit || 'Kg';
     const weightPerBagField = document.getElementById('inv-weight-per-bag');
     if (weightPerBagField) weightPerBagField.value = item.weightPerBag || '';
+    const lowStockThresholdField = document.getElementById('inv-low-stock-threshold');
+    if (lowStockThresholdField) lowStockThresholdField.value = (item.lowStockThreshold !== null && item.lowStockThreshold !== undefined) ? item.lowStockThreshold : '';
     document.getElementById('inv-cost-price').value = item.costPrice || '';
     document.getElementById('inv-price').value = item.price || item.retailPrice || '';
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
@@ -1572,6 +1588,8 @@ function resetInventoryForm() {
     if (resetWeightUnitField) resetWeightUnitField.value = 'Kg';
     const resetWeightPerBagField = document.getElementById('inv-weight-per-bag');
     if (resetWeightPerBagField) resetWeightPerBagField.value = '';
+    const resetLowStockField = document.getElementById('inv-low-stock-threshold');
+    if (resetLowStockField) resetLowStockField.value = '';
     document.getElementById('inv-cost-price').value = '';
     document.getElementById('inv-price').value = '';
     document.getElementById('inv-wholesale-price').value = '';
@@ -1701,13 +1719,12 @@ function loadPosInventoryDropdown() {
             inventoryCache[currentBranch][id] = item;
             
             const pName = item.name || item.productName || 'Unnamed Item';
-            const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
             const unitsPerPack = Number(item.unitsPerPack) || 1;
-            const pieceNote = unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '';
+            const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '');
 
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock} pcs)${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         });
     });
 }
@@ -1723,14 +1740,13 @@ function filterPosInventory() {
     Object.keys(branchItems).forEach(id => {
         const item = branchItems[id];
         const pName = item.name || item.productName || 'Unnamed Item';
-        const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
         const rPrice = item.price || item.retailPrice || 0;
         const wPrice = item.wholesalePrice || 0;
         const unitsPerPack = Number(item.unitsPerPack) || 1;
-        const pieceNote = unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '';
+        const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '');
 
         if (pName.toLowerCase().includes(query)) {
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${pStock} pcs)${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         }
     });
 }
