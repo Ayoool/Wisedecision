@@ -1,9 +1,18 @@
-<!DOCTYPE html>
+q<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wise Decision - POS & Enterprise Suite</title>
+
+    <!-- Preconnect hints: tells the browser to start the DNS lookup + connection
+         handshake with these servers immediately, in parallel with everything
+         else, instead of waiting until the actual script/data request needs
+         them. Pure timing hint — doesn't change what loads or when it runs,
+         just shaves a bit of latency off the connection itself. -->
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://wisedecision-24c4e-default-rtdb.firebaseio.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
     
     <!-- Firebase SDKs (Compat Version) -->
     <!-- defer: lets the browser render the page without waiting for these to
@@ -25,7 +34,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=19">
+    <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -1658,6 +1667,6 @@
          while those keep theirs, this file would run BEFORE Firebase exists and
          every firebase.database() call in it would throw immediately, breaking
          login and everything else. -->
-    <script src="script.js?v=19" defer></script>
+    <script src="script.js?v=20" defer></script>
 </body>
 </html>
