@@ -6,10 +6,17 @@
     <title>Wise Decision - POS & Enterprise Suite</title>
     
     <!-- Firebase SDKs (Compat Version) -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <!-- html2pdf for receipt generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- defer: lets the browser render the page without waiting for these to
+         download/execute first (they used to block first paint). Order is still
+         preserved — deferred scripts always run in the order they appear, right
+         before the page finishes loading — so script.js (also deferred, at the
+         bottom of the page) still runs after both of these, same as before. -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
+    <!-- html2pdf.bundle.min.js is no longer loaded here — it's a large library only
+         needed when someone actually clicks "Download PDF", so it's now fetched on
+         demand at that moment instead of slowing down every single page load.
+         See loadHtml2PdfLibrary() in script.js. -->
 
     <!-- Link your external CSS file -->
     <!-- Cache-busting version tag on style.css / script.js — GitHub Pages' CDN and
@@ -18,7 +25,7 @@
          Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
          either file, so browsers are forced to fetch the new copy instead of an
          old cached one. -->
-    <link rel="stylesheet" href="style.css?v=18">
+    <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
 
@@ -1644,6 +1651,13 @@
 
 
     <!-- Link your external JavaScript file -->
-    <script src="script.js?v=18"></script>
+    <!-- defer here too, and critically — this MUST stay deferred as long as the
+         two Firebase <script> tags in <head> are deferred (see comment there).
+         Deferred scripts execute in document order, so this still runs after
+         both Firebase SDKs finish loading. If this tag ever loses its `defer`
+         while those keep theirs, this file would run BEFORE Firebase exists and
+         every firebase.database() call in it would throw immediately, breaking
+         login and everything else. -->
+    <script src="script.js?v=19" defer></script>
 </body>
 </html>
