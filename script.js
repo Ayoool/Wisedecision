@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v18 (fixed: POS unit label, per-product low-stock threshold)");
+console.log("Wise Decision script.js — build v19 (perf: deferred scripts, lazy-loaded PDF library)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -28,6 +28,31 @@ try {
     }
 } catch (e) {
     console.error("Firebase init error:", e);
+}
+
+// ==================== LAZY-LOADED html2pdf LIBRARY ====================
+// html2pdf.bundle.min.js (which itself bundles html2canvas + jsPDF) is a large
+// library that used to be loaded as a blocking <script> in <head> on EVERY page
+// load, even though it's only ever needed if someone clicks "Download PDF" — a
+// small fraction of visits. Loading it on demand instead means the app itself
+// loads faster for everyone, and the ~1s extra delay only happens for the person
+// who actually wants a PDF, right when they ask for one.
+let html2pdfLoadPromise = null;
+function loadHtml2PdfLibrary() {
+    if (typeof html2pdf !== 'undefined') return Promise.resolve(); // already loaded
+    if (html2pdfLoadPromise) return html2pdfLoadPromise; // a load is already in flight — reuse it
+
+    html2pdfLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => {
+            html2pdfLoadPromise = null; // allow retrying on a later click instead of staying permanently broken
+            reject(new Error('Failed to load the PDF library. Check your internet connection and try again.'));
+        };
+        document.head.appendChild(script);
+    });
+    return html2pdfLoadPromise;
 }
 
 // ==================== GLOBAL APP STATE ====================
@@ -3000,7 +3025,9 @@ function downloadReceiptPDF() {
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a6', orientation: 'portrait' }
     };
-    html2pdf().from(element).set(opt).save();
+    loadHtml2PdfLibrary().then(() => {
+        html2pdf().from(element).set(opt).save();
+    }).catch(err => alert(err.message));
 }
 
 // ==================== STAFF MANAGEMENT (branch assignment) ====================
@@ -5077,7 +5104,9 @@ function downloadDebtReceiptPDF() {
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a6', orientation: 'portrait' }
     };
-    html2pdf().from(element).set(opt).save();
+    loadHtml2PdfLibrary().then(() => {
+        html2pdf().from(element).set(opt).save();
+    }).catch(err => alert(err.message));
 }
 
 // ==================== REFUNDS MODULE ====================
@@ -5462,7 +5491,9 @@ function downloadRefundReceiptPDF() {
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a6', orientation: 'portrait' }
     };
-    html2pdf().from(element).set(opt).save();
+    loadHtml2PdfLibrary().then(() => {
+        html2pdf().from(element).set(opt).save();
+    }).catch(err => alert(err.message));
 }
 
 // ---------- POS Customer Selection & Autocomplete (defaults to Walk-In) ----------
