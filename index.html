@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wise Decision - Cloud Enterprise & POS Portal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            line-height: 1.6;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 5%;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid #334155;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #38bdf8;
+            letter-spacing: 1px;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .nav-buttons a {
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .btn-login {
+            color: #38bdf8;
+            border: 1px solid #38bdf8;
+        }
+        .btn-login:hover {
+            background: rgba(56, 189, 248, 0.1);
+        }
+        .btn-register {
+            background: #2563eb;
+            color: #fff;
+        }
+        .btn-register:hover {
+            background: #1d4ed8;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+        
+        /* Hero Section */
+        .hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 60px 20px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .hero h1 {
+            font-size: 2.2rem;
+            margin-bottom: 20px;
+            color: #fff;
+            line-height: 1.2;
+        }
+        .hero h1 span {
+            color: #38bdf8;
+        }
+        .hero p {
+            font-size: 1.05rem;
+            color: #94a3b8;
+            margin-bottom: 30px;
+            max-width: 700px;
+        }
+        .hero-cta {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+        .hero-cta a {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-decoration: none;
+            font-size: 0.95rem;
+            width: 100%;
+            max-width: 280px;
+            text-align: center;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 50px 5%;
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+        .features h2 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 35px;
+            color: #fff;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: #1e293b;
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+        }
+        .card h3 {
+            margin-bottom: 12px;
+            color: #38bdf8;
+            font-size: 1.2rem;
+        }
+        .card p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            background: #1e293b;
+            color: #64748b;
+            border-top: 1px solid #334155;
+            margin-top: 50px;
+            font-size: 0.9rem;
+        }
+
+        /* Larger screen upgrades */
+        @media (min-width: 768px) {
+            .hero { padding: 90px 8% 60px; }
+            .hero h1 { font-size: 3rem; }
+            .hero-cta a { width: auto; }
+            .features h2 { font-size: 2.2rem; }
+            .logo { font-size: 1.4rem; }
+            .nav-buttons a { padding: 10px 20px; font-size: 0.95rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">WISE DECISION</div>
+        <div class="nav-buttons">
+            <a href="app.html" class="btn-login">Login</a>
+            <a href="app.html?action=register" class="btn-register">Get Started</a>
+        </div>
+    </header>
+
+    <section class="hero">
+        <h1>Run Your Enterprise Smarter with <span>Wise Decision POS</span></h1>
+        <p>The ultimate cloud enterprise and point-of-sale solution built to track multi-branch inventories, manage staff roles, process lightning-fast sales, and print thermal receipts seamlessly.</p>
+        <div class="hero-cta">
+            <a href="app.html?action=register" class="btn-register">Register Your Business</a>
+            <a href="app.html" class="btn-login">Access Store Portal</a>
+        </div>
+    </section>
+
+    <section class="features">
+        <h2>Why Growing Businesses Choose Us</h2>
+        <div class="grid">
+            <div class="card">
+                <h3>📦 Multi-Branch Tracking</h3>
+                <p>Monitor real-time stock levels, sales velocity, and overall business performance across multiple store branches from one centralized cloud dashboard.</p>
+            </div>
+            <div class="card">
+                <h3>🖨️ Thermal Receipt Printing</h3>
+                <p>Generate clean, professional receipts for your customers instantly with built-in thermal printer hardware compatibility.</p>
+            </div>
+            <div class="card">
+                <h3>👥 Role-Based Staff Access</h3>
+                <p>Assign secure Admin or Staff PIN codes, protect sensitive cash drawer figures, and keep accurate records of individual employee performance.</p>
+            </div>
+            <div class="card">
+                <h3>🔄 Easy Sales Returns</h3>
+                <p>Quickly process customer refunds, manage product exchanges, and automatically sync your live inventory logs without discrepancies.</p>
+            </div>
+            <div class="card">
+                <h3>📊 Supplier & Stock Tracking</h3>
+                <p>Keep detailed records of incoming supplies and vendor histories so you never run out of your fast-moving items.</p>
+            </div>
+            <div class="card">
+                <h3>☁️ Secure Cloud Infrastructure</h3>
+                <p>Your entire enterprise database is stored safely in the cloud, giving you reliable access anytime from laptops, tablets, or phones.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        &copy; 2026 Wise Decision. All rights reserved. Built for modern enterprises.
+    </footer>
+
+</body>
+</html>
