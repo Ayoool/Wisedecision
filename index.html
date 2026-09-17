@@ -44,7 +44,6 @@
             display: flex;
             align-items: baseline;
         }
-        /* Make the W bigger */
         .logo .big-w {
             font-size: 1.7rem;
             line-height: 1;
@@ -138,7 +137,6 @@
             max-width: 700px;
         }
 
-        /* Activation Notice Box */
         .activation-notice {
             background: rgba(56, 189, 248, 0.1);
             border: 1px solid #38bdf8;
@@ -240,6 +238,29 @@
             color: #94a3b8;
             font-size: 0.95rem;
             line-height: 1.6;
+        }
+
+        /* Supported Devices Banner Grid */
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+        }
+        .device-badge {
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .device-badge h4 {
+            color: #38bdf8;
+            font-size: 1rem;
+            margin-bottom: 5px;
+        }
+        .device-badge p {
+            color: #94a3b8;
+            font-size: 0.88rem;
         }
 
         /* FAQ Section */
@@ -366,6 +387,29 @@
             <div class="card">
                 <h3>☁️ Secure Cloud Infrastructure</h3>
                 <p>Your entire enterprise database is stored safely in the cloud, giving you reliable access anytime from laptops, tablets, or phones.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Supported Devices Section -->
+    <section>
+        <h2>Optimized For Your Equipment</h2>
+        <div class="devices-grid">
+            <div class="device-badge">
+                <h4>📱 Smartphones</h4>
+                <p>Run your entire store right from your mobile device.</p>
+            </div>
+            <div class="device-badge">
+                <h4>タブ Tablets / iPads</h4>
+                <p>Perfect screen layout for counter checkouts.</p>
+            </div>
+            <div class="device-badge">
+                <h4>💻 Laptops & PCs</h4>
+                <p>Full management view for deep enterprise control.</p>
+            </div>
+            <div class="device-badge">
+                <h4>🖨️ Thermal Printers</h4>
+                <p>Seamless receipt printing for quick customer service.</p>
             </div>
         </div>
     </section>
