@@ -111,9 +111,27 @@
         .hero p {
             font-size: 1.05rem;
             color: #94a3b8;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             max-width: 700px;
         }
+
+        /* Activation Notice Box */
+        .activation-notice {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid #38bdf8;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            max-width: 600px;
+            width: 100%;
+            color: #e2e8f0;
+            font-size: 0.95rem;
+        }
+        .activation-notice span {
+            color: #38bdf8;
+            font-weight: bold;
+        }
+
         .hero-cta {
             display: flex;
             justify-content: center;
@@ -201,9 +219,14 @@
         <h1>Run Your Enterprise Smarter with <span>Wise Decision POS</span></h1>
         <p>The ultimate cloud enterprise and point-of-sale solution built to track multi-branch inventories, manage staff roles, process lightning-fast sales, and print thermal receipts seamlessly.</p>
         
+        <!-- Activation Code Notice Box -->
+        <div class="activation-notice">
+            ⚠️ <span>Note:</span> You need an <span>Activation Code</span> first before you can successfully register your business. Click below to request yours instantly on WhatsApp!
+        </div>
+
         <div class="hero-cta">
-            <a href="app.html?action=register" class="btn-register">Register Your Business</a>
-            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS." target="_blank" class="btn-whatsapp">💬 Get Activation Code</a>
+            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20to%20register%20my%20business%20on%20Wise%20Decision%20POS." target="_blank" class="btn-whatsapp">💬 Get Activation Code on WhatsApp</a>
+            <a href="app.html?action=register" class="btn-register">Register Business</a>
             <a href="app.html" class="btn-login">Access Store Portal</a>
         </div>
     </section>
