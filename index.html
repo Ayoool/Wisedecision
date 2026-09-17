@@ -102,7 +102,7 @@
             border: none;
             cursor: pointer;
             width: 100%;
-            max-width: 280px;
+            max-width: 300px;
             text-align: center;
         }
         .btn-whatsapp:hover {
@@ -173,19 +173,52 @@
             text-align: center;
         }
 
-        /* Features Section */
-        .features {
+        /* Common Section Styling */
+        section {
             padding: 50px 5%;
             max-width: 1300px;
             margin: 0 auto;
         }
-        .features h2 {
+        section h2 {
             text-align: center;
             font-size: 1.8rem;
             margin-bottom: 35px;
             color: #fff;
             font-weight: 800;
         }
+
+        /* How It Works Steps Grid */
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .step-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            padding: 30px 25px;
+            border-radius: 12px;
+            border: 1px solid #334155;
+            position: relative;
+            text-align: left;
+        }
+        .step-number {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #38bdf8;
+            opacity: 0.4;
+            margin-bottom: 10px;
+        }
+        .step-card h3 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        .step-card p {
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+
+        /* Features Section */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -208,6 +241,30 @@
             font-size: 0.95rem;
             line-height: 1.6;
         }
+
+        /* FAQ Section */
+        .faq-container {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .faq-item {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+        .faq-item h4 {
+            color: #38bdf8;
+            font-size: 1.05rem;
+            margin-bottom: 8px;
+        }
+        .faq-item p {
+            color: #94a3b8;
+            font-size: 0.92rem;
+        }
         
         footer {
             text-align: center;
@@ -224,7 +281,7 @@
             .hero { padding: 90px 8% 60px; }
             .hero h1 { font-size: 3rem; }
             .hero-cta a, .btn-whatsapp { width: auto; }
-            .features h2 { font-size: 2.2rem; }
+            section h2 { font-size: 2.2rem; }
             .logo { font-size: 1.4rem; }
             .logo .big-w { font-size: 2rem; }
             .nav-buttons a { padding: 10px 20px; font-size: 0.95rem; }
@@ -260,7 +317,30 @@
         </div>
     </section>
 
-    <section class="features">
+    <!-- How It Works Section -->
+    <section>
+        <h2>How to Get Started</h2>
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-number">01</div>
+                <h3>Request Activation Code</h3>
+                <p>Click our WhatsApp button to chat directly with management and receive your secure business activation code.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">02</div>
+                <h3>Register Your Store</h3>
+                <p>Go to the registration portal, input your unique code, set up your store profile, and create your secure admin PIN.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">03</div>
+                <h3>Scale Your Business</h3>
+                <p>Start recording fast sales, managing inventory levels across branches, and printing thermal receipts instantly.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section>
         <h2>Why Growing Businesses Choose Us</h2>
         <div class="grid">
             <div class="card">
@@ -286,6 +366,29 @@
             <div class="card">
                 <h3>☁️ Secure Cloud Infrastructure</h3>
                 <p>Your entire enterprise database is stored safely in the cloud, giving you reliable access anytime from laptops, tablets, or phones.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section>
+        <h2>Frequently Asked Questions</h2>
+        <div class="faq-container">
+            <div class="faq-item">
+                <h4>What do I need to register my business?</h4>
+                <p>You will need an official Activation Code provided by management. Simply message us on WhatsApp using the button above to acquire yours.</p>
+            </div>
+            <div class="faq-item">
+                <h4>Can I access Wise Decision POS on my phone or tablet?</h4>
+                <p>Yes! Our cloud architecture is fully responsive and optimized to run seamlessly across smartphones, tablets, and desktop browsers.</p>
+            </div>
+            <div class="faq-item">
+                <h4>Does the system support thermal receipt printers?</h4>
+                <p>Yes, Wise Decision POS is built with direct thermal receipt printing compatibility to handle high-volume retail transactions effortlessly.</p>
+            </div>
+            <div class="faq-item">
+                <h4>Can I manage more than one store branch?</h4>
+                <p>Absolutely. You can monitor and track inventory, sales, and overall performance across multiple branches from a single unified cloud account.</p>
             </div>
         </div>
     </section>
