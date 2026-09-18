@@ -1,503 +1,598 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wise Decision - Cloud Enterprise & POS Portal</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #f0fdf4;
-            --card-bg: #ffffff;
-            --text: #0f172a;
-            --text-muted: #475569;
-            --accent: #0284c7;
-            --accent-hover: #0369a1;
-            --border: #bbf7d0;
-            --radius: 12px;
-        }
+<!-- HEADER -->
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-        }
+<header>
 
-        body {
-            background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
-            color: var(--text);
-            line-height: 1.6;
-            min-height: 100vh;
-        }
+    <div class="logo-container">
 
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 5%;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            flex-wrap: wrap;
-            gap: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-        }
-
-        .logo-container {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .logo {
-            font-size: 1.2rem;
-            font-weight: 800;
-            color: var(--accent);
-            letter-spacing: 0.5px;
-            display: flex;
-            align-items: baseline;
-        }
-
-        .logo .big-w {
-            font-size: 1.7rem;
-            line-height: 1;
-            color: var(--text);
-        }
-
-        .ceo-tag {
-            font-size: 0.68rem;
-            color: var(--text-muted);
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            font-weight: 600;
-            margin-top: 2px;
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        .nav-buttons a {
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            white-space: nowrap;
-        }
-
-        .btn-login {
-            color: var(--accent);
-            border: 1px solid var(--accent);
-            background: #e0f2fe;
-        }
-
-        .btn-login:hover {
-            background: #bae6fd;
-        }
-
-        .btn-register {
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-            color: #fff;
-        }
-
-        .btn-register:hover {
-            background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
-        }
-
-        .btn-whatsapp {
-            background: #16a34a;
-            color: #fff;
-            padding: 12px 24px;
-            border-radius: var(--radius);
-            font-weight: bold;
-            text-decoration: none;
-            font-size: 0.95rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: background 0.2s, transform 0.2s;
-            border: none;
-            cursor: pointer;
-            width: 100%;
-            max-width: 320px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.2);
-        }
-
-        .btn-whatsapp:hover {
-            background: #15803d;
-            transform: translateY(-2px);
-        }
-        
-        /* Hero Section */
-        .hero {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-align: center;
-            padding: 60px 20px 40px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .hero h1 {
-            font-size: 2.2rem;
-            margin-bottom: 20px;
-            color: var(--text);
-            line-height: 1.2;
-            font-weight: 800;
-        }
-
-        .hero h1 span {
-            color: var(--accent);
-        }
-
-        .hero p {
-            font-size: 1.05rem;
-            color: var(--text-muted);
-            margin-bottom: 25px;
-            max-width: 700px;
-        }
-
-        .activation-notice {
-            background: #e0f2fe;
-            border: 1px solid #bae6fd;
-            padding: 15px 20px;
-            border-radius: var(--radius);
-            margin-bottom: 25px;
-            max-width: 600px;
-            width: 100%;
-            color: var(--text);
-            font-size: 0.95rem;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-        }
-
-        .activation-notice span {
-            color: var(--accent);
-            font-weight: bold;
-        }
-
-        .hero-cta {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            flex-wrap: wrap;
-            width: 100%;
-        }
-
-        .hero-cta a {
-            padding: 12px 24px;
-            border-radius: var(--radius);
-            font-weight: bold;
-            text-decoration: none;
-            font-size: 0.95rem;
-            width: 100%;
-            max-width: 280px;
-            text-align: center;
-        }
-
-        /* Common Section Styling */
-        section {
-            padding: 50px 5%;
-            max-width: 1300px;
-            margin: 0 auto;
-        }
-
-        section h2 {
-            text-align: center;
-            font-size: 1.8rem;
-            margin-bottom: 35px;
-            color: var(--text);
-            font-weight: 800;
-        }
-
-        /* How It Works Steps Grid */
-        .steps-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .step-card {
-            background: var(--card-bg);
-            padding: 30px 25px;
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            position: relative;
-            text-align: left;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-        }
-
-        .step-number {
-            font-size: 2rem;
-            font-weight: 800;
-            color: var(--accent);
-            opacity: 0.4;
-            margin-bottom: 10px;
-        }
-
-        .step-card h3 {
-            color: var(--text);
-            margin-bottom: 10px;
-            font-size: 1.2rem;
-        }
-
-        .step-card p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-        }
-
-        /* Features Section Grid */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            padding: 25px;
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-        }
-
-        .card h3 {
-            margin-bottom: 12px;
-            color: var(--accent);
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-
-        .card p {
-            color: var(--text-muted);
-            font-size: 0.95rem;
-            line-height: 1.6;
-        }
-
-        /* Supported Devices Grid */
-        .devices-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 15px;
-        }
-
-        .device-badge {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            padding: 20px;
-            border-radius: var(--radius);
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-        }
-
-        .device-badge h4 {
-            color: var(--accent);
-            font-size: 1rem;
-            margin-bottom: 5px;
-        }
-
-        .device-badge p {
-            color: var(--text-muted);
-            font-size: 0.88rem;
-        }
-
-        /* FAQ Section */
-        .faq-container {
-            max-width: 800px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .faq-item {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: var(--radius);
-            border: 1px solid var(--border);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-        }
-
-        .faq-item h4 {
-            color: var(--accent);
-            font-size: 1.05rem;
-            margin-bottom: 8px;
-        }
-
-        .faq-item p {
-            color: var(--text-muted);
-            font-size: 0.92rem;
-        }
-        
-        footer {
-            text-align: center;
-            padding: 40px 20px;
-            background: #ffffff;
-            color: var(--text-muted);
-            border-top: 1px solid var(--border);
-            margin-top: 50px;
-            font-size: 0.9rem;
-        }
-
-        @media (min-width: 768px) {
-            .hero { padding: 90px 8% 60px; }
-            .hero h1 { font-size: 3rem; }
-            .hero-cta a, .btn-whatsapp { width: auto; }
-            section h2 { font-size: 2.2rem; }
-            .logo { font-size: 1.4rem; }
-            .logo .big-w { font-size: 2rem; }
-            .nav-buttons a { padding: 10px 20px; font-size: 0.95rem; }
-        }
-    </style>
-</head>
-<body>
-
-    <header>
-        <div class="logo-container">
-            <div class="logo"><span class="big-w">W</span>ISE DECISION</div>
-            <div class="ceo-tag">LET YOUR NEXT BUSINESS MOVE BE A WISE DECISION</div>
-        </div>
-        <div class="nav-buttons">
-            <a href="app.html" class="btn-login">Login</a>
-            <a href="app.html?action=register" class="btn-register">Get Started</a>
-        </div>
-    </header>
-
-    <section class="hero">
-        <h1>Run Your Enterprise Smarter with <span>Wise Decision POS</span></h1>
-        <p>The ultimate cloud enterprise and point-of-sale solution built to track multi-branch inventories, manage staff roles, process lightning-fast sales, and print thermal receipts seamlessly.</p>
-        
-        <div class="activation-notice">
-            ⚠️ <span>Note:</span> You need an <span>Activation Code</span> first before you can successfully register your business. Click below to request yours instantly on WhatsApp!
+        <div class="logo">
+            <span class="big-w">W</span>ISE DECISION
         </div>
 
-        <div class="hero-cta">
-            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20to%20register%20my%20business%20on%20Wise%20Decision%20POS." target="_blank" class="btn-whatsapp">💬 Get Activation Code on WhatsApp</a>
-            <a href="app.html?action=register" class="btn-register">Register Business</a>
-            <a href="app.html" class="btn-login">Access Store Portal</a>
+        <div class="ceo-tag">
+            LET YOUR NEXT BUSINESS MOVE BE A WISE DECISION
         </div>
-    </section>
 
-    <!-- How It Works Section -->
-    <section>
-        <h2>How to Get Started</h2>
-        <div class="steps-grid">
-            <div class="step-card">
-                <div class="step-number">01</div>
-                <h3>Request Activation Code</h3>
-                <p>Click our WhatsApp button to chat directly with management and receive your secure business activation code.</p>
-            </div>
-            <div class="step-card">
-                <div class="step-number">02</div>
-                <h3>Register Your Store</h3>
-                <p>Go to the registration portal, input your unique code, set up your store profile, and create your secure admin PIN.</p>
-            </div>
-            <div class="step-card">
-                <div class="step-number">03</div>
-                <h3>Scale Your Business</h3>
-                <p>Start recording fast sales, managing inventory levels across branches, and printing thermal receipts instantly.</p>
-            </div>
+    </div>
+
+    <div class="nav-buttons">
+
+        <a href="app.html" class="btn-login">
+            Login
+        </a>
+
+        <a href="app.html?action=register" class="btn-register">
+            Get Started
+        </a>
+
+    </div>
+
+</header>
+
+
+<!-- HERO -->
+
+<section class="hero">
+
+    <div class="hero-badge">
+        🇳🇬 Cloud Business Management Software for Nigeria
+    </div>
+
+    <h1>
+        Run Your Enterprise Smarter with
+        <span>Wise Decision POS</span>
+    </h1>
+
+    <p>
+        A cloud enterprise and point-of-sale solution built to help businesses
+        manage sales, inventory, staff, suppliers, expenses, multiple branches
+        and thermal receipts from one platform.
+    </p>
+
+    <div class="activation-notice">
+
+        ⚠️ <span>Note:</span>
+        You need an <span>Activation Code</span> before you can successfully
+        register your business. Click below to request yours instantly on WhatsApp.
+
+    </div>
+
+    <div class="hero-cta">
+
+        <a
+            href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20to%20register%20my%20business%20on%20Wise%20Decision%20POS."
+            target="_blank"
+            rel="noopener"
+            class="btn-whatsapp">
+
+            💬 Get Activation Code on WhatsApp
+
+        </a>
+
+        <a
+            href="app.html?action=register"
+            class="btn-register">
+
+            Register Business
+
+        </a>
+
+        <a
+            href="app.html"
+            class="btn-login">
+
+            Access Store Portal
+
+        </a>
+
+    </div>
+
+</section>
+
+
+<!-- HOW IT WORKS -->
+
+<section>
+
+    <h2>How to Get Started</h2>
+
+    <p class="section-description">
+        Start using Wise Decision POS with a simple three-step registration process.
+    </p>
+
+    <div class="steps-grid">
+
+        <div class="step-card">
+
+            <div class="step-number">01</div>
+
+            <h3>
+                Request Activation Code
+            </h3>
+
+            <p>
+                Click our WhatsApp button to chat directly with management
+                and receive your business activation code.
+            </p>
+
         </div>
-    </section>
 
-    <!-- Features Section -->
-    <section>
-        <h2>Why Growing Businesses Choose Us</h2>
-        <div class="grid">
-            <div class="card">
-                <h3>📦 Multi-Branch Tracking</h3>
-                <p>Monitor real-time stock levels, sales velocity, and overall business performance across multiple store branches from one centralized cloud dashboard.</p>
-            </div>
-            <div class="card">
-                <h3>🖨️ Thermal Receipt Printing</h3>
-                <p>Generate clean, professional receipts for your customers instantly with built-in thermal printer hardware compatibility.</p>
-            </div>
-            <div class="card">
-                <h3>👥 Role-Based Staff Access</h3>
-                <p>Assign secure Admin or Staff PIN codes, protect sensitive cash drawer figures, and keep accurate records of individual employee performance.</p>
-            </div>
-            <div class="card">
-                <h3>🔄 Easy Sales Returns</h3>
-                <p>Quickly process customer refunds, manage product exchanges, and automatically sync your live inventory logs without discrepancies.</p>
-            </div>
-            <div class="card">
-                <h3>📊 Supplier & Stock Tracking</h3>
-                <p>Keep detailed records of incoming supplies and vendor histories so you never run out of your fast-moving items.</p>
-            </div>
-            <div class="card">
-                <h3>☁️ Secure Cloud Infrastructure</h3>
-                <p>Your entire enterprise database is stored safely in the cloud, giving you reliable access anytime from laptops, tablets, or phones.</p>
-            </div>
+
+        <div class="step-card">
+
+            <div class="step-number">02</div>
+
+            <h3>
+                Register Your Store
+            </h3>
+
+            <p>
+                Enter your unique activation code, set up your store profile
+                and create your secure administrator access.
+            </p>
+
         </div>
-    </section>
 
-    <!-- Supported Devices Section -->
-    <section>
-        <h2>Optimized For Your Equipment</h2>
-        <div class="devices-grid">
-            <div class="device-badge">
-                <h4>📱 Smartphones</h4>
-                <p>Run your entire store right from your mobile device.</p>
-            </div>
-            <div class="device-badge">
-                <h4>🖥️ Tablets / iPads</h4>
-                <p>Perfect screen layout for counter checkouts.</p>
-            </div>
-            <div class="device-badge">
-                <h4>💻 Laptops & PCs</h4>
-                <p>Full management view for deep enterprise control.</p>
-            </div>
-            <div class="device-badge">
-                <h4>🖨️ Thermal Printers</h4>
-                <p>Seamless receipt printing for quick customer service.</p>
-            </div>
+
+        <div class="step-card">
+
+            <div class="step-number">03</div>
+
+            <h3>
+                Manage Your Business
+            </h3>
+
+            <p>
+                Start recording sales, managing inventory, tracking suppliers,
+                monitoring branches and printing thermal receipts.
+            </p>
+
         </div>
-    </section>
 
-    <!-- FAQ Section -->
-    <section>
-        <h2>Frequently Asked Questions</h2>
-        <div class="faq-container">
-            <div class="faq-item">
-                <h4>What do I need to register my business?</h4>
-                <p>You will need an official Activation Code provided by management. Simply message us on WhatsApp using the button above to acquire yours.</p>
-            </div>
-            <div class="faq-item">
-                <h4>Can I access Wise Decision POS on my phone or tablet?</h4>
-                <p>Yes! Our cloud architecture is fully responsive and optimized to run seamlessly across smartphones, tablets, and desktop browsers.</p>
-            </div>
-            <div class="faq-item">
-                <h4>Does the system support thermal receipt printers?</h4>
-                <p>Yes, Wise Decision POS is built with direct thermal receipt printing compatibility to handle high-volume retail transactions effortlessly.</p>
-            </div>
-            <div class="faq-item">
-                <h4>Can I manage more than one store branch?</h4>
-                <p>Absolutely. You can monitor and track inventory, sales, and overall performance across multiple branches from a single unified cloud account.</p>
-            </div>
+    </div>
+
+</section>
+
+
+<!-- FEATURES -->
+
+<section>
+
+    <h2>
+        Wise Decision POS Features
+    </h2>
+
+    <p class="section-description">
+        Business management tools designed to help you organize your everyday
+        operations from one platform.
+    </p>
+
+    <div class="grid">
+
+        <div class="card">
+
+            <h3>
+                📦 Multi-Branch Tracking
+            </h3>
+
+            <p>
+                Monitor real-time stock levels, sales activity and overall
+                business performance across multiple store branches from
+                one centralized cloud dashboard.
+            </p>
+
         </div>
-    </section>
 
-   About the Founder
 
-Emmanuel Ayoola Fisuyi is the founder of Wise Decision, a Nigerian software brand focused on business management and point-of-sale solutions.
+        <div class="card">
 
-Through Wise Decision, he develops practical digital tools designed to help businesses manage sales, inventory, customers, expenses, suppliers, staff, and day-to-day operations from one platform.
+            <h3>
+                🖨️ Thermal Receipt Printing
+            </h3>
 
-Wise Decision POS is built for businesses in Nigeria looking for a simple and reliable way to manage their business digitally.
+            <p>
+                Generate clean, professional receipts for your customers
+                with compatible thermal receipt printers.
+            </p>
 
-Let your next business move be a wise decision.
-    <footer>
-        &copy; 2026 Wise Decision. All rights reserved.Built by Wise Decision Whatsapp:09168140710
-    </footer>
+        </div>
 
-</body>
-</html>
+
+        <div class="card">
+
+            <h3>
+                👥 Role-Based Staff Access
+            </h3>
+
+            <p>
+                Assign controlled Admin and Staff access to help protect
+                sensitive business information and manage employee activity.
+            </p>
+
+        </div>
+
+
+        <div class="card">
+
+            <h3>
+                🔄 Easy Sales Returns
+            </h3>
+
+            <p>
+                Process customer refunds and product returns while keeping
+                sales and inventory records organized.
+            </p>
+
+        </div>
+
+
+        <div class="card">
+
+            <h3>
+                📊 Supplier & Stock Tracking
+            </h3>
+
+            <p>
+                Keep records of incoming supplies, supplier information
+                and product quantities so your inventory stays organized.
+            </p>
+
+        </div>
+
+
+        <div class="card">
+
+            <h3>
+                ☁️ Cloud Business Management
+            </h3>
+
+            <p>
+                Access your business management system through supported
+                web browsers on phones, tablets, laptops and PCs.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- BUSINESS TYPES -->
+
+<section>
+
+    <h2>
+        Businesses That Can Use Wise Decision POS
+    </h2>
+
+    <p class="section-description">
+        Wise Decision POS can be used by businesses that need organized
+        sales, inventory and day-to-day business management.
+    </p>
+
+    <div class="business-grid">
+
+        <div class="business-card">
+
+            <h3>
+                💊 Pharmacies
+            </h3>
+
+            <p>
+                Manage products, sales and inventory from one business system.
+            </p>
+
+        </div>
+
+
+        <div class="business-card">
+
+            <h3>
+                🛒 Retail Stores
+            </h3>
+
+            <p>
+                Record everyday transactions and monitor store inventory.
+            </p>
+
+        </div>
+
+
+        <div class="business-card">
+
+            <h3>
+                🍾 Beverage & Wine Stores
+            </h3>
+
+            <p>
+                Track products, sales, stock quantities and transactions.
+            </p>
+
+        </div>
+
+
+        <div class="business-card">
+
+            <h3>
+                🏪 Supermarkets
+            </h3>
+
+            <p>
+                Organize products, sales and inventory for everyday operations.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- DEVICES -->
+
+<section>
+
+    <h2>
+        Optimized For Your Equipment
+    </h2>
+
+    <p class="section-description">
+        Use Wise Decision POS across supported devices and business equipment.
+    </p>
+
+    <div class="devices-grid">
+
+        <div class="device-badge">
+
+            <h4>
+                📱 Smartphones
+            </h4>
+
+            <p>
+                Run your store through a supported mobile browser.
+            </p>
+
+        </div>
+
+
+        <div class="device-badge">
+
+            <h4>
+                🖥️ Tablets / iPads
+            </h4>
+
+            <p>
+                Convenient layout for counter and store operations.
+            </p>
+
+        </div>
+
+
+        <div class="device-badge">
+
+            <h4>
+                💻 Laptops & PCs
+            </h4>
+
+            <p>
+                Full management view for detailed business operations.
+            </p>
+
+        </div>
+
+
+        <div class="device-badge">
+
+            <h4>
+                🖨️ Thermal Printers
+            </h4>
+
+            <p>
+                Compatible thermal printing setups for customer receipts.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- FAQ -->
+
+<section>
+
+    <h2>
+        Frequently Asked Questions
+    </h2>
+
+    <div class="faq-container">
+
+        <div class="faq-item">
+
+            <h4>
+                What do I need to register my business?
+            </h4>
+
+            <p>
+                You will need an official Activation Code provided by
+                Wise Decision management. Use the WhatsApp button on this
+                page to request yours.
+            </p>
+
+        </div>
+
+
+        <div class="faq-item">
+
+            <h4>
+                Can I access Wise Decision POS on my phone or tablet?
+            </h4>
+
+            <p>
+                Yes. Wise Decision POS is designed to work through
+                supported web browsers on smartphones, tablets and
+                desktop computers.
+            </p>
+
+        </div>
+
+
+        <div class="faq-item">
+
+            <h4>
+                Does the system support thermal receipt printers?
+            </h4>
+
+            <p>
+                Yes. Wise Decision POS supports compatible thermal
+                receipt printing setups.
+            </p>
+
+        </div>
+
+
+        <div class="faq-item">
+
+            <h4>
+                Can I manage more than one store branch?
+            </h4>
+
+            <p>
+                Yes. Wise Decision POS includes multi-branch business
+                management functionality for supported accounts.
+            </p>
+
+        </div>
+
+
+        <div class="faq-item">
+
+            <h4>
+                What is Wise Decision POS?
+            </h4>
+
+            <p>
+                Wise Decision POS is a cloud-based point-of-sale and
+                business management system designed for businesses in Nigeria.
+            </p>
+
+        </div>
+
+
+        <div class="faq-item">
+
+            <h4>
+                Who founded Wise Decision?
+            </h4>
+
+            <p>
+                Wise Decision was founded by
+                <strong>Emmanuel Ayoola Fisuyi</strong>.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- FOUNDER -->
+
+<section>
+
+    <h2>
+        About the Founder
+    </h2>
+
+    <div class="founder-card">
+
+        <h3>
+            Emmanuel Ayoola Fisuyi
+        </h3>
+
+        <p>
+            <strong>Emmanuel Ayoola Fisuyi</strong> is the founder of
+            <strong>Wise Decision</strong>, a Nigerian software brand
+            focused on business management and point-of-sale solutions.
+        </p>
+
+        <p>
+            Through Wise Decision, he develops practical digital tools
+            designed to help businesses manage sales, inventory,
+            customers, expenses, suppliers, staff and day-to-day
+            business operations from one platform.
+        </p>
+
+        <p>
+            <strong>Wise Decision POS</strong> is designed for businesses
+            in Nigeria looking for a digital solution for managing
+            everyday sales and business operations.
+        </p>
+
+        <p class="tagline">
+            Let your next business move be a wise decision.
+        </p>
+
+    </div>
+
+</section>
+
+
+<!-- FINAL CTA -->
+
+<section class="final-cta">
+
+    <h2>
+        Ready to Manage Your Business Smarter?
+    </h2>
+
+    <p>
+        Get started with Wise Decision POS and bring your sales,
+        inventory and business management into one platform.
+    </p>
+
+    <div class="final-cta-buttons">
+
+        <a
+            href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS."
+            target="_blank"
+            rel="noopener"
+            class="btn-whatsapp">
+
+            💬 Contact Wise Decision
+
+        </a>
+
+        <a
+            href="app.html?action=register"
+            class="btn-register">
+
+            Get Started
+
+        </a>
+
+    </div>
+
+</section>
+
+
+<!-- FOOTER -->
+
+<footer>
+
+    <p>
+        &copy; 2026 <strong>Wise Decision</strong>.
+        All rights reserved.
+    </p>
+
+    <p style="margin-top: 8px;">
+        Cloud POS & Business Management Software in Nigeria
+    </p>
+
+    <p style="margin-top: 8px;">
+        WhatsApp: <strong>09168140710</strong>
+    </p>
+
+</footer>
