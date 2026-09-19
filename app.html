@@ -1676,6 +1676,12 @@
     <script src="script.js?v=20" defer></script>
     <script src="script.js?v=21" defer></script>
 <script src="perf-patch.js?v=21" defer></script>
+<script>
+window.addEventListener('load', function () {
+  var action = new URLSearchParams(location.search).get('action');
+  if (action === 'register') switchView('register-view');
+});
+</script>
 
 </body>
 </html>
