@@ -12,7 +12,7 @@
 // Billing data is stored under `billing/<storeId>` (NOT inside the store), so store
 // staff have no reason to see it, and `billingSettings` holds your bank details.
 
-console.log("Wise Decision superadmin-patch.js — v28 loaded");
+console.log("Wise Decision superadmin-patch.js — v29 loaded");
 
 function wdsDefaults() {
     return {
@@ -292,6 +292,7 @@ function wdsRenderList() {
         const locked = st.status === 'suspended';
         const color = locked ? '#475569' : ({ overdue: '#dc2626', 'due-soon': '#d97706', ok: '#16a34a', none: '#94a3b8' })[b.state];
 
+        const onTrial = !!(st.billing && st.billing.trial);
         let dueLine;
         if (b.state === 'none') dueLine = '<span style="color:#64748b;">No billing set up yet</span>';
         else if (b.state === 'overdue') dueLine = `<strong style="color:#dc2626;">${onTrial ? 'Trial ended' : 'Overdue by'} ${b.overdueBy} day${b.overdueBy === 1 ? '' : 's'}${onTrial ? ' ago' : ''}</strong> · ${onTrial ? 'trial ended' : 'was due'} ${wdsPrettyDate(st.billing.dueDate)}`;
@@ -299,7 +300,6 @@ function wdsRenderList() {
 
         const fee = st.billing ? `${wdsMoney(st.billing.monthlyFee)}/month` : '';
         const lastPaid = st.billing && st.billing.lastPaidDate ? ` · last paid ${wdsPrettyDate(st.billing.lastPaidDate)} (${wdsMoney(st.billing.lastPaidAmount)})` : '';
-        const onTrial = !!(st.billing && st.billing.trial);
         const badge = (locked ? '<span style="background:#e2e8f0; color:#334155; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">LOCKED</span> ' : '') + (onTrial ? '<span style="background:#ede9fe; color:#6d28d9; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">FREE TRIAL</span>' : '');
         const id = wdsEsc(st.id);
         const btn = (act, label, style) => `<button data-id="${id}" onclick="wdsAct('${act}', this)" style="padding:6px 10px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc; color:#334155; ${style || ''}">${label}</button>`;
