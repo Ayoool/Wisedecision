@@ -60,7 +60,7 @@ function wdsAgo(iso) {
     return `${days} days ago`;
 }
 function wdsWaNumber(phone) {
-    let p = String(phone || '').replace(/[^\d+]/g, '');
+    let p = String(String(phone || '').split(/[,;/|]/)[0] || '').replace(/[^\d+]/g, '');
     if (!p) return '';
     if (p.charAt(0) === '+') p = p.slice(1);
     else if (p.indexOf('00') === 0) p = p.slice(2);
