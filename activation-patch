@@ -11,7 +11,7 @@
 // NOTE: with the database rules still open this is enforced by the app only. It becomes
 // fully enforced by the database itself when the rules are locked (the next security step).
 
-console.log("Wise Decision activation-patch.js — v27 loaded");
+console.log("Wise Decision activation-patch.js — v28 loaded");
 
 // ---------- Helpers (pure ones are tested) ----------
 var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O/1/I so codes are easy to read out
@@ -28,6 +28,16 @@ function wdaAddDays(dateStr, n) {
 function wdaPrettyDate(iso) {
     const t = new Date(iso);
     return isNaN(t) ? '—' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function wdaWaNumber(phone) {
+    let p = String(phone || '').replace(/[^\d+]/g, '');
+    if (!p) return '';
+    if (p.charAt(0) === '+') p = p.slice(1);
+    else if (p.indexOf('00') === 0) p = p.slice(2);
+    else if (p.charAt(0) === '0') p = '234' + p.slice(1);
+    else if (/^\d{10}$/.test(p)) p = '234' + p;
+    return p;
 }
 
 function wdaGenerateCode() {
@@ -335,7 +345,7 @@ function wdaCopyCode() {
 function wdaSendCode() {
     if (!wdaLastGenerated) return;
     const g = wdaLastGenerated;
-    const number = (typeof wdsWaNumber === 'function') ? wdsWaNumber(g.phone) : String(g.phone || '').replace(/\D/g, '');
+    const number = wdaWaNumber(g.phone);
     window.open(`https://wa.me/${number}?text=${encodeURIComponent(wdaCodeMessage(g))}`, '_blank');
 }
 
