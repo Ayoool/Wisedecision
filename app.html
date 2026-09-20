@@ -1677,7 +1677,6 @@
     <script src="perf-patch.js?v=23" defer></script>
     <script src="bugfix-patch.js?v=23" defer></script>
     <script src="offline-patch.js?v=23" defer></script>
-    <script src="offline-patch.js?v=23" defer></script>
     <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
@@ -1685,6 +1684,37 @@
       if (action === 'register') switchView('register-view');
     });
     </script>
+    <script>
+window.addEventListener('load', function () {
+  var origSave = window.saveProduct;
+  function norm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+
+  window.saveProduct = function () {
+    var editId = document.getElementById('edit-product-id').value;
+    if (editId) return origSave.apply(this, arguments);      // editing is never blocked
+
+    var name = norm(document.getElementById('inv-name').value);
+    var branch = currentInventoryBranchFilter;
+    if (!name || branch === 'all') return origSave.apply(this, arguments);
+
+    var items = inventoryCache[branch] || {};
+    var foundId = null;
+    Object.keys(items).forEach(function (id) {
+      var it = items[id] || {};
+      if (norm(it.name || it.productName) === name) foundId = id;
+    });
+
+    if (foundId) {
+      var found = items[foundId];
+      if (confirm('You already have "' + (found.name || found.productName) + '" in ' + branchNameOf(branch) + ' (stock: ' + formatStockLabel(found) + ').\n\nTap OK to open it and edit it, or Cancel to change the name.')) {
+        editProduct(branch, foundId);
+      }
+      return;
+    }
+    return origSave.apply(this, arguments);
+  };
+});
+</script>
 
 </body>
 </html>
