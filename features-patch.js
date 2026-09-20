@@ -49,7 +49,7 @@ function wdfUnitLabel(u) { return u === 'Piece' ? 'pc' : ((u === 'Kg' || u === '
 
 // Nigerian-friendly WhatsApp number: 0801… -> 234801…, +234… -> 234…
 function wdfWaNumber(phone) {
-    let p = String(phone || '').replace(/[^\d+]/g, '');
+    let p = String(String(phone || '').split(/[,;/|]/)[0] || '').replace(/[^\d+]/g, '');
     if (!p) return '';
     if (p.charAt(0) === '+') p = p.slice(1);
     else if (p.indexOf('00') === 0) p = p.slice(2);
