@@ -1,4 +1,4 @@
-e// ==================== WISE DECISION SUPER ADMIN PATCH (v26) ====================
+// ==================== WISE DECISION SUPER ADMIN PATCH (v26) ====================
 // Load LAST (after script.js and the other patches), with `defer`.
 //
 // Replaces the Super Admin store list with a subscription dashboard:
@@ -12,23 +12,25 @@ e// ==================== WISE DECISION SUPER ADMIN PATCH (v26) =================
 // Billing data is stored under `billing/<storeId>` (NOT inside the store), so store
 // staff have no reason to see it, and `billingSettings` holds your bank details.
 
-console.log("Wise Decision superadmin-patch.js — v27 loaded");
+console.log("Wise Decision superadmin-patch.js — v28 loaded");
 
-const WDS_DEFAULT_SETTINGS = {
-    bankName: 'MONIEPOINT',
-    accountNumber: '9168140710',
-    accountName: 'EMMANUEL AYOOOLA FISUYI',
-    defaultFee: 0,
-    graceDays: 3,
-    dueSoonDays: 7
-};
+function wdsDefaults() {
+    return {
+        bankName: 'MONIEPOINT',
+        accountNumber: '9168140710',
+        accountName: 'EMMANUEL AYOOLA FISUYI',
+        defaultFee: 0,
+        graceDays: 3,
+        dueSoonDays: 7
+    };
+}
 
 // ---------- State ----------
-let wdsStores = [];
-let wdsSettings = Object.assign({}, WDS_DEFAULT_SETTINGS);
-let wdsFilter = 'all';
-let wdsSearch = '';
-let wdsModalStoreId = null;
+var wdsStores = [];
+var wdsSettings = wdsDefaults();
+var wdsFilter = 'all';
+var wdsSearch = '';
+var wdsModalStoreId = null;
 
 // ---------- Helpers ----------
 function wdsNum(n) { return Number(n) || 0; }
@@ -215,7 +217,7 @@ async function wdsReload() {
             firebase.database().ref('billing').once('value'),
             firebase.database().ref('billingSettings').once('value')
         ]);
-        wdsSettings = Object.assign({}, WDS_DEFAULT_SETTINGS, settingsSnap.val() || {});
+        wdsSettings = Object.assign(wdsDefaults(), settingsSnap.val() || {});
         const billing = billingSnap.val() || {};
 
         wdsStores = await Promise.all(ids.map(async id => {
@@ -243,6 +245,7 @@ function wdsMatchesFilter(st, b) {
 }
 
 function wdsRender() {
+    if (!wdsSettings) wdsSettings = wdsDefaults();
     const today = wdsTodayStr();
     const sum = wdsSummarize(wdsStores, today, wdsSettings);
 
@@ -267,6 +270,7 @@ function wdsRender() {
 }
 
 function wdsRenderList() {
+    if (!wdsSettings) wdsSettings = wdsDefaults();
     const list = document.getElementById('wds-list');
     if (!list) return;
     const today = wdsTodayStr();
@@ -553,7 +557,7 @@ async function wdsSaveSettings() {
     if (!settings.bankName || !settings.accountNumber || !settings.accountName) { alert("Bank name, account number and account name are needed for the reminder messages."); return; }
     try {
         await firebase.database().ref('billingSettings').set(settings);
-        wdsSettings = Object.assign({}, WDS_DEFAULT_SETTINGS, settings);
+        wdsSettings = Object.assign(wdsDefaults(), settings);
         wdsCloseModal();
         wdsRender();
     } catch (e) { alert("Failed to save: " + e.message); }
