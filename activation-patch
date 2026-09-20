@@ -11,7 +11,7 @@
 // NOTE: with the database rules still open this is enforced by the app only. It becomes
 // fully enforced by the database itself when the rules are locked (the next security step).
 
-console.log("Wise Decision activation-patch.js — v28 loaded");
+console.log("Wise Decision activation-patch.js — v29 loaded");
 
 // ---------- Helpers (pure ones are tested) ----------
 var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O/1/I so codes are easy to read out
@@ -31,7 +31,7 @@ function wdaPrettyDate(iso) {
 }
 
 function wdaWaNumber(phone) {
-    let p = String(phone || '').replace(/[^\d+]/g, '');
+    let p = String(String(phone || '').split(/[,;/|]/)[0] || '').replace(/[^\d+]/g, '');
     if (!p) return '';
     if (p.charAt(0) === '+') p = p.slice(1);
     else if (p.indexOf('00') === 0) p = p.slice(2);
@@ -361,28 +361,34 @@ async function wdaDeleteCode(hash) {
     try { await firebase.database().ref(`activationCodes/${hash}`).remove(); wdaOpenCodes(); } catch (e) { alert("Failed: " + e.message); }
 }
 
-// Button in the Super Admin header
-(function addCodesButton() {
-    const prev = window.loadSuperAdminDashboard;
-    window.loadSuperAdminDashboard = function () {
-        const r = typeof prev === 'function' ? prev.apply(this, arguments) : undefined;
-        try {
-            if (!document.getElementById('wda-open-btn')) {
-                const anchor = document.querySelector('#super-admin-view button[onclick="changeSuperAdminMasterPin()"]');
-                if (anchor && anchor.parentElement) {
-                    const b = document.createElement('button');
-                    b.id = 'wda-open-btn';
-                    b.className = 'menu-btn';
-                    b.style.cssText = 'width:auto; margin:0; background:#7c3aed; color:#fff;';
-                    b.textContent = '🎟 Activation codes';
-                    b.onclick = wdaOpenCodes;
-                    anchor.parentElement.insertBefore(b, anchor);
-                }
-            }
-        } catch (e) { console.warn(e); }
-        return r;
-    };
-})();
+// Button in the Super Admin header. Added by a small timer that keeps checking, so it appears
+// no matter which order the script files load in (and after every refresh of the dashboard).
+function wdaAttach() {
+    if (currentUserRole !== 'SuperAdmin') return;
+    if (!document.getElementById('wda-open-btn')) {
+        const anchor = document.querySelector('#super-admin-view button[onclick="changeSuperAdminMasterPin()"]');
+        if (anchor && anchor.parentElement) {
+            const b = document.createElement('button');
+            b.id = 'wda-open-btn';
+            b.className = 'menu-btn';
+            b.style.cssText = 'width:auto; margin:0; background:#7c3aed; color:#fff;';
+            b.textContent = '🎟 Activation codes';
+            b.onclick = wdaOpenCodes;
+            anchor.parentElement.insertBefore(b, anchor);
+        }
+    }
+    // Trial sync piggybacks on the Super Admin list reload (wrapped once)
+    if (typeof window.wdsReload === 'function' && !window.wdsReload.__wdaWrapped) {
+        const prev = window.wdsReload;
+        const wrapped = async function () {
+            try { await wdaSyncTrials(); } catch (e) { console.warn("Trial sync skipped:", e.message); }
+            return prev.apply(this, arguments);
+        };
+        wrapped.__wdaWrapped = true;
+        window.wdsReload = wrapped;
+    }
+}
+setInterval(function () { try { wdaAttach(); } catch (e) { console.warn(e); } }, 1200);
 
 // Keep trials in step: any used code whose store has no billing yet gets one (runs when the Super Admin list reloads)
 var wdaLastTrialSync = 0;
@@ -395,12 +401,3 @@ async function wdaSyncTrials() {
     await firebase.database().ref().update(updates);
     return true;
 }
-
-(function hookReload() {
-    const prev = window.wdsReload;
-    if (typeof prev !== 'function') return;
-    window.wdsReload = async function () {
-        try { await wdaSyncTrials(); } catch (e) { console.warn("Trial sync skipped:", e.message); }
-        return prev.apply(this, arguments);
-    };
-})();
