@@ -1719,6 +1719,23 @@ window.addEventListener('load', function () {
   };
 });
 </script>
+<script>
+window.addEventListener('load', function () {
+  var origAdd = window.addToCart;
+  window.addToCart = function () {
+    var before = currentCart.length;
+    var result = origAdd.apply(this, arguments);
+    if (currentCart.length > before) {           // only when the item really went into the cart
+      var search = document.getElementById('pos-search-input');
+      if (search && search.value) { search.value = ''; if (typeof filterPosInventory === 'function') filterPosInventory(); }
+      var sel = document.getElementById('pos-product-select'); if (sel) sel.value = '';
+      var qty = document.getElementById('pos-qty'); if (qty) qty.value = 1;
+      if (typeof onPosProductChange === 'function') onPosProductChange();
+    }
+    return result;
+  };
+});
+</script>
 
 </body>
 </html>
