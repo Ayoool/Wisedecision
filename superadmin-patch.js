@@ -12,7 +12,7 @@
 // Billing data is stored under `billing/<storeId>` (NOT inside the store), so store
 // staff have no reason to see it, and `billingSettings` holds your bank details.
 
-console.log("Wise Decision superadmin-patch.js — v29 loaded");
+console.log("Wise Decision superadmin-patch.js — v30 loaded");
 
 function wdsDefaults() {
     return {
@@ -27,6 +27,7 @@ function wdsDefaults() {
 
 // ---------- State ----------
 var wdsStores = [];
+var wdsBinned = [];     // stores moved to the Bin (kept for 30 days)
 var wdsSettings = wdsDefaults();
 var wdsFilter = 'all';
 var wdsSearch = '';
@@ -197,6 +198,7 @@ function wdsEnsureLayout() {
             <button class="menu-btn" style="width:auto; margin:0; padding:8px 12px; font-size:12px; background:#fffbeb; border:1px solid #fde68a; color:#92400e;" onclick="wdsOpenReminders()">📢 Reminders</button>
             <button class="menu-btn" style="width:auto; margin:0; padding:8px 12px; font-size:12px; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdsOpenSettings()">⚙ Billing settings</button>
         </div>
+        <div id="wds-extra-toolbar" style="display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px 0;"></div>
         <div id="wds-chips" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;"></div>
         <div id="wds-list"></div>`;
 }
@@ -220,11 +222,13 @@ async function wdsReload() {
         wdsSettings = Object.assign(wdsDefaults(), settingsSnap.val() || {});
         const billing = billingSnap.val() || {};
 
-        wdsStores = await Promise.all(ids.map(async id => {
+        const all = await Promise.all(ids.map(async id => {
             const ref = firebase.database().ref('stores/' + id);
-            const [n, p, s, c, l] = await Promise.all(['businessName', 'phone', 'status', 'createdAt', 'lastActiveAt'].map(f => ref.child(f).once('value')));
-            return { id, name: n.val() || '', phone: p.val() || '', status: s.val() || 'active', createdAt: c.val(), lastActiveAt: l.val(), billing: billing[id] || null };
+            const [n, p, s, c, l, bAt, bBy, bPrev] = await Promise.all(['businessName', 'phone', 'status', 'createdAt', 'lastActiveAt', 'binnedAt', 'binnedBy', 'statusBeforeBin'].map(f => ref.child(f).once('value')));
+            return { id, name: n.val() || '', phone: p.val() || '', status: s.val() || 'active', createdAt: c.val(), lastActiveAt: l.val(), binnedAt: bAt.val() || null, binnedBy: bBy.val() || null, statusBeforeBin: bPrev.val() || null, billing: billing[id] || null };
         }));
+        wdsStores = all.filter(st => !st.binnedAt);
+        wdsBinned = all.filter(st => st.binnedAt);
         wdsRender();
     } catch (e) {
         list.innerHTML = `<div style="color:#b91c1c; padding:16px;">Could not load stores: ${wdsEsc(e.message)}</div>`;
@@ -235,6 +239,7 @@ function wdsSetSearch(v) { wdsSearch = String(v || '').toLowerCase().trim(); wds
 function wdsSetFilter(f) { wdsFilter = f; wdsRender(); }
 
 function wdsMatchesFilter(st, b) {
+    if (typeof wdsExtraFilter === 'function') { const r = wdsExtraFilter(wdsFilter, st); if (r !== undefined) return r; }
     if (wdsFilter === 'all') return true;
     if (wdsFilter === 'suspended') return st.status === 'suspended';
     if (wdsFilter === 'overdue') return b.state === 'overdue';
@@ -263,10 +268,12 @@ function wdsRender() {
 
     const counts = { all: wdsStores.length, overdue: sum.overdue, 'due-soon': sum.dueSoon, trial: sum.trials, suspended: sum.suspended, none: sum.none };
     const labels = { all: 'All', overdue: 'Overdue', 'due-soon': 'Due soon', trial: 'On trial', suspended: 'Locked', none: 'No billing set' };
+    if (typeof wdsExtraChips === 'function') { wdsExtraChips().forEach(c => { labels[c.key] = c.label; counts[c.key] = c.count; }); }
     const chips = document.getElementById('wds-chips');
     if (chips) chips.innerHTML = Object.keys(labels).map(k => `<button onclick="wdsSetFilter('${k}')" style="padding:6px 12px; border-radius:16px; font-size:12px; font-weight:bold; cursor:pointer; border:1px solid ${wdsFilter === k ? '#0284c7' : '#cbd5e1'}; background:${wdsFilter === k ? '#0284c7' : '#fff'}; color:${wdsFilter === k ? '#fff' : '#334155'};">${labels[k]} (${counts[k]})</button>`).join('');
 
     wdsRenderList();
+    if (typeof wdsAfterRender === 'function') { try { wdsAfterRender(); } catch (e) { console.warn(e); } }
 }
 
 function wdsRenderList() {
@@ -309,7 +316,7 @@ function wdsRenderList() {
                 <div><strong style="font-size:15px;">${wdsEsc(st.name || 'Unnamed')}</strong> ${badge}<br><small style="color:#64748b;">${id}${st.phone ? ' · ' + wdsEsc(st.phone) : ''}</small></div>
                 <div style="text-align:right; font-size:12px; color:#334155;">${fee}</div>
             </div>
-            <div style="font-size:12px; margin:6px 0; color:#334155;">${dueLine}${lastPaid}<br><span style="color:#94a3b8;">Last active: ${wdsAgo(st.lastActiveAt)}</span>${st.billing && st.billing.notes ? `<br><em style="color:#64748b;">📝 ${wdsEsc(st.billing.notes)}</em>` : ''}</div>
+            <div style="font-size:12px; margin:6px 0; color:#334155;">${dueLine}${lastPaid}<br><span style="color:#94a3b8;">Last active: ${wdsAgo(st.lastActiveAt)}</span>${st.billing && st.billing.notes ? `<br><em style="color:#64748b;">📝 ${wdsEsc(st.billing.notes)}</em>` : ''}${typeof wdsExtraCardHtml === 'function' ? wdsExtraCardHtml(st) : ''}</div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 ${btn('pay', '✔ Record payment', 'background:#dcfce7; border-color:#86efac; color:#166534;')}
                 ${btn('remind', '📲 Remind', 'background:#fffbeb; border-color:#fde68a; color:#92400e;')}
@@ -336,7 +343,10 @@ function wdsAct(action, el) {
     else if (action === 'remind') wdsSendReminder(id);
     else if (action === 'lock') wdsToggleLock(st);
     else if (action === 'pin') wdsRunAndRefresh(() => promptChangeStorePassword(id));
-    else if (action === 'delete') wdsRunAndRefresh(() => deleteBusinessAccount(id), id);
+    else if (action === 'delete') {
+        if (typeof wdsSafeDelete === 'function') wdsSafeDelete(id);
+        else wdsRunAndRefresh(() => deleteBusinessAccount(id), id);
+    }
 }
 
 // The older buttons (PIN reset, delete) live in script.js / the auth patch and finish on their own;
