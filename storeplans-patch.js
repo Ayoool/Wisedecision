@@ -12,7 +12,7 @@
 //
 // A limit of 0 means "unlimited". Stores with no plan behave exactly as before.
 
-console.log("Wise Decision storeplans-patch.js — v33 loaded");
+console.log("Wise Decision storeplans-patch.js — v34 loaded");
 
 var wdnPlans = {};        // planId -> { name, monthlyFee, maxBranches, maxStaff, maxProducts }
 var wdnLimits = null;     // limits of the store that is logged in (null = none)
@@ -79,12 +79,11 @@ async function wdnShallow(path) {
     return j && typeof j === 'object' ? Object.keys(j) : [];
 }
 async function wdnCountProducts(storeId) {
-    try {
-        const branches = await wdnShallow('stores/' + storeId + '/inventory');
-        let n = 0;
-        for (let i = 0; i < branches.length; i++) n += (await wdnShallow('stores/' + storeId + '/inventory/' + branches[i])).length;
-        return n;
-    } catch (e) { return null; }
+    // Checks every branch AT ONCE (not one after another), so a store with several branches
+    // doesn't add up its wait time branch by branch.
+    const branches = await wdnShallow('stores/' + storeId + '/inventory');
+    const counts = await Promise.all(branches.map(function (b) { return wdnShallow('stores/' + storeId + '/inventory/' + b); }));
+    return counts.reduce(function (sum, keys) { return sum + keys.length; }, 0);
 }
 
 // =====================================================================
@@ -304,9 +303,15 @@ function wdnFillSlowParts(id, lim) {
     };
     const retryBtn = '<button data-id="' + wdnEsc(id) + '" onclick="wdnOpenDetail(this.dataset.id)" style="padding:3px 8px; font-size:11px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">Retry</button>';
 
-    wdnWithTimeout(wdnCountProducts(id), 25000)
-        .then(function (n) { put('wdn-slow-products', wdnMeterValue(n, lim.maxProducts)); })
-        .catch(function () { put('wdn-slow-products', '? ' + retryBtn); });
+    function tryCountProducts(retriesLeft) {
+        wdnWithTimeout(wdnCountProducts(id), 20000)
+            .then(function (n) { put('wdn-slow-products', wdnMeterValue(n, lim.maxProducts)); })
+            .catch(function () {
+                if (retriesLeft > 0) { tryCountProducts(retriesLeft - 1); return; }
+                put('wdn-slow-products', '<span style="color:#b45309;">couldn\'t count</span> ' + retryBtn);
+            });
+    }
+    tryCountProducts(1);   // one silent retry before showing the Retry button
 
     wdnWithTimeout(wdnShallow('stores/' + id + '/customers'), 25000)
         .then(function (keys) { put('wdn-slow-customers', String(keys.length)); })
