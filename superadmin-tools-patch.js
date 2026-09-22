@@ -9,7 +9,7 @@
 //   3. Announcements – send a message to all stores (or chosen ones); it pops up when their staff log
 //                     in, with an expiry date, and you can see which stores have read it.
 
-console.log("Wise Decision superadmin-tools-patch.js — v31 loaded");
+console.log("Wise Decision superadmin-tools-patch.js — v32 loaded");
 
 var WDT_BIN_DAYS = 30;
 var wdtUsage = {};              // storeId -> usage numbers (filled by "Load usage")
@@ -236,11 +236,12 @@ async function wdtFetchUsage(id) {
     // If even the oldest sale we fetched is from this month, there may be more — show "500+", not a wrong total
     const capped = count >= WDT_USAGE_SALES_CAP && oldest !== null && oldest >= monthStart;
 
+    // Checks every branch AT ONCE — a store with several branches doesn't add up its wait time branch by branch.
     let products = null;
     if (branchIds) {
         try {
-            products = 0;
-            for (const b of branchIds) products += (await wdtShallowKeys(`stores/${id}/inventory/${b}`)).length;
+            const counts = await Promise.all(branchIds.map(b => wdtShallowKeys(`stores/${id}/inventory/${b}`)));
+            products = counts.reduce((sum, keys) => sum + keys.length, 0);
         } catch (e) { products = null; }
     }
 
