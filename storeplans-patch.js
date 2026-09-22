@@ -12,7 +12,7 @@
 //
 // A limit of 0 means "unlimited". Stores with no plan behave exactly as before.
 
-console.log("Wise Decision storeplans-patch.js — v32 loaded");
+console.log("Wise Decision storeplans-patch.js — v33 loaded");
 
 var wdnPlans = {};        // planId -> { name, monthlyFee, maxBranches, maxStaff, maxProducts }
 var wdnLimits = null;     // limits of the store that is logged in (null = none)
@@ -65,24 +65,18 @@ function wdnModal(title, html) {
 }
 function wdnCloseModal() { const m = document.getElementById('wdn-modal'); if (m) m.style.display = 'none'; }
 
-// Shallow key listing (names only, not the data) — used to count things cheaply
+// Shallow key listing (names only, not the data) — used to count things cheaply.
+// Throws if it can't; we never fall back to downloading the whole node.
 async function wdnShallow(path) {
+    let url = firebase.app().options.databaseURL + '/' + path + '.json?shallow=true';
     try {
-        let url = firebase.app().options.databaseURL + '/' + path + '.json?shallow=true';
-        try {
-            const u = firebase.auth && firebase.auth().currentUser;
-            if (u) url += '&auth=' + encodeURIComponent(await u.getIdToken());
-        } catch (e) { /* not signed in with Firebase Auth */ }
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const j = await res.json();
-        return j && typeof j === 'object' ? Object.keys(j) : [];
-    } catch (e) {
-        const snap = await firebase.database().ref(path).once('value');
-        const ids = [];
-        snap.forEach(function (c) { ids.push(c.key); });
-        return ids;
-    }
+        const u = firebase.auth && firebase.auth().currentUser;
+        if (u) url += '&auth=' + encodeURIComponent(await u.getIdToken());
+    } catch (e) { /* not signed in with Firebase Auth */ }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    return j && typeof j === 'object' ? Object.keys(j) : [];
 }
 async function wdnCountProducts(storeId) {
     try {
@@ -207,39 +201,44 @@ async function wdnApplyPlan(storeId) {
 // =====================================================================
 // SUPER ADMIN — STORE DETAIL PAGE
 // =====================================================================
+var wdnDetailId = null;
+
+function wdnRow(label, value) {
+    return '<div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:2px 0;"><span style="color:#64748b;">' + label + '</span><span style="text-align:right;">' + value + '</span></div>';
+}
+function wdnMeterValue(count, max) {
+    const over = count !== null && wdnLimitReached(count, max);
+    return '<strong style="color:' + (over ? '#b91c1c' : '#0f172a') + ';">' + (count === null || count === undefined ? '?' : count) + '</strong> of ' + wdnUnl(max) + (over ? ' ⚠ at limit' : '');
+}
+function wdnUsageHtml(u) {
+    return wdnRow('Sales this month', (u.capped ? u.salesMonth + '+' : u.salesMonth) + ' · ' + (u.capped ? 'at least ' : '') + wdnMoney(u.revenueMonth)) + wdnRow('Last sale', wdnAgo(u.lastSaleAt));
+}
+
+// The page opens as soon as the small, quick facts arrive. The slower numbers (product and customer
+// counts, this month's sales) fill in afterwards, each on its own — a big store can never block the page.
 async function wdnOpenDetail(id) {
     if (currentUserRole !== 'SuperAdmin') return;
     const st = typeof wdsFind === 'function' ? wdsFind(id) : null;
     if (!st) return;
+    wdnDetailId = id;
     wdnModal(st.name || st.id, '<div style="text-align:center; color:#64748b; padding:24px;">Loading store details...</div>');
 
-    let staffSnap, branchSnap, addrSnap, prodCount, custKeys, usage = null;
-    try {
-        const root = firebase.database().ref('stores/' + id);
-        const got = await wdnWithTimeout(Promise.all([
-            root.child('staff').once('value'), root.child('branches').once('value'), root.child('address').once('value'),
-            wdnCountProducts(id), wdnShallow('stores/' + id + '/customers'), wdnLoadPlans()
-        ]), 30000);
-        staffSnap = got[0]; branchSnap = got[1]; addrSnap = got[2]; prodCount = got[3]; custKeys = got[4];
-        try { usage = (typeof wdtUsage !== 'undefined' && wdtUsage[id]) ? wdtUsage[id] : (typeof wdtFetchUsage === 'function' ? await wdtWithTimeout(wdtFetchUsage(id), 20000) : null); } catch (e) { usage = null; }
-    } catch (e) {
-        wdnModal(st.name || st.id, '<div style="color:#b91c1c; padding:12px;">Could not load details: ' + wdnEsc(e.message) + '</div>');
-        return;
-    }
+    const quick = function (p) { return wdnWithTimeout(p, 20000).catch(function () { return null; }); };
+    const root = firebase.database().ref('stores/' + id);
+    const got = await Promise.all([quick(root.child('staff').once('value')), quick(root.child('branches').once('value')), quick(root.child('address').once('value')), quick(wdnLoadPlans())]);
+    if (wdnDetailId !== id) return;                                   // they moved on to something else
 
-    const branches = {}; branchSnap.forEach(function (c) { branches[c.key] = c.val() || {}; });
-    const staff = []; staffSnap.forEach(function (c) { staff.push(Object.assign({ key: c.key }, c.val())); });
+    const staffSnap = got[0], branchSnap = got[1], addrSnap = got[2];
+    const branches = {}; if (branchSnap) branchSnap.forEach(function (c) { branches[c.key] = c.val() || {}; });
+    const staff = []; if (staffSnap) staffSnap.forEach(function (c) { staff.push(Object.assign({ key: c.key }, c.val())); });
     const b = st.billing || {};
     const plan = b.plan && wdnPlans[b.plan] ? wdnPlans[b.plan] : null;
+    const lim = plan || {};
     const state = typeof wdsBillingState === 'function' ? wdsBillingState(st.billing, wdsTodayStr(), wdsSettings) : { state: 'none' };
+    const eid = wdnEsc(id);
+    const retry = function (what) { return '<div style="font-size:12px; color:#b45309;">Couldn\'t load ' + what + '. <button data-id="' + eid + '" onclick="wdnOpenDetail(this.dataset.id)" style="padding:3px 8px; font-size:11px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">Retry</button></div>'; };
 
     const sec = function (title, body) { return '<div style="border-top:1px solid #e2e8f0; padding:12px 0;"><div style="font-weight:bold; font-size:13px; margin-bottom:6px;">' + title + '</div>' + body + '</div>'; };
-    const row = function (label, value) { return '<div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:2px 0;"><span style="color:#64748b;">' + label + '</span><span style="text-align:right;">' + value + '</span></div>'; };
-    const meter = function (label, count, max) {
-        const over = wdnLimitReached(count, max);
-        return row(label, '<strong style="color:' + (over ? '#b91c1c' : '#0f172a') + ';">' + (count === null ? '?' : count) + '</strong> of ' + wdnUnl(max) + (over ? ' ⚠ at limit' : ''));
-    };
-    const lim = plan || {};
 
     let dueText = 'No billing set up';
     if (state.state === 'overdue') dueText = '<span style="color:#dc2626;">' + (b.trial ? 'Trial ended ' : 'Overdue by ') + state.overdueBy + ' day' + (state.overdueBy === 1 ? '' : 's') + (b.trial ? ' ago' : '') + '</span>';
@@ -249,38 +248,42 @@ async function wdnOpenDetail(id) {
         return '<option value="' + wdnEsc(pid) + '"' + (pid === b.plan ? ' selected' : '') + '>' + wdnEsc(wdnPlans[pid].name) + ' — ' + wdnMoney(wdnPlans[pid].monthlyFee) + '</option>';
     }).join('');
 
-    const staffRows = staff.length === 0 ? '<div style="font-size:12px; color:#64748b;">No staff added yet.</div>' : staff.map(function (s) {
+    const staffRows = !staffSnap ? retry('the staff list') : (staff.length === 0 ? '<div style="font-size:12px; color:#64748b;">No staff added yet.</div>' : staff.map(function (s) {
         const branchName = branches[s.branchId] ? branches[s.branchId].name : (s.branchId || 'Main');
         const reset = s.authUid
             ? '<span style="font-size:10px; color:#94a3b8;">protected login</span>'
-            : '<button data-store="' + wdnEsc(id) + '" data-key="' + wdnEsc(s.key) + '" data-name="' + wdnEsc(s.name || '') + '" onclick="wdnResetStaffPin(this)" style="padding:4px 8px; font-size:10px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">🔑 Reset PIN</button>';
+            : '<button data-store="' + eid + '" data-key="' + wdnEsc(s.key) + '" data-name="' + wdnEsc(s.name || '') + '" onclick="wdnResetStaffPin(this)" style="padding:4px 8px; font-size:10px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">🔑 Reset PIN</button>';
         return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; padding:5px 0; border-bottom:1px dashed #e2e8f0;"><div><strong>' + wdnEsc(s.name || 'Unnamed') + '</strong><br><span style="color:#64748b;">' + wdnEsc(s.role || '') + ' · ' + wdnEsc(branchName) + '</span></div>' + reset + '</div>';
-    }).join('');
+    }).join(''));
+
+    const branchKeys = Object.keys(branches);
+    const branchRows = !branchSnap ? retry('the branches') : (branchKeys.map(function (k) { return '<div style="font-size:12px;">🏢 ' + wdnEsc(branches[k].name || k) + (branches[k].isMain ? ' <small style="color:#64748b;">(main)</small>' : '') + '</div>'; }).join('') || '<div style="font-size:12px; color:#64748b;">None</div>');
 
     const pays = typeof wdsPaymentsOf === 'function' ? wdsPaymentsOf(st.billing).slice(0, 5) : [];
     const payRows = pays.length === 0 ? '<div style="font-size:12px; color:#64748b;">No payments recorded yet.</div>' : pays.map(function (p) {
-        return row(wdnPretty(p.paidDate) + ' · ' + wdnEsc(p.method || ''), wdnMoney(p.amount) + ' → due ' + wdnPretty(p.dueAfter));
+        return wdnRow(wdnPretty(p.paidDate) + ' · ' + wdnEsc(p.method || ''), wdnMoney(p.amount) + ' → due ' + wdnPretty(p.dueAfter));
     }).join('');
 
-    const eid = wdnEsc(id);
     const act = function (a, label, style) { return '<button data-id="' + eid + '" onclick="wdnAct(\'' + a + '\', this.dataset.id)" style="padding:7px 11px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc; ' + (style || '') + '">' + label + '</button>'; };
 
     const html =
         '<div style="margin-bottom:8px;"><small style="color:#64748b;">' + eid + '</small> ' +
         (st.status === 'suspended' ? '<span style="background:#e2e8f0; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">LOCKED</span> ' : '') +
         (b.trial ? '<span style="background:#ede9fe; color:#6d28d9; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">FREE TRIAL</span>' : '') + '</div>' +
-        sec('Contact', row('Phone', wdnEsc(st.phone || '—')) + row('Address', wdnEsc(addrSnap.val() || '—')) + row('Registered', wdnPretty(st.createdAt)) + row('Last active', wdnAgo(st.lastActiveAt))) +
+        sec('Contact', wdnRow('Phone', wdnEsc(st.phone || '—')) + wdnRow('Address', wdnEsc((addrSnap && addrSnap.val()) || '—')) + wdnRow('Registered', wdnPretty(st.createdAt)) + wdnRow('Last active', wdnAgo(st.lastActiveAt))) +
         sec('Plan &amp; billing',
-            row('Plan', plan ? '<strong>' + wdnEsc(plan.name) + '</strong>' : 'none') + row('Monthly fee', b.monthlyFee ? wdnMoney(b.monthlyFee) : '—') + row('Payment', dueText) +
-            (b.lastPaidDate ? row('Last paid', wdnPretty(b.lastPaidDate) + ' (' + wdnMoney(b.lastPaidAmount) + ')') : '') +
+            wdnRow('Plan', plan ? '<strong>' + wdnEsc(plan.name) + '</strong>' : 'none') + wdnRow('Monthly fee', b.monthlyFee ? wdnMoney(b.monthlyFee) : '—') + wdnRow('Payment', dueText) +
+            (b.lastPaidDate ? wdnRow('Last paid', wdnPretty(b.lastPaidDate) + ' (' + wdnMoney(b.lastPaidAmount) + ')') : '') +
             '<div style="display:flex; gap:6px; margin-top:8px;"><select id="wdn-detail-plan" style="flex:1; padding:7px; border:1px solid #cbd5e1; border-radius:6px;">' + planOptions + '</select>' +
             '<button data-id="' + eid + '" onclick="wdnApplyPlan(this.dataset.id)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#0284c7; color:#fff; border:none;">Apply plan</button></div>') +
         sec('Usage' + (plan ? ' vs plan limits' : ''),
-            meter('Branches', Object.keys(branches).length, lim.maxBranches) + meter('Staff', staff.length, lim.maxStaff) + meter('Products', prodCount, lim.maxProducts) +
-            row('Customers', custKeys.length) +
-            (usage ? row('Sales this month', usage.salesMonth + ' · ' + wdnMoney(usage.revenueMonth)) + row('Last sale', wdnAgo(usage.lastSaleAt)) : '')) +
+            wdnRow('Branches', staffSnap || branchSnap ? wdnMeterValue(branchSnap ? branchKeys.length : null, lim.maxBranches) : '?') +
+            wdnRow('Staff', wdnMeterValue(staffSnap ? staff.length : null, lim.maxStaff)) +
+            wdnRow('Products', '<span id="wdn-slow-products" style="color:#94a3b8;">counting…</span>') +
+            wdnRow('Customers', '<span id="wdn-slow-customers" style="color:#94a3b8;">counting…</span>') +
+            '<div id="wdn-slow-usage" style="font-size:12px; color:#94a3b8; padding:2px 0;">Loading this month\'s sales…</div>') +
         sec('Staff (' + staff.length + ')', staffRows) +
-        sec('Branches (' + Object.keys(branches).length + ')', Object.keys(branches).map(function (k) { return '<div style="font-size:12px;">🏢 ' + wdnEsc(branches[k].name || k) + (branches[k].isMain ? ' <small style="color:#64748b;">(main)</small>' : '') + '</div>'; }).join('') || '<div style="font-size:12px; color:#64748b;">None</div>') +
+        sec('Branches (' + branchKeys.length + ')', branchRows) +
         sec('Recent payments', payRows) +
         sec('Private notes', '<textarea id="wdn-detail-notes" rows="3" placeholder="Only you can see this — e.g. owner\'s name, agreement, reminders" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">' + wdnEsc(b.notes || '') + '</textarea>' +
             '<button data-id="' + eid + '" onclick="wdnSaveNotes(this.dataset.id)" style="margin-top:6px; padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">Save note</button>') +
@@ -289,6 +292,32 @@ async function wdnOpenDetail(id) {
         act('plan', '✏ Billing') + act('history', '🧾 History') + act('lock', st.status === 'suspended' ? '🔓 Unlock' : '🔒 Lock', st.status === 'suspended' ? '' : 'color:#991b1b;') + act('delete', '🗑 Delete', 'color:#991b1b;') + '</div>';
 
     wdnModal(st.name || st.id, html);
+    wdnFillSlowParts(id, lim);
+}
+
+// Slow parts fill in one by one; a failure in one never affects the others
+function wdnFillSlowParts(id, lim) {
+    const put = function (elId, html) {
+        if (wdnDetailId !== id) return;
+        const el = document.getElementById(elId);
+        if (el) { el.innerHTML = html; el.style.color = ''; }
+    };
+    const retryBtn = '<button data-id="' + wdnEsc(id) + '" onclick="wdnOpenDetail(this.dataset.id)" style="padding:3px 8px; font-size:11px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">Retry</button>';
+
+    wdnWithTimeout(wdnCountProducts(id), 25000)
+        .then(function (n) { put('wdn-slow-products', wdnMeterValue(n, lim.maxProducts)); })
+        .catch(function () { put('wdn-slow-products', '? ' + retryBtn); });
+
+    wdnWithTimeout(wdnShallow('stores/' + id + '/customers'), 25000)
+        .then(function (keys) { put('wdn-slow-customers', String(keys.length)); })
+        .catch(function () { put('wdn-slow-customers', '?'); });
+
+    const cached = typeof wdtUsage !== 'undefined' ? wdtUsage[id] : null;
+    if (cached) { put('wdn-slow-usage', wdnUsageHtml(cached)); return; }
+    if (typeof wdtFetchUsage !== 'function') { put('wdn-slow-usage', ''); return; }
+    wdnWithTimeout(wdtFetchUsage(id), 40000)
+        .then(function (u) { if (typeof wdtUsage !== 'undefined') wdtUsage[id] = u; put('wdn-slow-usage', wdnUsageHtml(u)); })
+        .catch(function () { put('wdn-slow-usage', 'Couldn\'t load this month\'s sales (the store has a lot of data or the connection is slow). ' + retryBtn); });
 }
 
 function wdnAct(action, id) {
