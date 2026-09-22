@@ -9,7 +9,7 @@
 //   3. Announcements – send a message to all stores (or chosen ones); it pops up when their staff log
 //                     in, with an expiry date, and you can see which stores have read it.
 
-console.log("Wise Decision superadmin-tools-patch.js — v30 loaded");
+console.log("Wise Decision superadmin-tools-patch.js — v31 loaded");
 
 var WDT_BIN_DAYS = 30;
 var wdtUsage = {};              // storeId -> usage numbers (filled by "Load usage")
@@ -197,44 +197,54 @@ function wdtOpenBin() {
 // 2. USAGE: who is actually using the app?
 // =====================================================================
 async function wdtShallowKeys(path) {
+    // Lists only the names under a path (cheap even for huge stores). Throws if it can't — we never
+    // fall back to downloading the whole node, which is what made big stores time out.
+    let url = `${firebase.app().options.databaseURL}/${path}.json?shallow=true`;
     try {
-        let url = `${firebase.app().options.databaseURL}/${path}.json?shallow=true`;
-        try {
-            const u = firebase.auth && firebase.auth().currentUser;
-            if (u) url += '&auth=' + encodeURIComponent(await u.getIdToken());
-        } catch (e) { /* not signed in with Firebase Auth */ }
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const j = await res.json();
-        return j && typeof j === 'object' ? Object.keys(j) : [];
-    } catch (e) {
-        const snap = await firebase.database().ref(path).once('value');
-        const ids = [];
-        snap.forEach(c => ids.push(c.key));
-        return ids;
-    }
+        const u = firebase.auth && firebase.auth().currentUser;
+        if (u) url += '&auth=' + encodeURIComponent(await u.getIdToken());
+    } catch (e) { /* not signed in with Firebase Auth */ }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    return j && typeof j === 'object' ? Object.keys(j) : [];
 }
+
+var WDT_USAGE_SALES_CAP = 500;   // never download more than this many recent sales per store
 
 async function wdtFetchUsage(id) {
     const root = firebase.database().ref(`stores/${id}`);
     const d = new Date();
     const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
 
-    const [txSnap, lastSnap, branchIds, staffIds] = await Promise.all([
-        root.child('transactions').orderByChild('date').startAt(monthStart).once('value'),
-        root.child('transactions').orderByChild('date').limitToLast(1).once('value'),
-        wdtShallowKeys(`stores/${id}/inventory`),
-        wdtShallowKeys(`stores/${id}/staff`)
+    const [txSnap, branchIds, staffIds] = await Promise.all([
+        root.child('transactions').orderByChild('date').limitToLast(WDT_USAGE_SALES_CAP).once('value'),
+        wdtShallowKeys(`stores/${id}/inventory`).catch(() => null),
+        wdtShallowKeys(`stores/${id}/staff`).catch(() => null)
     ]);
 
-    let salesMonth = 0, revenueMonth = 0, lastSaleAt = null;
-    txSnap.forEach(c => { const t = c.val() || {}; salesMonth++; revenueMonth += wdtNum(t.totalAmount); });
-    lastSnap.forEach(c => { lastSaleAt = (c.val() || {}).date || null; });
+    // Snapshot children come oldest -> newest
+    let count = 0, salesMonth = 0, revenueMonth = 0, lastSaleAt = null, oldest = null;
+    txSnap.forEach(c => {
+        const t = c.val() || {};
+        count++;
+        if (!t.date) return;
+        if (!oldest) oldest = t.date;
+        lastSaleAt = t.date;
+        if (t.date >= monthStart) { salesMonth++; revenueMonth += wdtNum(t.totalAmount); }
+    });
+    // If even the oldest sale we fetched is from this month, there may be more — show "500+", not a wrong total
+    const capped = count >= WDT_USAGE_SALES_CAP && oldest !== null && oldest >= monthStart;
 
-    let products = 0;
-    for (const b of branchIds) products += (await wdtShallowKeys(`stores/${id}/inventory/${b}`)).length;
+    let products = null;
+    if (branchIds) {
+        try {
+            products = 0;
+            for (const b of branchIds) products += (await wdtShallowKeys(`stores/${id}/inventory/${b}`)).length;
+        } catch (e) { products = null; }
+    }
 
-    return { salesMonth, revenueMonth: Math.round(revenueMonth * 100) / 100, products, staff: staffIds.length, lastSaleAt, loadedAt: new Date().toISOString() };
+    return { salesMonth, revenueMonth: Math.round(revenueMonth * 100) / 100, capped, products, staff: staffIds ? staffIds.length : null, lastSaleAt, loadedAt: new Date().toISOString() };
 }
 
 async function wdtLoadUsage() {
@@ -253,7 +263,7 @@ async function wdtLoadUsage() {
         }
     };
     const total = queue.length;
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    await Promise.all([worker(), worker()]);
     wdtUsageBusy = false;
     wdsRender();
     if (total === 0) alert("There are no stores to check.");
@@ -298,7 +308,11 @@ function wdsExtraCardHtml(st) {
     if (f.noProducts) tags.push('⚠ hasn\'t added any products');
     if (f.neverSold) tags.push('⚠ never made a sale');
     else if (f.inactive) tags.push(`⚠ no sale for ${f.lastSaleDays} days`);
-    return `<br><span style="color:#334155;">📊 This month: <strong>${u.salesMonth}</strong> sale${u.salesMonth === 1 ? '' : 's'} · ${wdtMoney(u.revenueMonth)} · ${u.products} product${u.products === 1 ? '' : 's'} · ${u.staff} staff · last sale ${wdtAgo(u.lastSaleAt)}</span>` +
+    const sales = u.capped ? `${u.salesMonth}+` : `${u.salesMonth}`;
+    const money = (u.capped ? 'at least ' : '') + wdtMoney(u.revenueMonth);
+    const products = u.products === null || u.products === undefined ? '?' : u.products;
+    const staff = u.staff === null || u.staff === undefined ? '?' : u.staff;
+    return `<br><span style="color:#334155;">📊 This month: <strong>${sales}</strong> sale${u.salesMonth === 1 && !u.capped ? '' : 's'} · ${money} · ${products} product${products === 1 ? '' : 's'} · ${staff} staff · last sale ${wdtAgo(u.lastSaleAt)}</span>` +
         (tags.length ? `<br><span style="color:#b45309; font-weight:bold;">${tags.join(' · ')}</span>` : '');
 }
 
