@@ -90,7 +90,7 @@ let currentActiveRefund = null; // { txId, transaction, branchId, customerId, cu
 // (PINs, customer balances, cash handling) from anyone who walks up after the
 // cashier/admin steps away. Warns with a countdown first so a genuinely-present
 // user isn't logged out mid-task.
-const IDLE_TIMEOUT_MINUTES = 4;    // total inactivity allowed before logout
+const IDLE_TIMEOUT_MINUTES = 6;    // total inactivity allowed before logout
 const IDLE_WARNING_SECONDS = 60;   // how long the "Still there?" countdown runs, counted out of the total above
 
 let idleTimer = null;              // fires once inactivity reaches (timeout - warning)
