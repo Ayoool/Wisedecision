@@ -14,7 +14,7 @@
 // Data lives at stores/{storeId}/preOrders/{id} — outside inventory, so it doesn't touch
 // anything the rest of the app reads.
 
-console.log("Wise Decision manager-preorder-patch.js — v34 loaded");
+console.log("Wise Decision manager-preorder-patch.js — v35 loaded");
 
 // ---------- Helpers ----------
 function wdmNum(n) { return Number(n) || 0; }
@@ -158,6 +158,35 @@ function wdmOrderMessage(group, businessName) {
     return 'Hello ' + group.supplierName + ', please we need to restock the following for ' + businessName + ':\n\n' + lines.join('\n') + '\n\nKindly confirm availability and price. Thank you.';
 }
 
+// ----- Receiving (pure) -----
+// Total already recorded for each item, added up across every past receipt for this pre-order.
+function wdmReceivedTotals(record) {
+    const totals = {};
+    Object.keys((record && record.receipts) || {}).forEach(function (k) {
+        (record.receipts[k].items || []).forEach(function (it) { totals[it.id] = wdmRound((totals[it.id] || 0) + wdmNum(it.receivedQty)); });
+    });
+    return totals;
+}
+function wdmIsFullyReceived(record) {
+    const totals = wdmReceivedTotals(record);
+    const items = (record && record.items) || [];
+    if (items.length === 0) return false;
+    return items.every(function (it) { return (totals[it.id] || 0) >= it.orderQty - 1e-9; });
+}
+// Turns "what was entered for each item" into one group per supplier, ready to record as a
+// supply. Items with nothing entered (0, blank, or missing) are left out.
+function wdmBuildReceiptGroups(items, enteredQtyById) {
+    const groups = {};
+    (items || []).forEach(function (it) {
+        const entered = wdmNum((enteredQtyById || {})[it.id]);
+        if (!(entered > 0)) return;
+        const key = it.supplierId || it.supplierName || '__none__';
+        groups[key] = groups[key] || { supplierId: it.supplierId || null, supplierName: it.supplierName || 'No supplier on record', items: [] };
+        groups[key].items.push({ id: it.id, name: it.name, receivedQty: wdmRound(entered), costPrice: wdmNum(it.costPrice), unitsPerPack: wdmNum(it.unitsPerPack) || 1 });
+    });
+    return Object.keys(groups).map(function (k) { return groups[k]; });
+}
+
 // =====================================================================
 // FIREBASE — thin wrappers around the pure functions above (atomic, so two people
 // editing the same pre-order at once can never lose one of their changes)
@@ -200,6 +229,61 @@ function wdmAddNote(id, note) { return wdmTransact(id, function (r) { return Obj
 function wdmSubmit(id) { return wdmTransact(id, function (r) { return wdmSubmitPure(r, wdmActorName()); }); }
 function wdmReturnToManager(id, note) { return wdmTransact(id, function (r) { return wdmReturnPure(r, wdmActorName(), note); }); }
 function wdmPlaceOrder(id) { return wdmTransact(id, function (r) { return wdmPlacePure(r, wdmActorName()); }); }
+async function wdmRecordReceipt(preOrderId, branchId, groups, notes) {
+    if (!groups || groups.length === 0) throw new Error("Enter at least one quantity received.");
+    const by = wdmActorName();
+    const nowIso = new Date().toISOString();
+    const invRef = firebase.database().ref('stores/' + currentStoreId + '/inventory/' + branchId);
+    const receiptEntries = [];
+
+    for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
+        const supplyItems = [];
+        let totalCost = 0;
+        for (let ii = 0; ii < g.items.length; ii++) {
+            const it = g.items[ii];
+            let stockBefore = 0, stockAfter = 0, costPriceNow = it.costPrice, found = true;
+            const res = await invRef.child(it.id).transaction(function (p) {
+                if (p === null || typeof p !== 'object') { found = false; return p; }   // product deleted since — record the receipt without touching stock
+                stockBefore = wdmNum(p.stock !== undefined ? p.stock : p.stockQty);
+                stockAfter = wdmRound(stockBefore + it.receivedQty);
+                costPriceNow = wdmNum(p.costPrice) || costPriceNow;
+                p.stock = stockAfter; p.stockQty = stockAfter;
+                return p;
+            });
+            const lineCost = wdmRound(costPriceNow * it.receivedQty);
+            totalCost = wdmRound(totalCost + lineCost);
+            supplyItems.push({ name: it.name, productId: found ? it.id : null, qty: it.receivedQty, loosePieces: 0, costPrice: costPriceNow, unitsPerPackAtSupply: it.unitsPerPack, piecesReceived: it.receivedQty, lineCost: lineCost, stockBefore: found ? stockBefore : null, stockAfter: found ? stockAfter : null });
+            receiptEntries.push({ id: it.id, name: it.name, receivedQty: it.receivedQty });
+        }
+
+        const supplyId = 'SUP-' + firebase.database().ref('stores/' + currentStoreId + '/supplies').push().key;
+        const supplyData = { supplyId: supplyId, supplierId: g.supplierId, supplierName: g.supplierName, branchId: branchId, items: supplyItems, totalCost: totalCost, notes: (notes ? notes + ' ' : '') + '(from Pre-Order ' + preOrderId + ')', date: nowIso, recordedBy: by };
+        await firebase.database().ref('stores/' + currentStoreId + '/supplies/' + supplyId).set(supplyData);
+
+        if (g.supplierId) {
+            await firebase.database().ref('stores/' + currentStoreId + '/suppliers/' + g.supplierId).transaction(function (sup) {
+                if (sup === null || typeof sup !== 'object') return sup;
+                sup.totalSupplied = wdmRound(wdmNum(sup.totalSupplied) + totalCost);
+                sup.supplyCount = wdmNum(sup.supplyCount) + 1;
+                sup.lastSupplyDate = nowIso;
+                return sup;
+            });
+        }
+    }
+
+    // Keep the record: append this receipt to the pre-order's own history, and mark it fully
+    // received once every item has been covered (a partial delivery just stays "placed").
+    return wdmTransact(preOrderId, function (r) {
+        const receipts = Object.assign({}, r.receipts || {});
+        const key = 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+        receipts[key] = { at: nowIso, by: by, items: receiptEntries };
+        const next = Object.assign({}, r, { receipts: receipts });
+        if (wdmIsFullyReceived(next)) next.status = 'received';
+        return next;
+    });
+}
+
 async function wdmDeleteDraft(id) {
     const ref = firebase.database().ref('stores/' + currentStoreId + '/preOrders/' + id);
     const snap = await ref.once('value');
@@ -227,7 +311,7 @@ function wdmModal(title, html) {
 }
 function wdmCloseModal() { const m = document.getElementById('wdm-modal'); if (m) m.style.display = 'none'; }
 
-const WDM_STATUS_LABEL = { draft: ['#fffbeb', '#92400e', 'DRAFT'], submitted: ['#eff6ff', '#1d4ed8', 'SUBMITTED — waiting on Admin'], placed: ['#dcfce7', '#166534', 'PLACED'] };
+const WDM_STATUS_LABEL = { draft: ['#fffbeb', '#92400e', 'DRAFT'], submitted: ['#eff6ff', '#1d4ed8', 'SUBMITTED — waiting on Admin'], placed: ['#dcfce7', '#166534', 'PLACED'], received: ['#ecfdf5', '#047857', 'RECEIVED — stock updated'] };
 
 async function wdmOpenPreOrders() {
     if (currentUserRole !== 'Admin' && currentUserRole !== 'Manager') return;
@@ -287,13 +371,44 @@ async function wdmOpenDetail(id, known) {
     }
 }
 
+function wdmReceivingRowHtml(it, idx, receivedSoFar) {
+    const outstanding = wdmRound(Math.max(0, it.orderQty - receivedSoFar));
+    const doneNote = receivedSoFar > 0 ? '<br><small style="color:#166534;">' + receivedSoFar + ' ' + wdmUnitLabel(it) + ' already received</small>' : '';
+    return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px dashed #e2e8f0;">' +
+        '<div style="flex:1;"><strong>' + wdmEsc(it.name) + '</strong><br><small style="color:#64748b;">Ordered ' + wdmRound(it.orderQty) + ' ' + wdmUnitLabel(it) + '</small>' + doneNote + '</div>' +
+        '<input type="number" min="0" step="any" placeholder="0" value="' + (outstanding > 0 ? outstanding : '') + '" data-id="' + wdmEsc(it.id) + '" class="wdm-receive-qty" style="width:70px; padding:6px; border:1px solid #cbd5e1; border-radius:6px; text-align:right;">' +
+        '<span style="font-size:11px; color:#64748b; width:34px;">' + wdmUnitLabel(it) + '</span></div>';
+}
+
+function wdmReceivedRowHtml(it, receivedSoFar) {
+    const complete = receivedSoFar >= it.orderQty - 1e-9;
+    return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px dashed #e2e8f0;">' +
+        '<div style="flex:1;"><strong>' + wdmEsc(it.name) + '</strong><br><small style="color:#64748b;">Ordered ' + wdmRound(it.orderQty) + ' ' + wdmUnitLabel(it) + '</small></div>' +
+        '<span style="font-weight:bold; color:' + (complete ? '#166534' : '#b45309') + ';">' + wdmRound(receivedSoFar) + ' ' + wdmUnitLabel(it) + '</span></div>';
+}
+
+function wdmReceiptHistoryHtml(r) {
+    const keys = Object.keys(r.receipts || {}).sort(function (a, b) { return String(r.receipts[a].at).localeCompare(String(r.receipts[b].at)); });
+    if (keys.length === 0) return '';
+    const rows = keys.map(function (k) {
+        const rec = r.receipts[k];
+        const lines = (rec.items || []).map(function (i) { return wdmEsc(i.name) + ' × ' + wdmRound(i.receivedQty); }).join(', ');
+        return '<div style="font-size:12px; padding:4px 0;">📥 ' + wdmPretty(rec.at) + ' by ' + wdmEsc(rec.by || '') + '<br><span style="color:#64748b;">' + lines + '</span></div>';
+    }).join('<hr style="border:none; border-top:1px dashed #e2e8f0; margin:4px 0;">');
+    return '<div style="border-top:1px solid #e2e8f0; padding:10px 0; margin-top:6px;"><div style="font-weight:bold; font-size:13px; margin-bottom:4px;">📜 Receiving history</div>' + rows + '</div>';
+}
+
 function wdmRenderDetail(r) {
     const s = WDM_STATUS_LABEL[r.status] || ['#f1f5f9', '#334155', r.status];
     const editable = wdmCanEdit(r, currentUserRole);
     const items = r.items || [];
     const total = items.reduce(function (sum, i) { return sum + wdmRound(i.orderQty * i.costPrice); }, 0);
+    const canReceive = (currentUserRole === 'Admin' || currentUserRole === 'Manager') && r.status === 'placed';
+    const receivedTotals = wdmReceivedTotals(r);
 
     const rows = items.length === 0 ? '<div style="text-align:center; color:#64748b; padding:12px;">No items on this list.</div>' : items.map(function (it, idx) {
+        if (r.status === 'placed' && canReceive) return wdmReceivingRowHtml(it, idx, receivedTotals[it.id] || 0);
+        if (r.status === 'received') return wdmReceivedRowHtml(it, receivedTotals[it.id] || 0);
         return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px dashed #e2e8f0;">' +
             '<div style="flex:1;"><strong>' + wdmEsc(it.name) + '</strong><br><small style="color:#64748b;">' + wdmEsc(it.supplierName || 'No supplier on record') + (it.daysLeft !== null && it.daysLeft !== undefined ? ' · ~' + it.daysLeft + ' days of stock left' : '') + '</small></div>' +
             (editable
@@ -313,11 +428,15 @@ function wdmRenderDetail(r) {
     } else if (r.status === 'placed') {
         const groups = wdmGroupBySupplier(items);
         actions = groups.map(function (g, gi) {
-            const supHas = typeof suppliersCache !== 'undefined' && g.supplierId && suppliersCache[g.supplierId];
-            const phone = supHas ? suppliersCache[g.supplierId].phone : '';
             return '<button data-gi="' + gi + '" onclick="wdmWhatsappGroup(this.dataset.gi)" style="display:block; width:100%; box-sizing:border-box; margin-bottom:6px; padding:8px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #86efac; background:#dcfce7; color:#166534;">📲 Order from ' + wdmEsc(g.supplierName) + '</button>';
         }).join('');
         wdmCurrentGroups = groups;
+        if (canReceive) {
+            actions += '<div style="border-top:1px solid #e2e8f0; margin-top:8px; padding-top:10px;">' +
+                '<div style="font-weight:bold; font-size:13px; margin-bottom:6px;">📥 Record what you received</div>' +
+                '<input type="text" id="wdm-receive-notes" placeholder="Note (e.g. invoice number) — optional" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:8px; box-sizing:border-box;">' +
+                '<button onclick="wdmDoRecordReceipt()" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7;">💾 Save &amp; Update Stock</button></div>';
+        }
     }
 
     const noteBox = r.note || r.reviewNote ? '<div style="font-size:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px; margin-bottom:10px;">' + (r.reviewNote ? '<strong>Admin\'s note:</strong> ' + wdmEsc(r.reviewNote) : wdmEsc(r.note || '')) + '</div>' : '';
@@ -325,6 +444,7 @@ function wdmRenderDetail(r) {
     wdmModal('🛒 Pre-Order', '<div style="margin-bottom:8px;"><span style="font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px; background:' + s[0] + '; color:' + s[1] + ';">' + s[2] + '</span> <small style="color:#94a3b8;">started by ' + wdmEsc(r.createdBy || '') + ' · ' + wdmPretty(r.createdAt) + '</small></div>' +
         noteBox + rows +
         '<div style="text-align:right; font-weight:bold; padding:8px 0;">Estimated total: ' + wdmMoney(total) + '</div>' +
+        wdmReceiptHistoryHtml(r) +
         '<div style="border-top:1px solid #e2e8f0; padding-top:10px;">' + actions + '</div>');
 }
 
@@ -351,6 +471,21 @@ function wdmDoPlace() {
     if (!confirm("Place this order? The list will be locked.")) return;
     wdmPlaceOrder(wdmCurrentId).then(function (r) { wdmCurrentRecord = Object.assign({ id: wdmCurrentId }, r); wdmRenderDetail(wdmCurrentRecord); }).catch(function (e) { alert(e.message); });
 }
+function wdmDoRecordReceipt() {
+    const inputs = document.querySelectorAll('.wdm-receive-qty');
+    const entered = {};
+    inputs.forEach(function (inp) { entered[inp.dataset.id] = parseFloat(inp.value) || 0; });
+    const groups = wdmBuildReceiptGroups(wdmCurrentRecord.items || [], entered);
+    if (groups.length === 0) { alert("Enter at least one quantity received."); return; }
+    const notesEl = document.getElementById('wdm-receive-notes');
+    const notes = notesEl ? notesEl.value.trim() : '';
+    wdmRecordReceipt(wdmCurrentId, wdmCurrentRecord.branchId, groups, notes).then(function (r) {
+        wdmCurrentRecord = Object.assign({ id: wdmCurrentId }, r);
+        wdmRenderDetail(wdmCurrentRecord);
+        alert(r.status === 'received' ? "Recorded — every item has now been received in full. Stock has been updated." : "Recorded and stock updated. Some items are still outstanding.");
+    }).catch(function (e) { alert("Could not save: " + e.message); });
+}
+
 function wdmDoDelete() {
     if (!confirm("Delete this draft? This cannot be undone.")) return;
     wdmDeleteDraft(wdmCurrentId).then(function () { wdmOpenPreOrders(); }).catch(function (e) { alert(e.message); });
