@@ -2,53 +2,31 @@
 <html lang="en-NG">
 <head>
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Wise Decision POS | Cloud POS & Business Management Software in Nigeria</title>
-
-    <meta name="description"
-        content="Wise Decision POS is a cloud-based point-of-sale and business management software for businesses in Nigeria. Manage sales, inventory, suppliers, staff, expenses, branches and thermal receipts from one platform.">
-
+    <meta name="description" content="Wise Decision POS is a cloud-based point-of-sale and business management software for businesses in Nigeria. Manage sales, inventory, suppliers, staff, expenses, branches and thermal receipts from one platform.">
     <meta name="author" content="EMMANUEL AYOOOLA FISUYI">
-
     <meta name="robots" content="index, follow">
-
     <link rel="canonical" href="https://ayoool.github.io/Wisedecision/">
 
     <!-- Open Graph -->
-    <meta property="og:title"
-        content="Wise Decision POS | Business Management Software in Nigeria">
-
-    <meta property="og:description"
-        content="Manage sales, inventory, suppliers, staff, expenses and branches with Wise Decision POS.">
-
+    <meta property="og:title" content="Wise Decision POS | Business Management Software in Nigeria">
+    <meta property="og:description" content="Manage sales, inventory, suppliers, staff, expenses and branches with Wise Decision POS.">
     <meta property="og:type" content="website">
-
-    <meta property="og:url"
-        content="https://ayoool.github.io/Wisedecision/">
-
+    <meta property="og:url" content="https://ayoool.github.io/Wisedecision/">
     <meta property="og:site_name" content="Wise Decision">
-
     <meta name="theme-color" content="#0f766e">
 
     <!-- Google Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
-
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
-
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- STRUCTURED DATA -->
-
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@graph": [
-
             {
                 "@type": "Organization",
                 "name": "Wise Decision",
@@ -58,7 +36,6 @@
                     "name": "Emmanuel Ayoola Fisuyi"
                 }
             },
-
             {
                 "@type": "SoftwareApplication",
                 "name": "Wise Decision POS",
@@ -71,119 +48,72 @@
                     "name": "EMMANUEL AYOOOLA FISUYI"
                 }
             },
-
             {
                 "@type": "Person",
                 "name": "EMMANUEL AYOOOLA FISUYI",
                 "jobTitle": "Founder of Wise Decision",
                 "url": "https://ayoool.github.io/Wisedecision/"
             }
-
         ]
     }
     </script>
 
-
-    <!-- =========================
-         WISE DECISION CSS
-    ========================== -->
-
     <style>
-
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-
         html {
             scroll-behavior: smooth;
         }
 
-
         body {
             font-family: "Inter", Arial, sans-serif;
-
-            background:
-                linear-gradient(
-                    180deg,
-                    #f0fdf4 0%,
-                    #ffffff 35%,
-                    #f8fafc 100%
-                );
-
+            background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 35%, #f8fafc 100%);
             color: #0f172a;
-
             line-height: 1.6;
-
             overflow-x: hidden;
         }
-
 
         a {
             text-decoration: none;
         }
 
-
-        /* =========================
-           HEADER
-        ========================== */
-
+        /* HEADER */
         header {
             width: 100%;
-
             padding: 18px 7%;
-
             display: flex;
-
             align-items: center;
-
             justify-content: space-between;
-
             gap: 20px;
-
             background: rgba(255,255,255,0.92);
-
             border-bottom: 1px solid #e2e8f0;
-
             position: sticky;
-
             top: 0;
-
             z-index: 1000;
-
             backdrop-filter: blur(12px);
         }
 
-
         .logo-container {
             display: flex;
-
             flex-direction: column;
-
             gap: 3px;
         }
 
-
         .logo {
             font-size: 24px;
-
             font-weight: 800;
-
             letter-spacing: -0.8px;
-
             color: #0f172a;
         }
 
-
         .big-w {
             color: #0f766e;
-
             font-size: 32px;
-
             display: inline-block;
-
             transition: transform 0.3s ease;
         }
 
@@ -191,161 +121,93 @@
             transform: scale(1.1) rotate(-5deg);
         }
 
-
         .ceo-tag {
             font-size: 9px;
-
             font-weight: 700;
-
             letter-spacing: 0.5px;
-
             color: #64748b;
-
             max-width: 360px;
         }
 
-
         .nav-buttons {
             display: flex;
-
             align-items: center;
-
             gap: 10px;
         }
 
-
-        /* =========================
-           BUTTONS
-        ========================== */
-
+        /* BUTTONS */
         .btn-login,
         .btn-register,
         .btn-whatsapp {
             display: inline-flex;
-
             align-items: center;
-
             justify-content: center;
-
             min-height: 46px;
-
             padding: 12px 20px;
-
             border-radius: 10px;
-
             font-weight: 700;
-
             font-size: 14px;
-
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
             cursor: pointer;
         }
 
-
         .btn-login {
             color: #0f766e;
-
             background: #ecfdf5;
-
             border: 1px solid #a7f3d0;
         }
 
-
         .btn-login:hover {
             background: #d1fae5;
-
             transform: translateY(-3px);
-
             box-shadow: 0 6px 15px rgba(15, 118, 110, 0.15);
         }
 
-
         .btn-register {
             color: white;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #0f766e,
-                    #0284c7
-                );
-
-            box-shadow:
-                0 8px 20px rgba(15,118,110,0.18);
+            background: linear-gradient(135deg, #0f766e, #0284c7);
+            box-shadow: 0 8px 20px rgba(15,118,110,0.18);
         }
-
 
         .btn-register:hover {
             transform: translateY(-3px);
-
-            box-shadow:
-                0 12px 28px rgba(15,118,110,0.3);
+            box-shadow: 0 12px 28px rgba(15,118,110,0.3);
         }
-
 
         .btn-whatsapp {
             color: white;
-
             background: #16a34a;
-
-            box-shadow:
-                0 8px 20px rgba(22,163,74,0.18);
+            box-shadow: 0 8px 20px rgba(22,163,74,0.18);
         }
-
 
         .btn-whatsapp:hover {
             background: #15803d;
-
             transform: translateY(-3px);
-
-            box-shadow:
-                0 12px 28px rgba(22,163,74,0.3);
+            box-shadow: 0 12px 28px rgba(22,163,74,0.3);
         }
 
-
-        /* =========================
-           HERO
-        ========================== */
-
+        /* HERO */
         .hero {
             text-align: center;
-
             padding: 100px 7% 90px;
-
             max-width: 1100px;
-
             margin: auto;
-
             position: relative;
         }
 
-
         .hero::before {
             content: "";
-
             position: absolute;
-
             width: 350px;
-
             height: 350px;
-
             background: #ccfbf1;
-
             border-radius: 50%;
-
             filter: blur(80px);
-
             opacity: 0.6;
-
             top: 10px;
-
             left: 50%;
-
             transform: translateX(-50%);
-
             z-index: -1;
-
             animation: pulse-glow 6s ease-in-out infinite alternate;
         }
 
@@ -354,28 +216,17 @@
             100% { transform: translateX(-50%) scale(1.15); opacity: 0.8; }
         }
 
-
         .hero-badge {
             display: inline-block;
-
             padding: 8px 18px;
-
             border-radius: 999px;
-
             background: #ecfdf5;
-
             color: #0f766e;
-
             border: 1px solid #a7f3d0;
-
             font-size: 13px;
-
             font-weight: 700;
-
             margin-bottom: 22px;
-
             box-shadow: 0 4px 12px rgba(15,118,110,0.08);
-
             animation: float-badge 3s ease-in-out infinite;
         }
 
@@ -384,41 +235,22 @@
             50% { transform: translateY(-4px); }
         }
 
-
         .hero h1 {
             font-size: clamp(40px, 6vw, 70px);
-
             line-height: 1.05;
-
             letter-spacing: -2.5px;
-
             font-weight: 800;
-
             max-width: 950px;
-
             margin: auto;
         }
 
-
         .hero h1 span {
             display: block;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #0f766e,
-                    #0284c7,
-                    #0f766e
-                );
-
+            background: linear-gradient(135deg, #0f766e, #0284c7, #0f766e);
             background-size: 200% auto;
-
             -webkit-background-clip: text;
-
             background-clip: text;
-
             color: transparent;
-
             animation: shine 5s linear infinite;
         }
 
@@ -426,63 +258,39 @@
             to { background-position: 200% center; }
         }
 
-
         .hero > p {
             max-width: 800px;
-
             margin: 25px auto;
-
             font-size: 18px;
-
             color: #475569;
         }
 
-
         .activation-notice {
             max-width: 750px;
-
             margin: 28px auto;
-
             padding: 17px 20px;
-
             background: #fffbeb;
-
             border: 1px solid #fde68a;
-
             border-radius: 12px;
-
             color: #78350f;
-
             font-size: 14px;
-
             box-shadow: 0 4px 15px rgba(245, 158, 11, 0.08);
         }
-
 
         .activation-notice span {
             font-weight: 800;
         }
 
-
         .hero-cta {
             display: flex;
-
             justify-content: center;
-
             align-items: center;
-
             flex-wrap: wrap;
-
             gap: 12px;
-
             margin-top: 28px;
         }
 
-
-        /* =========================
-           CSS DASHBOARD MOCKUP
-        ========================== */
-
+        /* DASHBOARD MOCKUP */
         .dashboard-mockup {
             margin-top: 55px;
             background: #ffffff;
@@ -531,12 +339,7 @@
 
         .mockup-body {
             padding: 30px;
-            background:
-                linear-gradient(
-                    135deg,
-                    #f8fafc 0%,
-                    #f0fdfa 100%
-                );
+            background: linear-gradient(135deg, #f8fafc 0%, #f0fdfa 100%);
         }
 
         .mockup-grid {
@@ -574,11 +377,7 @@
             color: #0f766e;
         }
 
-
-        /* =========================
-           LOADING SPINNER OVERLAY
-        ========================== */
-
+        /* LOADING SPINNER OVERLAY */
         #loading-overlay {
             position: fixed;
             top: 0;
@@ -635,245 +434,144 @@
             100% { transform: rotate(360deg); }
         }
 
-
-        /* =========================
-           GENERAL SECTIONS
-        ========================== */
-
+        /* GENERAL SECTIONS */
         section:not(.hero):not(.final-cta) {
             max-width: 1200px;
-
             margin: auto;
-
             padding: 80px 7%;
         }
 
-
         h2 {
             text-align: center;
-
             font-size: clamp(30px, 4vw, 44px);
-
             line-height: 1.15;
-
             letter-spacing: -1.2px;
-
             margin-bottom: 15px;
         }
-
 
         .section-description {
             text-align: center;
-
             max-width: 700px;
-
             margin: 0 auto 42px;
-
             color: #64748b;
-
             font-size: 16px;
         }
 
-
-        /* =========================
-           STEPS
-        ========================== */
-
+        /* STEPS */
         .steps-grid {
             display: grid;
-
-            grid-template-columns:
-                repeat(3, 1fr);
-
+            grid-template-columns: repeat(3, 1fr);
             gap: 22px;
         }
-
 
         .step-card {
             background: white;
-
             border: 1px solid #e2e8f0;
-
             border-radius: 18px;
-
             padding: 30px;
-
-            box-shadow:
-                0 10px 30px rgba(15,23,42,0.05);
-
+            box-shadow: 0 10px 30px rgba(15,23,42,0.05);
             transition: 0.3s ease;
         }
-
 
         .step-card:hover {
             transform: translateY(-6px);
-
             border-color: #99f6e4;
-
             box-shadow: 0 15px 35px rgba(15, 118, 110, 0.08);
         }
 
-
         .step-number {
             font-size: 14px;
-
             font-weight: 800;
-
             color: #0f766e;
-
             margin-bottom: 15px;
         }
 
-
         .step-card h3 {
             font-size: 19px;
-
             margin-bottom: 10px;
         }
 
-
         .step-card p {
             color: #64748b;
-
             font-size: 14px;
         }
 
-
-        /* =========================
-           FEATURE CARDS
-        ========================== */
-
+        /* FEATURE CARDS */
         .grid {
             display: grid;
-
-            grid-template-columns:
-                repeat(3, 1fr);
-
+            grid-template-columns: repeat(3, 1fr);
             gap: 22px;
         }
 
-
         .card {
             background: white;
-
             border: 1px solid #e2e8f0;
-
             border-radius: 18px;
-
             padding: 28px;
-
-            box-shadow:
-                0 10px 30px rgba(15,23,42,0.05);
-
+            box-shadow: 0 10px 30px rgba(15,23,42,0.05);
             transition: all 0.3s ease;
         }
 
-
         .card:hover {
             transform: translateY(-6px);
-
             border-color: #99f6e4;
-
-            box-shadow:
-                0 20px 40px rgba(15,118,110,0.12);
+            box-shadow: 0 20px 40px rgba(15,118,110,0.12);
         }
-
 
         .card h3 {
             font-size: 18px;
-
             margin-bottom: 12px;
         }
 
-
         .card p {
             color: #64748b;
-
             font-size: 14px;
         }
 
-
-        /* =========================
-           BUSINESS TYPES
-        ========================== */
-
+        /* BUSINESS TYPES */
         .business-grid {
             display: grid;
-
-            grid-template-columns:
-                repeat(4, 1fr);
-
+            grid-template-columns: repeat(4, 1fr);
             gap: 18px;
         }
 
-
         .business-card {
-            background:
-                linear-gradient(
-                    145deg,
-                    #ffffff,
-                    #f0fdfa
-                );
-
+            background: linear-gradient(145deg, #ffffff, #f0fdfa);
             border: 1px solid #ccfbf1;
-
             border-radius: 16px;
-
             padding: 25px;
-
             transition: 0.3s ease;
         }
 
-
         .business-card:hover {
             transform: translateY(-6px);
-
             border-color: #0f766e;
-
-            box-shadow:
-                0 15px 30px rgba(15,118,110,0.12);
+            box-shadow: 0 15px 30px rgba(15,118,110,0.12);
         }
-
 
         .business-card h3 {
             font-size: 17px;
-
             margin-bottom: 8px;
         }
 
-
         .business-card p {
             color: #64748b;
-
             font-size: 14px;
         }
 
-
-        /* =========================
-           DEVICES
-        ========================== */
-
+        /* DEVICES */
         .devices-grid {
             display: grid;
-
-            grid-template-columns:
-                repeat(4, 1fr);
-
+            grid-template-columns: repeat(4, 1fr);
             gap: 18px;
         }
 
-
         .device-badge {
             background: white;
-
             border: 1px solid #e2e8f0;
-
             border-radius: 16px;
-
             padding: 25px;
-
             text-align: center;
-
             transition: 0.3s ease;
         }
 
@@ -882,47 +580,30 @@
             border-color: #99f6e4;
         }
 
-
         .device-badge h4 {
             font-size: 16px;
-
             margin-bottom: 8px;
         }
 
-
         .device-badge p {
             color: #64748b;
-
             font-size: 13px;
         }
 
-
-        /* =========================
-           FAQ
-        ========================== */
-
+        /* FAQ */
         .faq-container {
             max-width: 850px;
-
             margin: auto;
-
             display: grid;
-
             gap: 15px;
         }
 
-
         .faq-item {
             background: white;
-
             border: 1px solid #e2e8f0;
-
             border-radius: 15px;
-
             padding: 22px 25px;
-
             cursor: pointer;
-
             transition: 0.25s ease;
         }
 
@@ -931,16 +612,11 @@
             box-shadow: 0 6px 20px rgba(15,23,42,0.04);
         }
 
-
         .faq-item h4 {
             font-size: 16px;
-
             margin-bottom: 0;
-
             display: flex;
-
             justify-content: space-between;
-
             align-items: center;
         }
 
@@ -955,7 +631,6 @@
             transform: rotate(45deg);
         }
 
-
         .faq-answer {
             max-height: 0;
             overflow: hidden;
@@ -967,39 +642,20 @@
             margin-top: 10px;
         }
 
-
         .faq-answer p {
             color: #64748b;
-
             font-size: 14px;
         }
 
-
-        /* =========================
-           FOUNDER
-        ========================== */
-
+        /* FOUNDER */
         .founder-card {
             max-width: 900px;
-
             margin: auto;
-
             padding: 40px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #f0fdfa,
-                    #eff6ff
-                );
-
+            background: linear-gradient(135deg, #f0fdfa, #eff6ff);
             border: 1px solid #bae6fd;
-
             border-radius: 22px;
-
-            box-shadow:
-                0 15px 40px rgba(15,23,42,0.06);
-
+            box-shadow: 0 15px 40px rgba(15,23,42,0.06);
             transition: transform 0.3s ease;
         }
 
@@ -1007,215 +663,140 @@
             transform: translateY(-4px);
         }
 
-
         .founder-card h3 {
             font-size: 27px;
-
             margin-bottom: 20px;
-
             color: #0f766e;
         }
 
-
         .founder-card p {
             color: #475569;
-
             margin-bottom: 15px;
         }
-
 
         .founder-card strong {
             color: #0f172a;
         }
 
-
         .founder-card .tagline {
             margin-top: 25px;
-
             margin-bottom: 0;
-
             font-size: 18px;
-
             font-weight: 800;
-
             color: #0f766e;
         }
 
-
-        /* =========================
-           FINAL CTA
-        ========================== */
-
+        /* FINAL CTA */
         .final-cta {
             max-width: 1100px;
-
             margin: 50px auto;
-
             padding: 70px 7%;
-
             text-align: center;
-
             border-radius: 28px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #0f766e,
-                    #0284c7
-                );
-
+            background: linear-gradient(135deg, #0f766e, #0284c7);
             color: white;
-
-            box-shadow:
-                0 20px 50px rgba(15,118,110,0.2);
+            box-shadow: 0 20px 50px rgba(15,118,110,0.2);
         }
-
 
         .final-cta h2 {
             color: white;
-
             margin-bottom: 15px;
         }
 
-
         .final-cta p {
             max-width: 650px;
-
             margin: auto;
-
             color: #e0f2fe;
         }
 
-
         .final-cta-buttons {
             display: flex;
-
             justify-content: center;
-
             align-items: center;
-
             flex-wrap: wrap;
-
             gap: 12px;
-
             margin-top: 28px;
         }
 
-
         .final-cta .btn-register {
             background: white;
-
             color: #0f766e;
         }
-
 
         .final-cta .btn-whatsapp {
             background: #16a34a;
         }
 
-
-        /* =========================
-           FOOTER
-        ========================== */
-
+        /* FOOTER */
         footer {
             text-align: center;
-
             padding: 45px 7%;
-
             background: #0f172a;
-
             color: #cbd5e1;
-
             font-size: 14px;
         }
-
 
         footer strong {
             color: white;
         }
 
-
-        /* =========================
-           MOBILE
-        ========================== */
-
+        /* MOBILE */
         @media (max-width: 900px) {
-
             header {
                 padding: 15px 5%;
             }
 
-
             .steps-grid,
             .grid {
-                grid-template-columns:
-                    repeat(2, 1fr);
+                grid-template-columns: repeat(2, 1fr);
             }
-
 
             .business-grid,
             .devices-grid {
-                grid-template-columns:
-                    repeat(2, 1fr);
+                grid-template-columns: repeat(2, 1fr);
             }
 
             .mockup-grid {
                 grid-template-columns: 1fr;
             }
-
         }
 
-
         @media (max-width: 650px) {
-
             header {
                 position: relative;
-
                 flex-direction: column;
-
                 align-items: stretch;
-
                 text-align: center;
             }
-
 
             .logo-container {
                 align-items: center;
             }
 
-
             .nav-buttons {
                 justify-content: center;
             }
-
 
             .ceo-tag {
                 max-width: none;
             }
 
-
             .hero {
                 padding: 70px 5% 60px;
             }
 
-
             .hero h1 {
                 font-size: 40px;
-
                 letter-spacing: -1.5px;
             }
-
 
             .hero > p {
                 font-size: 16px;
             }
 
-
             section:not(.hero):not(.final-cta) {
                 padding: 60px 5%;
             }
-
 
             .steps-grid,
             .grid,
@@ -1224,47 +805,33 @@
                 grid-template-columns: 1fr;
             }
 
-
             .hero-cta,
             .final-cta-buttons {
                 flex-direction: column;
             }
 
-
             .hero-cta a,
             .final-cta-buttons a {
                 width: 100%;
-
                 max-width: 400px;
             }
-
 
             .founder-card {
                 padding: 28px 22px;
             }
 
-
             .final-cta {
                 margin: 30px 5%;
-
                 padding: 55px 6%;
-
                 border-radius: 22px;
             }
-
         }
-
-
     </style>
-
 </head>
-
 
 <body>
 
-<!-- =========================
-     LOADING SPINNER OVERLAY
-========================== -->
+<!-- LOADING SPINNER OVERLAY -->
 <div id="loading-overlay">
     <div class="spinner-container">
         <div class="spinner"></div>
@@ -1272,119 +839,56 @@
     <div class="loading-text">Redirecting to Wise Decision POS...</div>
 </div>
 
-
-<!-- =========================
-     HEADER
-========================== -->
-
+<!-- HEADER -->
 <header>
-
     <div class="logo-container">
-
         <div class="logo">
             <span class="big-w">W</span>ISE DECISION
         </div>
-
         <div class="ceo-tag">
             LET YOUR NEXT BUSINESS MOVE BE A WISE DECISION
         </div>
-
     </div>
-
-
     <div class="nav-buttons">
-
-        <a href="app.html" class="btn-login action-link">
-            Login
-        </a>
-
-        <a href="app.html?action=register" class="btn-register action-link">
-            Get Started
-        </a>
-
+        <a href="app.html" class="btn-login action-link">Login</a>
+        <a href="app.html?action=register" class="btn-register action-link">Get Started</a>
     </div>
-
 </header>
 
-
-
-<!-- =========================
-     HERO
-========================== -->
-
+<!-- HERO -->
 <section class="hero">
-
     <div class="hero-badge">
         🇳🇬 Cloud Business Management Software for Nigeria
     </div>
-
-
     <h1>
-
         Run Your Enterprise Smarter with
-
-        <span>
-            Wise Decision POS
-        </span>
-
+        <span>Wise Decision POS</span>
     </h1>
-
-
     <p>
-
         A cloud enterprise and point-of-sale solution built to help businesses
         manage sales, inventory, staff, suppliers, expenses, multiple branches
         and thermal receipts from one platform.
-
     </p>
-
-
     <div class="activation-notice">
-
         ⚠️ <span>Note:</span>
-
         You need an <span>Activation Code</span> before you can successfully
         register your business.
-
         Click below to request yours instantly on WhatsApp.
-
     </div>
-
-
     <div class="hero-cta">
-
-        <a
-            href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20to%20register%20my%20business%20on%20Wise%20Decision%20POS."
-            target="_blank"
-            rel="noopener"
-            class="btn-whatsapp">
-
+        <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20to%20register%20my%20business%20on%20Wise%20Decision%20POS."
+           target="_blank" rel="noopener" class="btn-whatsapp">
             💬 Get Activation Code on WhatsApp
-
         </a>
-
-
-        <a
-            href="app.html?action=register"
-            class="btn-register action-link">
-
+        <a href="app.html?action=register" class="btn-register action-link">
             Register Business
-
         </a>
-
-
-        <a
-            href="app.html"
-            class="btn-login action-link">
-
+        <a href="app.html" class="btn-login action-link">
             Access Store Portal
-
         </a>
-
     </div>
 
-
-    <!-- CSS DASHBOARD MOCKUP PREVIEW -->
+    <!-- DASHBOARD MOCKUP PREVIEW -->
     <div class="dashboard-mockup">
         <div class="mockup-header">
             <div class="dot dot-red"></div>
@@ -1411,574 +915,259 @@
             </div>
         </div>
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     HOW IT WORKS
-========================== -->
-
+<!-- HOW IT WORKS -->
 <section>
-
-    <h2>
-        How to Get Started
-    </h2>
-
-
+    <h2>How to Get Started</h2>
     <p class="section-description">
-
         Start using Wise Decision POS with a simple three-step registration process.
-
     </p>
-
-
     <div class="steps-grid">
-
-
         <div class="step-card">
-
-            <div class="step-number">
-                01
-            </div>
-
-            <h3>
-                Request Activation Code
-            </h3>
-
+            <div class="step-number">01</div>
+            <h3>Request Activation Code</h3>
             <p>
                 Click our WhatsApp button to chat directly with management
                 and receive your business activation code.
             </p>
-
         </div>
-
-
         <div class="step-card">
-
-            <div class="step-number">
-                02
-            </div>
-
-            <h3>
-                Register Your Store
-            </h3>
-
+            <div class="step-number">02</div>
+            <h3>Register Your Store</h3>
             <p>
                 Enter your unique activation code, set up your store profile
                 and create your secure administrator access.
             </p>
-
         </div>
-
-
         <div class="step-card">
-
-            <div class="step-number">
-                03
-            </div>
-
-            <h3>
-                Manage Your Business
-            </h3>
-
+            <div class="step-number">03</div>
+            <h3>Manage Your Business</h3>
             <p>
                 Start recording sales, managing inventory, tracking suppliers,
                 monitoring branches and printing thermal receipts.
             </p>
-
         </div>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     FEATURES
-========================== -->
-
+<!-- FEATURES -->
 <section>
-
-    <h2>
-        Wise Decision POS Features
-    </h2>
-
-
+    <h2>Wise Decision POS Features</h2>
     <p class="section-description">
-
         Business management tools designed to help you organize your everyday
         operations from one platform.
-
     </p>
-
-
     <div class="grid">
-
-
         <div class="card">
-
-            <h3>
-                📦 Multi-Branch Tracking
-            </h3>
-
+            <h3>📦 Multi-Branch Tracking</h3>
             <p>
                 Monitor stock levels, sales activity and overall business
                 performance across multiple store branches from one
                 centralized cloud dashboard.
             </p>
-
         </div>
-
-
         <div class="card">
-
-            <h3>
-                🖨️ Thermal Receipt Printing
-            </h3>
-
+            <h3>🖨️ Thermal Receipt Printing</h3>
             <p>
                 Generate clean, professional receipts for your customers
                 with compatible thermal receipt printers.
             </p>
-
         </div>
-
-
         <div class="card">
-
-            <h3>
-                👥 Role-Based Staff Access
-            </h3>
-
+            <h3>👥 Role-Based Staff Access</h3>
             <p>
                 Assign controlled Admin and Staff access to help protect
                 sensitive business information and manage employee activity.
             </p>
-
         </div>
-
-
         <div class="card">
-
-            <h3>
-                🔄 Easy Sales Returns
-            </h3>
-
+            <h3>🔄 Easy Sales Returns</h3>
             <p>
                 Process customer refunds and product returns while keeping
                 sales and inventory records organized.
             </p>
-
         </div>
-
-
         <div class="card">
-
-            <h3>
-                📊 Supplier & Stock Tracking
-            </h3>
-
+            <h3>📊 Supplier & Stock Tracking</h3>
             <p>
                 Keep records of incoming supplies, supplier information
                 and product quantities so your inventory stays organized.
             </p>
-
         </div>
-
-
         <div class="card">
-
-            <h3>
-                ☁️ Cloud Business Management
-            </h3>
-
+            <h3>☁️ Cloud Business Management</h3>
             <p>
                 Access your business management system through supported
                 web browsers on phones, tablets, laptops and PCs.
             </p>
-
         </div>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     BUSINESS TYPES
-========================== -->
-
+<!-- BUSINESS TYPES -->
 <section>
-
-    <h2>
-        Businesses That Can Use Wise Decision POS
-    </h2>
-
-
+    <h2>Businesses That Can Use Wise Decision POS</h2>
     <p class="section-description">
-
         Wise Decision POS can be used by businesses that need organized
         sales, inventory and day-to-day business management.
-
     </p>
-
-
     <div class="business-grid">
-
-
         <div class="business-card">
-
-            <h3>
-                💊 Pharmacies
-            </h3>
-
-            <p>
-                Manage products, sales and inventory from one business system.
-            </p>
-
+            <h3>💊 Pharmacies</h3>
+            <p>Manage products, sales and inventory from one business system.</p>
         </div>
-
-
         <div class="business-card">
-
-            <h3>
-                🛒 Retail Stores
-            </h3>
-
-            <p>
-                Record everyday transactions and monitor store inventory.
-            </p>
-
+            <h3>🛒 Retail Stores</h3>
+            <p>Record everyday transactions and monitor store inventory.</p>
         </div>
-
-
         <div class="business-card">
-
-            <h3>
-                🍾 Beverage & Wine Stores
-            </h3>
-
-            <p>
-                Track products, sales, stock quantities and transactions.
-            </p>
-
+            <h3>🍾 Beverage & Wine Stores</h3>
+            <p>Track products, sales, stock quantities and transactions.</p>
         </div>
-
-
         <div class="business-card">
-
-            <h3>
-                🏪 Supermarkets
-            </h3>
-
-            <p>
-                Organize products, sales and inventory for everyday operations.
-            </p>
-
+            <h3>🏪 Supermarkets</h3>
+            <p>Organize products, sales and inventory for everyday operations.</p>
         </div>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     DEVICES
-========================== -->
-
+<!-- DEVICES -->
 <section>
-
-    <h2>
-        Optimized For Your Equipment
-    </h2>
-
-
+    <h2>Optimized For Your Equipment</h2>
     <p class="section-description">
-
         Use Wise Decision POS across supported devices and business equipment.
-
     </p>
-
-
     <div class="devices-grid">
-
-
         <div class="device-badge">
-
-            <h4>
-                📱 Smartphones
-            </h4>
-
-            <p>
-                Run your store through a supported mobile browser.
-            </p>
-
+            <h4>📱 Smartphones</h4>
+            <p>Run your store through a supported mobile browser.</p>
         </div>
-
-
         <div class="device-badge">
-
-            <h4>
-                🖥️ Tablets / iPads
-            </h4>
-
-            <p>
-                Convenient layout for counter and store operations.
-            </p>
-
+            <h4>🖥️ Tablets / iPads</h4>
+            <p>Convenient layout for counter and store operations.</p>
         </div>
-
-
         <div class="device-badge">
-
-            <h4>
-                💻 Laptops & PCs
-            </h4>
-
-            <p>
-                Full management view for detailed business operations.
-            </p>
-
+            <h4>💻 Laptops & PCs</h4>
+            <p>Full management view for detailed business operations.</p>
         </div>
-
-
         <div class="device-badge">
-
-            <h4>
-                🖨️ Thermal Printers
-            </h4>
-
-            <p>
-                Compatible thermal printing setups for customer receipts.
-            </p>
-
+            <h4>🖨️ Thermal Printers</h4>
+            <p>Compatible thermal printing setups for customer receipts.</p>
         </div>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     FAQ (Interactive Accordion)
-========================== -->
-
+<!-- FAQ -->
 <section>
-
-    <h2>
-        Frequently Asked Questions
-    </h2>
-
-
+    <h2>Frequently Asked Questions</h2>
     <div class="faq-container">
-
-
         <div class="faq-item">
             <h4>What do I need to register my business?</h4>
             <div class="faq-answer">
                 <p>You will need an official Activation Code provided by Wise Decision management. Use the WhatsApp button on this page to request yours.</p>
             </div>
         </div>
-
-
         <div class="faq-item">
             <h4>Can I access Wise Decision POS on my phone or tablet?</h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS is designed to work through supported web browsers on smartphones, tablets and desktop computers.</p>
             </div>
         </div>
-
-
         <div class="faq-item">
             <h4>Does the system support thermal receipt printers?</h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS supports compatible thermal receipt printing setups.</p>
             </div>
         </div>
-
-
         <div class="faq-item">
             <h4>Can I manage more than one store branch?</h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS includes multi-branch business management functionality for supported accounts.</p>
             </div>
         </div>
-
-
         <div class="faq-item">
             <h4>What is Wise Decision POS?</h4>
             <div class="faq-answer">
                 <p>Wise Decision POS is a cloud-based point-of-sale and business management system designed for businesses in Nigeria.</p>
             </div>
         </div>
-
-
         <div class="faq-item">
             <h4>Who founded Wise Decision?</h4>
             <div class="faq-answer">
                 <p>Wise Decision was founded by <strong>Emmanuel Ayoola Fisuyi</strong>.</p>
             </div>
         </div>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     FOUNDER
-========================== -->
-
+<!-- FOUNDER -->
 <section>
-
-    <h2>
-        About the Founder
-    </h2>
-
-
+    <h2>About the Founder</h2>
     <div class="founder-card">
-
-        <h3>
-            EMMANUEL AYOOOLA FISUYI
-        </h3>
-
-
+        <h3>EMMANUEL AYOOOLA FISUYI</h3>
         <p>
-
             <strong>EMMANUEL AYOOOLA FISUYI</strong> is the founder of
             <strong>Wise Decision</strong>, a Nigerian software brand
             focused on business management and point-of-sale solutions.
-
         </p>
-
-
         <p>
-
             Through Wise Decision, he develops practical digital tools
             designed to help businesses manage sales, inventory,
             customers, expenses, suppliers, staff and day-to-day
             business operations from one platform.
-
         </p>
-
-
         <p>
-
             <strong>Wise Decision POS</strong> is designed for businesses
             in Nigeria looking for a digital solution for managing
             everyday sales and business operations.
-
         </p>
-
-
         <p class="tagline">
-
             Let your next business move be a wise decision.
-
         </p>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     FINAL CTA
-========================== -->
-
+<!-- FINAL CTA -->
 <section class="final-cta">
-
-    <h2>
-        Ready to Manage Your Business Smarter?
-    </h2>
-
-
+    <h2>Ready to Manage Your Business Smarter?</h2>
     <p>
-
         Get started with Wise Decision POS and bring your sales,
         inventory and business management into one platform.
-
     </p>
-
-
     <div class="final-cta-buttons">
-
-
-        <a
-            href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS."
-            target="_blank"
-            rel="noopener"
-            class="btn-whatsapp">
-
+        <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS."
+           target="_blank" rel="noopener" class="btn-whatsapp">
             💬 Contact Wise Decision
-
         </a>
-
-
-        <a
-            href="app.html?action=register"
-            class="btn-register action-link">
-
+        <a href="app.html?action=register" class="btn-register action-link">
             Get Started
-
         </a>
-
     </div>
-
 </section>
 
-
-
-<!-- =========================
-     FOOTER
-========================== -->
-
+<!-- FOOTER -->
 <footer>
-
     <p>
-
         &copy; 2026 <strong>Wise Decision</strong>.
         All rights reserved.
-
     </p>
-
-
     <p style="margin-top: 8px;">
-
         Cloud POS & Business Management Software in Nigeria
-
     </p>
-
-
     <p style="margin-top: 8px;">
-
         WhatsApp: <strong>09168140710</strong>
-
     </p>
-
 </footer>
 
-
-<!-- =========================
-     INTERACTIVE SCRIPTS
-========================== -->
+<!-- INTERACTIVE SCRIPTS -->
 <script>
     // FAQ Accordion functionality
     document.querySelectorAll('.faq-item').forEach(item => {
         item.addEventListener('click', () => {
-            // Close other open items
             document.querySelectorAll('.faq-item').forEach(other => {
                 if (other !== item) other.classList.remove('active');
             });
-            // Toggle current item
             item.classList.toggle('active');
         });
     });
@@ -1988,18 +1177,13 @@
         link.addEventListener('click', function(e) {
             e.preventDefault();
             const targetUrl = this.href;
-
-            // Show loading overlay
             document.getElementById('loading-overlay').classList.add('active');
-
-            // Delay navigation slightly to let the user enjoy the animation
             setTimeout(function() {
                 window.location.href = targetUrl;
             }, 650);
         });
     });
 </script>
-
 
 </body>
 </html>
