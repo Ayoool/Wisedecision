@@ -20,7 +20,7 @@
     <!-- Google Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- STRUCTURED DATA -->
     <script type="application/ld+json">
@@ -103,30 +103,47 @@
             gap: 3px;
         }
 
+        /* === LOGO: BIG W === */
         .logo {
-            font-size: 24px;
-            font-weight: 800;
-            letter-spacing: -0.8px;
+            font-size: 22px;
+            font-weight: 900;
+            letter-spacing: -0.6px;
             color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 1px;
+            line-height: 1;
         }
 
         .big-w {
-            color: #0f766e;
-            font-size: 32px;
+            font-size: 46px;
+            font-weight: 900;
             display: inline-block;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, text-shadow 0.3s ease;
+            line-height: 0.85;
+            letter-spacing: -3px;
+            margin-right: -2px;
+            /* Gradient fill for a bold brand mark */
+            background: linear-gradient(135deg, #0f766e, #0284c7);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 10px rgba(15, 118, 110, 0.15);
         }
 
         .logo:hover .big-w {
-            transform: scale(1.1) rotate(-5deg);
+            transform: scale(1.18) rotate(-6deg);
+            text-shadow: 0 4px 18px rgba(15, 118, 110, 0.35);
         }
 
         .ceo-tag {
             font-size: 9px;
             font-weight: 700;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             color: #64748b;
             max-width: 360px;
+            text-transform: uppercase;
+            margin-top: 2px;
         }
 
         .nav-buttons {
@@ -773,6 +790,15 @@
                 align-items: center;
             }
 
+            /* Mobile logo sizing */
+            .logo {
+                font-size: 19px;
+            }
+
+            .big-w {
+                font-size: 38px;
+            }
+
             .nav-buttons {
                 justify-content: center;
             }
@@ -1082,108 +1108,3 @@
         </div>
         <div class="faq-item">
             <h4>Can I manage more than one store branch?</h4>
-            <div class="faq-answer">
-                <p>Yes. Wise Decision POS includes multi-branch business management functionality for supported accounts.</p>
-            </div>
-        </div>
-        <div class="faq-item">
-            <h4>What is Wise Decision POS?</h4>
-            <div class="faq-answer">
-                <p>Wise Decision POS is a cloud-based point-of-sale and business management system designed for businesses in Nigeria.</p>
-            </div>
-        </div>
-        <div class="faq-item">
-            <h4>Who founded Wise Decision?</h4>
-            <div class="faq-answer">
-                <p>Wise Decision was founded by <strong>Emmanuel Ayoola Fisuyi</strong>.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- FOUNDER -->
-<section>
-    <h2>About the Founder</h2>
-    <div class="founder-card">
-        <h3>EMMANUEL AYOOOLA FISUYI</h3>
-        <p>
-            <strong>EMMANUEL AYOOOLA FISUYI</strong> is the founder of
-            <strong>Wise Decision</strong>, a Nigerian software brand
-            focused on business management and point-of-sale solutions.
-        </p>
-        <p>
-            Through Wise Decision, he develops practical digital tools
-            designed to help businesses manage sales, inventory,
-            customers, expenses, suppliers, staff and day-to-day
-            business operations from one platform.
-        </p>
-        <p>
-            <strong>Wise Decision POS</strong> is designed for businesses
-            in Nigeria looking for a digital solution for managing
-            everyday sales and business operations.
-        </p>
-        <p class="tagline">
-            Let your next business move be a wise decision.
-        </p>
-    </div>
-</section>
-
-<!-- FINAL CTA -->
-<section class="final-cta">
-    <h2>Ready to Manage Your Business Smarter?</h2>
-    <p>
-        Get started with Wise Decision POS and bring your sales,
-        inventory and business management into one platform.
-    </p>
-    <div class="final-cta-buttons">
-        <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS."
-           target="_blank" rel="noopener" class="btn-whatsapp">
-            💬 Contact Wise Decision
-        </a>
-        <a href="app.html?action=register" class="btn-register action-link">
-            Get Started
-        </a>
-    </div>
-</section>
-
-<!-- FOOTER -->
-<footer>
-    <p>
-        &copy; 2026 <strong>Wise Decision</strong>.
-        All rights reserved.
-    </p>
-    <p style="margin-top: 8px;">
-        Cloud POS & Business Management Software in Nigeria
-    </p>
-    <p style="margin-top: 8px;">
-        WhatsApp: <strong>09168140710</strong>
-    </p>
-</footer>
-
-<!-- INTERACTIVE SCRIPTS -->
-<script>
-    // FAQ Accordion functionality
-    document.querySelectorAll('.faq-item').forEach(item => {
-        item.addEventListener('click', () => {
-            document.querySelectorAll('.faq-item').forEach(other => {
-                if (other !== item) other.classList.remove('active');
-            });
-            item.classList.toggle('active');
-        });
-    });
-
-    // Loading Spinner functionality for login/register buttons
-    document.querySelectorAll('.action-link').forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const targetUrl = this.href;
-            document.getElementById('loading-overlay').classList.add('active');
-            setTimeout(function() {
-                window.location.href = targetUrl;
-            }, 650);
-        });
-    });
-</script>
-
-</body>
-</html>
