@@ -123,7 +123,6 @@
             line-height: 0.85;
             letter-spacing: -3px;
             margin-right: -2px;
-            /* Gradient fill for a bold brand mark */
             background: linear-gradient(135deg, #0f766e, #0284c7);
             -webkit-background-clip: text;
             background-clip: text;
@@ -210,6 +209,7 @@
             max-width: 1100px;
             margin: auto;
             position: relative;
+            isolation: isolate;
         }
 
         .hero::before {
@@ -226,6 +226,22 @@
             transform: translateX(-50%);
             z-index: -1;
             animation: pulse-glow 6s ease-in-out infinite alternate;
+        }
+
+        /* === HERO BACKGROUND IMAGE === */
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1920&q=80");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.09;
+            z-index: -2;
+            border-radius: 30px;
+            -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 78%);
+            mask-image: radial-gradient(ellipse at center, black 40%, transparent 78%);
         }
 
         @keyframes pulse-glow {
@@ -629,19 +645,27 @@
             box-shadow: 0 6px 20px rgba(15,23,42,0.04);
         }
 
+        .faq-item.active {
+            border-color: #0f766e;
+            box-shadow: 0 8px 24px rgba(15,118,110,0.1);
+        }
+
         .faq-item h4 {
             font-size: 16px;
             margin-bottom: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 16px;
         }
 
         .faq-item h4::after {
             content: "+";
-            font-size: 20px;
+            font-size: 22px;
             color: #0f766e;
             transition: transform 0.3s ease;
+            flex-shrink: 0;
+            line-height: 1;
         }
 
         .faq-item.active h4::after {
@@ -651,12 +675,12 @@
         .faq-answer {
             max-height: 0;
             overflow: hidden;
-            transition: max-height 0.3s ease, margin-top 0.3s ease;
+            transition: max-height 0.35s ease, margin-top 0.35s ease;
         }
 
         .faq-item.active .faq-answer {
-            max-height: 150px;
-            margin-top: 10px;
+            max-height: 300px;
+            margin-top: 12px;
         }
 
         .faq-answer p {
@@ -790,7 +814,6 @@
                 align-items: center;
             }
 
-            /* Mobile logo sizing */
             .logo {
                 font-size: 19px;
             }
@@ -1108,3 +1131,108 @@
         </div>
         <div class="faq-item">
             <h4>Can I manage more than one store branch?</h4>
+            <div class="faq-answer">
+                <p>Yes. Wise Decision POS includes multi-branch business management functionality for supported accounts.</p>
+            </div>
+        </div>
+        <div class="faq-item">
+            <h4>What is Wise Decision POS?</h4>
+            <div class="faq-answer">
+                <p>Wise Decision POS is a cloud-based point-of-sale and business management system designed for businesses in Nigeria.</p>
+            </div>
+        </div>
+        <div class="faq-item">
+            <h4>Who founded Wise Decision?</h4>
+            <div class="faq-answer">
+                <p>Wise Decision was founded by <strong>Emmanuel Ayoola Fisuyi</strong>.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- FOUNDER -->
+<section>
+    <h2>About the Founder</h2>
+    <div class="founder-card">
+        <h3>EMMANUEL AYOOOLA FISUYI</h3>
+        <p>
+            <strong>EMMANUEL AYOOOLA FISUYI</strong> is the founder of
+            <strong>Wise Decision</strong>, a Nigerian software brand
+            focused on business management and point-of-sale solutions.
+        </p>
+        <p>
+            Through Wise Decision, he develops practical digital tools
+            designed to help businesses manage sales, inventory,
+            customers, expenses, suppliers, staff and day-to-day
+            business operations from one platform.
+        </p>
+        <p>
+            <strong>Wise Decision POS</strong> is designed for businesses
+            in Nigeria looking for a digital solution for managing
+            everyday sales and business operations.
+        </p>
+        <p class="tagline">
+            Let your next business move be a wise decision.
+        </p>
+    </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+    <h2>Ready to Manage Your Business Smarter?</h2>
+    <p>
+        Get started with Wise Decision POS and bring your sales,
+        inventory and business management into one platform.
+    </p>
+    <div class="final-cta-buttons">
+        <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS."
+           target="_blank" rel="noopener" class="btn-whatsapp">
+            💬 Contact Wise Decision
+        </a>
+        <a href="app.html?action=register" class="btn-register action-link">
+            Get Started
+        </a>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+    <p>
+        &copy; 2026 <strong>Wise Decision</strong>.
+        All rights reserved.
+    </p>
+    <p style="margin-top: 8px;">
+        Cloud POS & Business Management Software in Nigeria
+    </p>
+    <p style="margin-top: 8px;">
+        WhatsApp: <strong>09168140710</strong>
+    </p>
+</footer>
+
+<!-- INTERACTIVE SCRIPTS -->
+<script>
+    // FAQ Accordion functionality
+    document.querySelectorAll('.faq-item').forEach(item => {
+        item.addEventListener('click', () => {
+            document.querySelectorAll('.faq-item').forEach(other => {
+                if (other !== item) other.classList.remove('active');
+            });
+            item.classList.toggle('active');
+        });
+    });
+
+    // Loading Spinner functionality for login/register buttons
+    document.querySelectorAll('.action-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const targetUrl = this.href;
+            document.getElementById('loading-overlay').classList.add('active');
+            setTimeout(function() {
+                window.location.href = targetUrl;
+            }, 650);
+        });
+    });
+</script>
+
+</body>
+</html>
