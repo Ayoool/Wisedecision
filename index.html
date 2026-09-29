@@ -128,7 +128,7 @@
 
         /* =========================
            HEADER
-        ========================== -->
+        ========================== */
 
         header {
             width: 100%;
@@ -216,7 +216,7 @@
 
         /* =========================
            BUTTONS
-        ========================== -->
+        ========================== */
 
         .btn-login,
         .btn-register,
@@ -306,7 +306,7 @@
 
         /* =========================
            HERO
-        ========================== -->
+        ========================== */
 
         .hero {
             text-align: center;
@@ -481,7 +481,7 @@
 
         /* =========================
            CSS DASHBOARD MOCKUP
-        ========================== -->
+        ========================== */
 
         .dashboard-mockup {
             margin-top: 55px;
@@ -577,7 +577,7 @@
 
         /* =========================
            LOADING SPINNER OVERLAY
-        ========================== -->
+        ========================== */
 
         #loading-overlay {
             position: fixed;
@@ -638,7 +638,7 @@
 
         /* =========================
            GENERAL SECTIONS
-        ========================== -->
+        ========================== */
 
         section:not(.hero):not(.final-cta) {
             max-width: 1200px;
@@ -677,7 +677,7 @@
 
         /* =========================
            STEPS
-        ========================== -->
+        ========================== */
 
         .steps-grid {
             display: grid;
@@ -741,7 +741,7 @@
 
         /* =========================
            FEATURE CARDS
-        ========================== -->
+        ========================== */
 
         .grid {
             display: grid;
@@ -795,7 +795,7 @@
 
         /* =========================
            BUSINESS TYPES
-        ========================== -->
+        ========================== */
 
         .business-grid {
             display: grid;
@@ -851,7 +851,7 @@
 
         /* =========================
            DEVICES
-        ========================== -->
+        ========================== */
 
         .devices-grid {
             display: grid;
@@ -899,7 +899,7 @@
 
         /* =========================
            FAQ
-        ========================== -->
+        ========================== */
 
         .faq-container {
             max-width: 850px;
@@ -977,7 +977,7 @@
 
         /* =========================
            FOUNDER
-        ========================== -->
+        ========================== */
 
         .founder-card {
             max-width: 900px;
@@ -1044,7 +1044,7 @@
 
         /* =========================
            FINAL CTA
-        ========================== -->
+        ========================== */
 
         .final-cta {
             max-width: 1100px;
@@ -1116,7 +1116,7 @@
 
         /* =========================
            FOOTER
-        ========================== -->
+        ========================== */
 
         footer {
             text-align: center;
@@ -1138,7 +1138,7 @@
 
         /* =========================
            MOBILE
-        ========================== -->
+        ========================== */
 
         @media (max-width: 900px) {
 
@@ -1294,11 +1294,11 @@
 
     <div class="nav-buttons">
 
-        <a href="app.html" class="btn-login login-trigger">
+        <a href="app.html" class="btn-login action-link">
             Login
         </a>
 
-        <a href="app.html?action=register" class="btn-register login-trigger">
+        <a href="app.html?action=register" class="btn-register action-link">
             Get Started
         </a>
 
@@ -1366,7 +1366,7 @@
 
         <a
             href="app.html?action=register"
-            class="btn-register login-trigger">
+            class="btn-register action-link">
 
             Register Business
 
@@ -1375,7 +1375,7 @@
 
         <a
             href="app.html"
-            class="btn-login login-trigger">
+            class="btn-login action-link">
 
             Access Store Portal
 
@@ -1925,7 +1925,7 @@
 
         <a
             href="app.html?action=register"
-            class="btn-register login-trigger">
+            class="btn-register action-link">
 
             Get Started
 
@@ -1983,8 +1983,8 @@
         });
     });
 
-    // Loading Spinner functionality ONLY for login-trigger buttons
-    document.querySelectorAll('.login-trigger').forEach(link => {
+    // Loading Spinner functionality for login/register buttons
+    document.querySelectorAll('.action-link').forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
             const targetUrl = this.href;
