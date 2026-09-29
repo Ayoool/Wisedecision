@@ -571,3 +571,179 @@ div[id*="mimo"] {
 
 /* Refund receipts print via the same thermal-width rules as the other three
    printable boxes above — see the shared @media print block. */
+/* ================= WISE DECISION — BRANDING UPGRADE ================= */
+
+/* Animated gradient background for auth screens */
+.auth-wrapper {
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(15, 118, 110, 0.25), transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(2, 132, 199, 0.25), transparent 45%),
+        linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+/* Soft floating orbs */
+.auth-wrapper::before,
+.auth-wrapper::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.auth-wrapper::before {
+    width: 380px;
+    height: 380px;
+    background: #14b8a6;
+    top: -120px;
+    left: -120px;
+    opacity: 0.35;
+    animation: auth-float 18s ease-in-out infinite;
+}
+
+.auth-wrapper::after {
+    width: 420px;
+    height: 420px;
+    background: #0ea5e9;
+    bottom: -150px;
+    right: -150px;
+    opacity: 0.30;
+    animation: auth-float 22s ease-in-out infinite reverse;
+}
+
+@keyframes auth-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50%      { transform: translate(40px, -30px) scale(1.08); }
+}
+
+/* Modern glass auth card */
+.auth-card {
+    position: relative;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow:
+        0 25px 60px rgba(0, 0, 0, 0.35),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    animation: auth-card-in 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes auth-card-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Brand title — bigger gradient W */
+.auth-card .brand-title {
+    font-size: 26px !important;
+    font-weight: 900 !important;
+    letter-spacing: -0.6px;
+    color: #0f172a !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    gap: 1px;
+    margin-bottom: 6px;
+}
+
+.auth-card .brand-title .big-w {
+    font-size: 52px;
+    font-weight: 900;
+    line-height: 0.85;
+    letter-spacing: -3px;
+    margin-right: -2px;
+    background: linear-gradient(135deg, #0f766e, #0284c7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 3px 14px rgba(15, 118, 110, 0.18);
+    transition: transform 0.3s ease, text-shadow 0.3s ease;
+    display: inline-block;
+}
+
+.auth-card .brand-title:hover .big-w {
+    transform: scale(1.15) rotate(-6deg);
+    text-shadow: 0 5px 20px rgba(15, 118, 110, 0.40);
+}
+
+/* Subtitle polish */
+.auth-card .subtitle {
+    text-align: center !important;
+    font-size: 12px;
+    color: #64748b !important;
+    margin-bottom: 22px !important;
+    letter-spacing: 0.2px;
+}
+
+/* Inputs inside auth card */
+.auth-card .form-group input {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    padding: 12px 14px;
+    font-size: 14px;
+}
+
+.auth-card .form-group input:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: #0f766e;
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+}
+
+/* Login / register buttons inside auth card */
+.auth-card .btn-action-primary {
+    padding: 13px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #0f766e 0%, #0284c7 100%) !important;
+    box-shadow: 0 10px 22px rgba(15, 118, 110, 0.25);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    justify-content: center !important;
+    text-align: center !important;
+}
+
+.auth-card .btn-action-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 30px rgba(15, 118, 110, 0.35);
+}
+
+.auth-card .menu-btn[onclick*="register-view"] {
+    justify-content: center !important;
+    text-align: center !important;
+    background: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 10px;
+    font-weight: 700;
+    color: #334155 !important;
+    transition: all 0.25s ease;
+}
+
+.auth-card .menu-btn[onclick*="register-view"]:hover {
+    background: #e2e8f0 !important;
+    color: #0f766e !important;
+    border-color: #99f6e4 !important;
+}
+
+/* Register card — cancel button matches */
+.auth-card .btn-logout {
+    justify-content: center !important;
+    text-align: center !important;
+    border-radius: 10px;
+    transition: all 0.25s ease;
+}
+
+/* Responsive mobile tweak */
+@media (max-width: 480px) {
+    .auth-card .brand-title { font-size: 22px !important; }
+    .auth-card .brand-title .big-w { font-size: 44px; }
+    .auth-card { padding: 20px; }
+}
