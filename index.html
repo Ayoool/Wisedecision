@@ -440,6 +440,141 @@
 
 
         /* =========================
+           CSS DASHBOARD MOCKUP
+        ========================== */
+
+        .dashboard-mockup {
+            margin-top: 55px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px rgba(15,23,42,0.12);
+            overflow: hidden;
+            text-align: left;
+        }
+
+        .mockup-header {
+            background: #f1f5f9;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .dot-red { background: #ef4444; }
+        .dot-yellow { background: #f59e0b; }
+        .dot-green { background: #10b981; }
+
+        .mockup-url {
+            margin-left: 10px;
+            font-size: 12px;
+            color: #64748b;
+            background: #ffffff;
+            padding: 4px 12px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            flex-grow: 1;
+            font-family: monospace;
+        }
+
+        .mockup-body {
+            padding: 30px;
+            background:
+                linear-gradient(
+                    135deg,
+                    #f8fafc 0%,
+                    #f0fdfa 100%
+                );
+        }
+
+        .mockup-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .mockup-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 12px rgba(15,23,42,0.03);
+        }
+
+        .mockup-card h4 {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .mockup-card .stat {
+            font-size: 22px;
+            font-weight: 800;
+            color: #0f766e;
+        }
+
+
+        /* =========================
+           LOADING SPINNER OVERLAY
+        ========================== */
+
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(6px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        #loading-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .spinner {
+            width: 55px;
+            height: 55px;
+            border: 5px solid rgba(255, 255, 255, 0.2);
+            border-top: 5px solid #14b8a6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        .loading-text {
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 16px;
+            letter-spacing: 0.3px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+
+        /* =========================
            GENERAL SECTIONS
         ========================== */
 
@@ -908,6 +1043,10 @@
                     repeat(2, 1fr);
             }
 
+            .mockup-grid {
+                grid-template-columns: 1fr;
+            }
+
         }
 
 
@@ -1006,6 +1145,14 @@
 
 <body>
 
+<!-- =========================
+     LOADING SPINNER OVERLAY
+========================== -->
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Redirecting to Wise Decision POS...</div>
+</div>
+
 
 <!-- =========================
      HEADER
@@ -1028,11 +1175,11 @@
 
     <div class="nav-buttons">
 
-        <a href="app.html" class="btn-login">
+        <a href="app.html" class="btn-login action-link">
             Login
         </a>
 
-        <a href="app.html?action=register" class="btn-register">
+        <a href="app.html?action=register" class="btn-register action-link">
             Get Started
         </a>
 
@@ -1100,7 +1247,7 @@
 
         <a
             href="app.html?action=register"
-            class="btn-register">
+            class="btn-register action-link">
 
             Register Business
 
@@ -1109,12 +1256,41 @@
 
         <a
             href="app.html"
-            class="btn-login">
+            class="btn-login action-link">
 
             Access Store Portal
 
         </a>
 
+    </div>
+
+
+    <!-- CSS DASHBOARD MOCKUP PREVIEW -->
+    <div class="dashboard-mockup">
+        <div class="mockup-header">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+            <div class="mockup-url">https://ayoool.github.io/Wisedecision/dashboard</div>
+        </div>
+        <div class="mockup-body">
+            <h3 style="font-size: 18px; color: #0f172a; margin-bottom: 5px;">📊 Wise Decision Enterprise Cloud Portal</h3>
+            <p style="font-size: 14px; color: #64748b;">Live multi-branch inventory, sales tracking, and thermal receipt management.</p>
+            <div class="mockup-grid">
+                <div class="mockup-card">
+                    <h4>Today's Sales</h4>
+                    <div class="stat">₦184,500</div>
+                </div>
+                <div class="mockup-card">
+                    <h4>Active Stock Items</h4>
+                    <div class="stat">1,240</div>
+                </div>
+                <div class="mockup-card">
+                    <h4>Active Branches</h4>
+                    <div class="stat">Multi-Branch</div>
+                </div>
+            </div>
+        </div>
     </div>
 
 </section>
@@ -1564,7 +1740,7 @@
 
             <p>
                 Wise Decision was founded by
-                <strong>Emmanuel Ayooola Fisuyi</strong>.
+                <strong>Emmanuel Ayoola Fisuyi</strong>.
             </p>
 
         </div>
@@ -1668,7 +1844,7 @@
 
         <a
             href="app.html?action=register"
-            class="btn-register">
+            class="btn-register action-link">
 
             Get Started
 
@@ -1708,6 +1884,27 @@
     </p>
 
 </footer>
+
+
+<!-- =========================
+     SPINNER SCRIPT
+========================== -->
+<script>
+    document.querySelectorAll('.action-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault(); // Pause default navigation briefly
+            const targetUrl = this.href;
+
+            // Show the loading spinner overlay
+            document.getElementById('loading-overlay').classList.add('active');
+
+            // Navigate after 600ms so the user sees the smooth spinner animation
+            setTimeout(function() {
+                window.location.href = targetUrl;
+            }, 600);
+        });
+    });
+</script>
 
 
 </body>
