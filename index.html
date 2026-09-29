@@ -143,7 +143,7 @@
 
             gap: 20px;
 
-            background: rgba(255,255,255,0.96);
+            background: rgba(255,255,255,0.92);
 
             border-bottom: 1px solid #e2e8f0;
 
@@ -181,6 +181,14 @@
             color: #0f766e;
 
             font-size: 32px;
+
+            display: inline-block;
+
+            transition: transform 0.3s ease;
+        }
+
+        .logo:hover .big-w {
+            transform: scale(1.1) rotate(-5deg);
         }
 
 
@@ -229,7 +237,7 @@
 
             font-size: 14px;
 
-            transition: all 0.25s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
             cursor: pointer;
         }
@@ -247,7 +255,9 @@
         .btn-login:hover {
             background: #d1fae5;
 
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+
+            box-shadow: 0 6px 15px rgba(15, 118, 110, 0.15);
         }
 
 
@@ -267,10 +277,10 @@
 
 
         .btn-register:hover {
-            transform: translateY(-2px);
+            transform: translateY(-3px);
 
             box-shadow:
-                0 12px 28px rgba(15,118,110,0.25);
+                0 12px 28px rgba(15,118,110,0.3);
         }
 
 
@@ -287,7 +297,10 @@
         .btn-whatsapp:hover {
             background: #15803d;
 
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+
+            box-shadow:
+                0 12px 28px rgba(22,163,74,0.3);
         }
 
 
@@ -313,32 +326,39 @@
 
             position: absolute;
 
-            width: 300px;
+            width: 350px;
 
-            height: 300px;
+            height: 350px;
 
             background: #ccfbf1;
 
             border-radius: 50%;
 
-            filter: blur(70px);
+            filter: blur(80px);
 
-            opacity: 0.45;
+            opacity: 0.6;
 
-            top: 20px;
+            top: 10px;
 
             left: 50%;
 
             transform: translateX(-50%);
 
             z-index: -1;
+
+            animation: pulse-glow 6s ease-in-out infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            0% { transform: translateX(-50%) scale(0.9); opacity: 0.5; }
+            100% { transform: translateX(-50%) scale(1.15); opacity: 0.8; }
         }
 
 
         .hero-badge {
             display: inline-block;
 
-            padding: 8px 15px;
+            padding: 8px 18px;
 
             border-radius: 999px;
 
@@ -353,6 +373,15 @@
             font-weight: 700;
 
             margin-bottom: 22px;
+
+            box-shadow: 0 4px 12px rgba(15,118,110,0.08);
+
+            animation: float-badge 3s ease-in-out infinite;
+        }
+
+        @keyframes float-badge {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
         }
 
 
@@ -378,14 +407,23 @@
                 linear-gradient(
                     135deg,
                     #0f766e,
-                    #0284c7
+                    #0284c7,
+                    #0f766e
                 );
+
+            background-size: 200% auto;
 
             -webkit-background-clip: text;
 
             background-clip: text;
 
             color: transparent;
+
+            animation: shine 5s linear infinite;
+        }
+
+        @keyframes shine {
+            to { background-position: 200% center; }
         }
 
 
@@ -416,6 +454,8 @@
             color: #78350f;
 
             font-size: 14px;
+
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.08);
         }
 
 
@@ -448,9 +488,14 @@
             background: #ffffff;
             border: 1px solid #cbd5e1;
             border-radius: 16px;
-            box-shadow: 0 25px 50px rgba(15,23,42,0.12);
+            box-shadow: 0 30px 60px rgba(15,23,42,0.15);
             overflow: hidden;
             text-align: left;
+            transition: transform 0.4s ease;
+        }
+
+        .dashboard-mockup:hover {
+            transform: translateY(-6px);
         }
 
         .mockup-header {
@@ -507,6 +552,12 @@
             border-radius: 12px;
             border: 1px solid #e2e8f0;
             box-shadow: 0 4px 12px rgba(15,23,42,0.03);
+            transition: 0.3s ease;
+        }
+
+        .mockup-card:hover {
+            border-color: #0f766e;
+            transform: translateY(-2px);
         }
 
         .mockup-card h4 {
@@ -534,8 +585,8 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(6px);
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -551,21 +602,32 @@
             visibility: visible;
         }
 
+        .spinner-container {
+            position: relative;
+            width: 70px;
+            height: 70px;
+            margin-bottom: 20px;
+        }
+
         .spinner {
-            width: 55px;
-            height: 55px;
-            border: 5px solid rgba(255, 255, 255, 0.2);
-            border-top: 5px solid #14b8a6;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #14b8a6;
+            border-right: 4px solid #0284c7;
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-bottom: 15px;
+            animation: spin 0.9s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
         }
 
         .loading-text {
             color: #ffffff;
             font-weight: 600;
             font-size: 16px;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.5px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
         @keyframes spin {
@@ -639,14 +701,16 @@
             box-shadow:
                 0 10px 30px rgba(15,23,42,0.05);
 
-            transition: 0.25s ease;
+            transition: 0.3s ease;
         }
 
 
         .step-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-6px);
 
             border-color: #99f6e4;
+
+            box-shadow: 0 15px 35px rgba(15, 118, 110, 0.08);
         }
 
 
@@ -701,7 +765,7 @@
             box-shadow:
                 0 10px 30px rgba(15,23,42,0.05);
 
-            transition: all 0.25s ease;
+            transition: all 0.3s ease;
         }
 
 
@@ -711,7 +775,7 @@
             border-color: #99f6e4;
 
             box-shadow:
-                0 18px 35px rgba(15,23,42,0.09);
+                0 20px 40px rgba(15,118,110,0.12);
         }
 
 
@@ -757,15 +821,17 @@
 
             padding: 25px;
 
-            transition: 0.25s ease;
+            transition: 0.3s ease;
         }
 
 
         .business-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-6px);
+
+            border-color: #0f766e;
 
             box-shadow:
-                0 15px 30px rgba(15,118,110,0.09);
+                0 15px 30px rgba(15,118,110,0.12);
         }
 
 
@@ -807,6 +873,13 @@
             padding: 25px;
 
             text-align: center;
+
+            transition: 0.3s ease;
+        }
+
+        .device-badge:hover {
+            transform: translateY(-4px);
+            border-color: #99f6e4;
         }
 
 
@@ -847,17 +920,55 @@
             border-radius: 15px;
 
             padding: 22px 25px;
+
+            cursor: pointer;
+
+            transition: 0.25s ease;
+        }
+
+        .faq-item:hover {
+            border-color: #99f6e4;
+            box-shadow: 0 6px 20px rgba(15,23,42,0.04);
         }
 
 
         .faq-item h4 {
             font-size: 16px;
 
-            margin-bottom: 8px;
+            margin-bottom: 0;
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+        }
+
+        .faq-item h4::after {
+            content: "+";
+            font-size: 20px;
+            color: #0f766e;
+            transition: transform 0.3s ease;
+        }
+
+        .faq-item.active h4::after {
+            transform: rotate(45deg);
         }
 
 
-        .faq-item p {
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, margin-top 0.3s ease;
+        }
+
+        .faq-item.active .faq-answer {
+            max-height: 150px;
+            margin-top: 10px;
+        }
+
+
+        .faq-answer p {
             color: #64748b;
 
             font-size: 14px;
@@ -888,6 +999,12 @@
 
             box-shadow:
                 0 15px 40px rgba(15,23,42,0.06);
+
+            transition: transform 0.3s ease;
+        }
+
+        .founder-card:hover {
+            transform: translateY(-4px);
         }
 
 
@@ -1149,7 +1266,9 @@
      LOADING SPINNER OVERLAY
 ========================== -->
 <div id="loading-overlay">
-    <div class="spinner"></div>
+    <div class="spinner-container">
+        <div class="spinner"></div>
+    </div>
     <div class="loading-text">Redirecting to Wise Decision POS...</div>
 </div>
 
@@ -1647,7 +1766,7 @@
 
 
 <!-- =========================
-     FAQ
+     FAQ (Interactive Accordion)
 ========================== -->
 
 <section>
@@ -1661,88 +1780,50 @@
 
 
         <div class="faq-item">
-
-            <h4>
-                What do I need to register my business?
-            </h4>
-
-            <p>
-                You will need an official Activation Code provided by
-                Wise Decision management. Use the WhatsApp button on this
-                page to request yours.
-            </p>
-
+            <h4>What do I need to register my business?</h4>
+            <div class="faq-answer">
+                <p>You will need an official Activation Code provided by Wise Decision management. Use the WhatsApp button on this page to request yours.</p>
+            </div>
         </div>
 
 
         <div class="faq-item">
-
-            <h4>
-                Can I access Wise Decision POS on my phone or tablet?
-            </h4>
-
-            <p>
-                Yes. Wise Decision POS is designed to work through
-                supported web browsers on smartphones, tablets and
-                desktop computers.
-            </p>
-
+            <h4>Can I access Wise Decision POS on my phone or tablet?</h4>
+            <div class="faq-answer">
+                <p>Yes. Wise Decision POS is designed to work through supported web browsers on smartphones, tablets and desktop computers.</p>
+            </div>
         </div>
 
 
         <div class="faq-item">
-
-            <h4>
-                Does the system support thermal receipt printers?
-            </h4>
-
-            <p>
-                Yes. Wise Decision POS supports compatible thermal
-                receipt printing setups.
-            </p>
-
+            <h4>Does the system support thermal receipt printers?</h4>
+            <div class="faq-answer">
+                <p>Yes. Wise Decision POS supports compatible thermal receipt printing setups.</p>
+            </div>
         </div>
 
 
         <div class="faq-item">
-
-            <h4>
-                Can I manage more than one store branch?
-            </h4>
-
-            <p>
-                Yes. Wise Decision POS includes multi-branch business
-                management functionality for supported accounts.
-            </p>
-
+            <h4>Can I manage more than one store branch?</h4>
+            <div class="faq-answer">
+                <p>Yes. Wise Decision POS includes multi-branch business management functionality for supported accounts.</p>
+            </div>
         </div>
 
 
         <div class="faq-item">
-
-            <h4>
-                What is Wise Decision POS?
-            </h4>
-
-            <p>
-                Wise Decision POS is a cloud-based point-of-sale and
-                business management system designed for businesses in Nigeria.
-            </p>
-
+            <h4>What is Wise Decision POS?</h4>
+            <div class="faq-answer">
+                <p>Wise Decision POS is a cloud-based point-of-sale and business management system designed for businesses in Nigeria.</p>
+            </div>
         </div>
 
 
         <div class="faq-item">
-
-            <h4>
-                Who founded Wise Decision?
-            </h4>
-
-            <p>
-                Wise Decision was founded by
-                <strong>Emmanuel Ayoola Fisuyi</strong>.
-            </p>
-
+            <h4>Who founded Wise Decision?</h4>
+            <div class="faq-answer">
+                <p>Wise Decision was founded by <strong>Emmanuel Ayoola Fisuyi</strong>.</p>
+            </div>
         </div>
 
     </div>
@@ -1887,21 +1968,34 @@
 
 
 <!-- =========================
-     SPINNER SCRIPT
+     INTERACTIVE SCRIPTS
 ========================== -->
 <script>
+    // FAQ Accordion functionality
+    document.querySelectorAll('.faq-item').forEach(item => {
+        item.addEventListener('click', () => {
+            // Close other open items
+            document.querySelectorAll('.faq-item').forEach(other => {
+                if (other !== item) other.classList.remove('active');
+            });
+            // Toggle current item
+            item.classList.toggle('active');
+        });
+    });
+
+    // Loading Spinner functionality for login/register buttons
     document.querySelectorAll('.action-link').forEach(link => {
         link.addEventListener('click', function(e) {
-            e.preventDefault(); // Pause default navigation briefly
+            e.preventDefault();
             const targetUrl = this.href;
 
-            // Show the loading spinner overlay
+            // Show loading overlay
             document.getElementById('loading-overlay').classList.add('active');
 
-            // Navigate after 600ms so the user sees the smooth spinner animation
+            // Delay navigation slightly to let the user enjoy the animation
             setTimeout(function() {
                 window.location.href = targetUrl;
-            }, 600);
+            }, 650);
         });
     });
 </script>
