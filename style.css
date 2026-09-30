@@ -250,7 +250,7 @@ body {
 
 .menu-btn:active { transform: translateY(0); }
 
-/* ===================== SIDEBAR BUTTONS — UNIFIED BASE ===================== */
+/* ===================== SIDEBAR BUTTONS — BASE ===================== */
 /* Base state for sidebar buttons. Per-button colors are defined further down
    and override these via the .btn-* class rules in the override block. */
 
@@ -1005,7 +1005,7 @@ div[id*="mimo"] {
 }
 
 /* ===================== SIDEBAR BUTTONS — COLOR-CODED OVERRIDE ===================== */
-/* Placed last, with !important, so these win over any earlier unified/base rules.
+/* Placed near the end, with !important, so these win over any earlier unified/base rules.
    Restores the per-button color-coding you had before. */
 
 .btn-dash      { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe !important; border-left: 4px solid #3b82f6 !important; }
@@ -1030,4 +1030,53 @@ div[id*="mimo"] {
     color: #1d4ed8 !important;
     border: 1px solid #bfdbfe !important;
     border-left: 4px solid #3b82f6 !important;
+}
+
+/* ===================== FIX: PRIMARY ACTION BUTTONS ===================== */
+/* When a button uses BOTH .btn-action-primary and a sidebar color class
+   (like .btn-pos on "Add to Cart"), the sidebar color's !important was
+   winning and painting dark text on a light background, making it unreadable.
+   This restores the white-on-gradient look for primary action buttons.
+   Specificity: .btn-action-primary.btn-pos (two classes) beats .btn-pos
+   (one class), so this wins even against the !important above. */
+
+.btn-action-primary.btn-pos,
+.btn-action-primary.btn-dash,
+.btn-action-primary.btn-inv,
+.btn-action-primary.btn-acc,
+.btn-action-primary.btn-rep,
+.btn-action-primary.btn-staff,
+.btn-action-primary.btn-cust,
+.btn-action-primary.btn-branch,
+.btn-action-primary.btn-exp,
+.btn-action-primary.btn-supplier,
+.btn-action-primary.btn-transfer,
+.btn-action-primary.btn-sec {
+    background: var(--gradient-brand) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-left: none !important;
+    text-align: center !important;
+    justify-content: center !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.2px !important;
+    box-shadow: 0 10px 22px rgba(13, 148, 136, 0.25) !important;
+}
+
+.btn-action-primary.btn-pos:hover,
+.btn-action-primary.btn-dash:hover,
+.btn-action-primary.btn-inv:hover,
+.btn-action-primary.btn-acc:hover,
+.btn-action-primary.btn-rep:hover,
+.btn-action-primary.btn-staff:hover,
+.btn-action-primary.btn-cust:hover,
+.btn-action-primary.btn-branch:hover,
+.btn-action-primary.btn-exp:hover,
+.btn-action-primary.btn-supplier:hover,
+.btn-action-primary.btn-transfer:hover,
+.btn-action-primary.btn-sec:hover {
+    background: var(--gradient-brand-hover) !important;
+    color: #ffffff !important;
+    box-shadow: 0 14px 30px rgba(13, 148, 136, 0.35) !important;
+    transform: translateY(-2px) !important;
 }
