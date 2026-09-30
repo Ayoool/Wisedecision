@@ -3,8 +3,8 @@
     --card-bg: #ffffff;
     --text: #0b1220;
     --text-muted: #5b6b85;
-    --accent: #0d9488;              /* teal-600 — brand primary */
-    --accent-2: #0284c7;            /* sky-600 — brand secondary */
+    --accent: #0d9488;
+    --accent-2: #0284c7;
     --accent-hover: #0f766e;
     --border: #e2e8f0;
     --border-soft: #eef2f7;
@@ -125,8 +125,8 @@ body {
 }
 
 .auth-card .brand-title {
-    font-size: 26px !important;
-    color: #0f172a !important;
+    font-size: 26px;
+    color: #0f172a;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -163,10 +163,10 @@ body {
 }
 
 .auth-card .subtitle {
-    text-align: center !important;
+    text-align: center;
     font-size: 12.5px;
-    color: #64748b !important;
-    margin-bottom: 24px !important;
+    color: #64748b;
+    margin-bottom: 24px;
     letter-spacing: 0.2px;
 }
 
@@ -209,20 +209,7 @@ body {
 
 .form-group textarea { resize: vertical; }
 
-.auth-card .form-group input {
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    padding: 12px 14px;
-    font-size: 14px;
-}
-
-.auth-card .form-group input:focus {
-    background: #ffffff;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.12);
-}
-
-/* ===================== BUTTONS ===================== */
+/* ===================== BUTTONS — BASE ===================== */
 
 .menu-btn {
     width: 100%;
@@ -233,7 +220,7 @@ body {
     margin-bottom: 8px;
     font-size: 13px;
     text-align: left;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -245,31 +232,128 @@ body {
 .menu-btn:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
-    filter: brightness(0.98);
 }
 
 .menu-btn:active { transform: translateY(0); }
 
-/* ===================== SIDEBAR BUTTONS — BASE ===================== */
-/* Base state for sidebar buttons. Per-button colors are defined further down
-   and override these via the .btn-* class rules in the override block. */
+/* ===================== SIDEBAR BUTTONS — RAINBOW ===================== */
+/* One rule per button. Hover darkens the tint slightly. No !important. */
 
-.btn-dash,
-.btn-pos,
-.btn-inv,
-.btn-acc,
-.btn-rep,
-.btn-staff,
-.btn-cust,
-.btn-branch,
-.btn-exp,
-.btn-supplier,
-.btn-transfer,
+.btn-dash {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    border-left-color: #3b82f6;
+}
+.btn-dash:hover { background: #dbeafe; color: #1e3a8a; }
+
+.btn-pos {
+    background: #f0fdf4;
+    color: #15803d;
+    border-color: #bbf7d0;
+    border-left-color: #22c55e;
+}
+.btn-pos:hover { background: #dcfce7; color: #166534; }
+
+.btn-inv {
+    background: #fffbeb;
+    color: #b45309;
+    border-color: #fde68a;
+    border-left-color: #f59e0b;
+}
+.btn-inv:hover { background: #fef3c7; color: #92400e; }
+
+.btn-acc {
+    background: #fdf4ff;
+    color: #a21caf;
+    border-color: #f5d0fe;
+    border-left-color: #d946ef;
+}
+.btn-acc:hover { background: #fae8ff; color: #86198f; }
+
+.btn-rep {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+    border-left-color: #ef4444;
+}
+.btn-rep:hover { background: #fee2e2; color: #991b1b; }
+
+.btn-staff {
+    background: #ecfeff;
+    color: #0e7490;
+    border-color: #a5f3fc;
+    border-left-color: #06b6d4;
+}
+.btn-staff:hover { background: #cffafe; color: #155e75; }
+
+.btn-cust {
+    background: #f5f3ff;
+    color: #6d28d9;
+    border-color: #ddd6fe;
+    border-left-color: #8b5cf6;
+}
+.btn-cust:hover { background: #ede9fe; color: #5b21b6; }
+
+.btn-branch {
+    background: #fff7ed;
+    color: #c2410c;
+    border-color: #ffedd5;
+    border-left-color: #f97316;
+}
+.btn-branch:hover { background: #ffedd5; color: #9a3412; }
+
+.btn-exp {
+    background: #fefce8;
+    color: #a16207;
+    border-color: #fef08a;
+    border-left-color: #eab308;
+}
+.btn-exp:hover { background: #fef9c3; color: #854d0e; }
+
+.btn-supplier {
+    background: #eff6ff;
+    color: #1e40af;
+    border-color: #bfdbfe;
+    border-left-color: #2563eb;
+}
+.btn-supplier:hover { background: #e0e7ff; color: #1e3a8a; }
+
+.btn-transfer {
+    background: #f0fdfa;
+    color: #0f766e;
+    border-color: #99f6e4;
+    border-left-color: #14b8a6;
+}
+.btn-transfer:hover { background: #ccfbf1; color: #115e59; }
+
 .btn-sec {
-    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+    background: #f8fafc;
+    color: #334155;
+    border-color: #e2e8f0;
+    border-left-color: #64748b;
+}
+.btn-sec:hover { background: #e2e8f0; color: #1e293b; }
+
+/* Pre-Orders (injected by manager-preorder-patch.js) — blue like Dashboard */
+.sidebar .menu-btn[onclick*="preorder"],
+.sidebar .menu-btn[onclick*="Preorder"],
+.sidebar .menu-btn[onclick*="PreOrder"],
+.sidebar .menu-btn[onclick*="pre-order"] {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+    border-left-color: #3b82f6;
+}
+.sidebar .menu-btn[onclick*="preorder"]:hover,
+.sidebar .menu-btn[onclick*="Preorder"]:hover,
+.sidebar .menu-btn[onclick*="PreOrder"]:hover,
+.sidebar .menu-btn[onclick*="pre-order"]:hover {
+    background: #dbeafe;
+    color: #1e3a8a;
 }
 
-/* Slightly taller sidebar buttons on desktop for better breathing room */
+/* Slightly taller sidebar buttons on desktop */
 @media (min-width: 768px) {
     .sidebar .menu-btn {
         padding: 13px 16px;
@@ -277,9 +361,14 @@ body {
     }
 }
 
+/* ===================== OTHER BUTTONS ===================== */
+
+/* Primary action button (gradient) — this is the base style.
+   It intentionally comes AFTER .btn-pos etc so on buttons that carry both
+   classes, this one wins by source order (same specificity, later wins). */
 .btn-action-primary {
     background: var(--gradient-brand);
-    color: #fff;
+    color: #ffffff;
     border: none;
     border-left: none;
     text-align: center;
@@ -291,7 +380,7 @@ body {
 
 .btn-action-primary:hover {
     background: var(--gradient-brand-hover);
-    color: #fff;
+    color: #ffffff;
     box-shadow: 0 14px 30px rgba(13, 148, 136, 0.35);
     transform: translateY(-2px);
 }
@@ -306,14 +395,27 @@ body {
 .btn-logout {
     background: #fee2e2;
     color: #dc2626;
-    border: 1px solid #fecaca;
-    border-left: 4px solid #dc2626;
+    border-color: #fecaca;
+    border-left-color: #dc2626;
     justify-content: center;
 }
-
 .btn-logout:hover {
     background: #fecaca;
     color: #b91c1c;
+}
+
+.btn-secondary {
+    background: #f1f5f9;
+    color: #334155;
+    border-color: #cbd5e1;
+    border-left-color: #cbd5e1;
+    justify-content: center;
+    text-align: center;
+}
+.btn-secondary:hover {
+    background: #e2e8f0;
+    color: #0f766e;
+    border-color: #99f6e4;
 }
 
 .btn-complete-sale {
@@ -331,13 +433,11 @@ body {
     box-shadow: 0 8px 20px rgba(22, 163, 74, 0.25);
     letter-spacing: 0.3px;
 }
-
 .btn-complete-sale:hover {
     background: linear-gradient(135deg, #15803d 0%, #166534 100%);
     transform: translateY(-1px);
     box-shadow: 0 12px 26px rgba(22, 163, 74, 0.35);
 }
-
 .btn-complete-sale:disabled {
     background: #cbd5e1;
     cursor: not-allowed;
@@ -358,11 +458,24 @@ body {
     transition: all 0.2s ease;
     box-shadow: var(--shadow-sm);
 }
-
 .btn-primary:hover {
     background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     box-shadow: var(--shadow-md);
     transform: translateY(-1px);
+}
+
+/* ===================== BRANCH BADGE ===================== */
+
+.branch-badge {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    color: #166534;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 999px;
+    display: inline-block;
+    border: 1px solid #86efac;
+    letter-spacing: 0.2px;
 }
 
 /* ===================== DASHBOARD LAYOUT ===================== */
@@ -499,14 +612,12 @@ tbody tr:hover { background: #f8fafc; }
     margin-top: 15px;
     box-shadow: var(--shadow-md);
 }
-
 .security-card h3 {
     font-size: 1.1rem;
     color: #0f172a;
     margin-bottom: 6px;
     font-weight: 700;
 }
-
 .security-card p {
     font-size: 0.85rem;
     color: #64748b;
@@ -522,18 +633,21 @@ tbody tr:hover { background: #f8fafc; }
     text-align: center;
     font-weight: 500;
 }
-
 .form-message.success { color: var(--success); }
 .form-message.error   { color: var(--danger); }
 
-#dynamic-accept-print-btn:disabled {
+/* ===================== DISABLED STATES ===================== */
+
+#dynamic-accept-print-btn:disabled,
+#refund-confirm-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-    background: #94a3b8 !important;
+    background: #94a3b8;
 }
 
-#split-modal > div {
-    max-height: 85vh;
+#split-modal > div,
+#refund-modal > div {
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -555,13 +669,11 @@ tbody tr:hover { background: #f8fafc; }
     border-radius: 999px;
     letter-spacing: 0.3px;
 }
-
 .accountant-tab-btn:hover {
     transform: none;
     filter: brightness(0.96);
     box-shadow: none;
 }
-
 .accountant-tab-btn.active {
     background: var(--gradient-brand);
     color: #fff;
@@ -571,55 +683,7 @@ tbody tr:hover { background: #f8fafc; }
 #pending-order-details-modal table th { text-align: left; }
 #pending-order-details-modal #pending-details-total { color: var(--accent); }
 
-/* ===================== REFUND MODAL ===================== */
-
-#refund-modal > div {
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-}
-
-#refund-confirm-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    background: #94a3b8 !important;
-}
-
-/* ===================== MISC POLISH ===================== */
-
-.auth-card .menu-btn[onclick*="register-view"] {
-    justify-content: center !important;
-    text-align: center !important;
-    background: #f1f5f9 !important;
-    border: 1px solid #cbd5e1 !important;
-    border-left: 1px solid #cbd5e1 !important;
-    border-radius: var(--radius-sm);
-    font-weight: 700;
-    color: #334155 !important;
-    transition: all 0.25s ease;
-}
-
-.auth-card .menu-btn[onclick*="register-view"]:hover {
-    background: #e2e8f0 !important;
-    color: #0f766e !important;
-    border-color: #99f6e4 !important;
-}
-
-.auth-card .btn-logout {
-    justify-content: center !important;
-    text-align: center !important;
-    border-radius: var(--radius-sm);
-    transition: all 0.25s ease;
-}
-
-iframe,
-div[class*="mimo"],
-div[id*="mimo"] {
-    pointer-events: none !important;
-}
-
-/* ===================== PRINT (unchanged behavior) ===================== */
+/* ===================== PRINT ===================== */
 
 @media print {
     html, body {
@@ -707,376 +771,12 @@ div[id*="mimo"] {
     }
 }
 
-/* ===================== HELPER CLASSES ===================== */
-
-/* Register button on the login screen */
-.btn-secondary {
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-left: 1px solid #cbd5e1;
-    color: #334155;
-    justify-content: center;
-    text-align: center;
-}
-.btn-secondary:hover {
-    background: #e2e8f0;
-    color: #0f766e;
-    border-color: #99f6e4;
-}
-
-/* Sidebar branch badge pill ("Branch: Main") */
-.branch-badge {
-    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-    color: #166534;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 5px 12px;
-    border-radius: 999px;
-    display: inline-block;
-    border: 1px solid #86efac;
-    letter-spacing: 0.2px;
-}
-
-/* POS toggle buttons (Retail/Wholesale, Pack/Piece) */
-.toggle-btn {
-    width: auto !important;
-    margin: 0 !important;
-    padding: 6px 14px !important;
-    font-size: 12px !important;
-    border-radius: 999px !important;
-    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
-}
-
-/* Filter bar rows */
-.filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    background: #ffffff;
-    padding: 12px 15px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border-soft);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 15px;
-}
-.filter-bar-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-muted);
-    letter-spacing: 0.2px;
-}
-
-/* Inline form controls */
-.form-control-inline {
-    padding: 6px 10px;
-    border-radius: 8px;
-    border: 1px solid #cbd5e1;
-    font-size: 13px;
-    background: #fff;
-    color: var(--text);
-}
-.form-control-inline:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
-}
-
-/* Plain content cards */
-.surface-card {
-    background: #ffffff;
-    padding: 20px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border-soft);
-    box-shadow: var(--shadow-md);
-}
-
-/* Table wrappers */
-.table-card {
-    background: #ffffff;
-    border-radius: var(--radius);
-    border: 1px solid var(--border-soft);
-    box-shadow: var(--shadow-md);
-    overflow-x: auto;
-}
-
-/* Small info pill */
-.info-pill {
-    font-size: 11px;
-    color: #b45309;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    padding: 5px 12px;
-    border-radius: 999px;
-    font-weight: 600;
-}
-
-/* Total-summary pills */
-.total-pill {
-    padding: 8px 15px;
-    border-radius: 999px;
-    font-weight: 700;
-    font-size: 14px;
-    background: #eff6ff;
-    color: #1d4ed8;
-    border: 1px solid #bfdbfe;
-}
-.total-pill-danger {
-    background: #fef2f2;
-    color: #991b1b;
-    border-color: #fecaca;
-}
-
-/* "Selling from: Main" pill in POS */
-.branch-pill {
-    margin-left: auto;
-    font-size: 11px;
-    font-weight: 700;
-    color: #166534;
-    background: #dcfce7;
-    border: 1px solid #86efac;
-    padding: 5px 12px;
-    border-radius: 999px;
-}
-
-/* Reports summary cards */
-.reports-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
-    margin-bottom: 20px;
-}
-.reports-card {
-    padding: 14px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border-soft);
-}
-.reports-card-label {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    display: block;
-}
-.reports-card h3 {
-    font-size: 20px;
-    margin: 6px 0 0 0;
-    font-weight: 800;
-}
-.reports-card-green {
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    border-color: #bbf7d0;
-}
-.reports-card-green .reports-card-label { color: #166534; }
-.reports-card-green h3 { color: #15803d; }
-.reports-card-blue {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-    border-color: #bfdbfe;
-}
-.reports-card-blue .reports-card-label { color: #1e40af; }
-.reports-card-blue h3 { color: #1d4ed8; }
-.reports-card-purple {
-    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
-    border-color: #e9d5ff;
-}
-.reports-card-purple .reports-card-label { color: #6b21a8; }
-.reports-card-purple h3 { color: #7e22ce; }
-
-/* Net profit summary card */
-.net-profit-card {
-    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-    border: 1px solid #a7f3d0;
-    padding: 18px;
-    border-radius: var(--radius);
-    margin-bottom: 20px;
-    box-shadow: var(--shadow-sm);
-}
-.net-profit-card h3 {
-    font-size: 11px;
-    font-weight: 700;
-    color: #047857;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    margin: 0 0 4px 0;
-}
-.net-profit-card h3 span {
-    text-transform: none;
-    color: #065f46;
-}
-.net-profit-card p {
-    font-size: 26px;
-    font-weight: 800;
-    color: #065f46;
-    margin: 0 0 4px 0;
-}
-.net-profit-card span {
-    font-size: 11px;
-    color: #64748b;
-}
-
-/* Super admin shell */
-.super-admin-shell {
-    padding: 30px;
-    background: #0f172a;
-    color: #fff;
-    min-height: 100vh;
-}
-.super-admin-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    background: #1e293b;
-    padding: 15px 20px;
-    border-radius: 12px;
-    border: 1px solid #334155;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-.super-admin-header h2 {
-    margin: 0;
-    color: #fff;
-    font-size: 20px;
-}
-.super-admin-header p {
-    margin: 3px 0 0 0;
-    font-size: 12px;
-    color: #94a3b8;
-}
-.super-admin-panel {
-    background: #ffffff;
-    color: #0f172a;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
-}
-.btn-super-primary {
-    background: var(--gradient-brand);
-    color: #fff;
-    border: none;
-    border-left: none;
-}
-
-/* Dashboard "Total Sales Today" stat card */
-.stat-card {
-    background: #ffffff;
-    border: 1px solid var(--border-soft);
-    padding: 20px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-md);
-}
-.stat-card-green {
-    background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
-    border-color: #bbf7d0;
-}
-.stat-label {
-    font-weight: 600;
-    font-size: 11px;
-    color: #166534;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-.stat-value {
-    font-size: 26px;
-    margin-top: 8px;
-    font-weight: 800;
-    color: #15803d;
-}
-.stat-foot {
-    font-size: 11px;
-    margin-top: 5px;
-    color: #4ade80;
-}
-
-/* Soft ambient pulse animation */
-@keyframes pulse-soft {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.85; }
-}
-
 /* ===================== RESPONSIVE ===================== */
 
 @media (max-width: 480px) {
     .auth-card { padding: 22px 20px; }
-    .auth-card .brand-title { font-size: 22px !important; }
+    .auth-card .brand-title { font-size: 22px; }
     .auth-card .brand-title .big-w { font-size: 46px; }
     .main-content-area { padding: 18px; }
     .sidebar { padding: 18px 14px; }
-}
-
-/* ===================== SIDEBAR BUTTONS — COLOR-CODED OVERRIDE ===================== */
-/* Placed near the end, with !important, so these win over any earlier unified/base rules.
-   Restores the per-button color-coding you had before. */
-
-.btn-dash      { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe !important; border-left: 4px solid #3b82f6 !important; }
-.btn-pos       { background: #f0fdf4 !important; color: #15803d !important; border: 1px solid #bbf7d0 !important; border-left: 4px solid #22c55e !important; }
-.btn-inv       { background: #fffbeb !important; color: #b45309 !important; border: 1px solid #fde68a !important; border-left: 4px solid #f59e0b !important; }
-.btn-acc       { background: #fdf4ff !important; color: #a21caf !important; border: 1px solid #f5d0fe !important; border-left: 4px solid #d946ef !important; }
-.btn-rep       { background: #fef2f2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; border-left: 4px solid #ef4444 !important; }
-.btn-staff     { background: #ecfeff !important; color: #0e7490 !important; border: 1px solid #a5f3fc !important; border-left: 4px solid #06b6d4 !important; }
-.btn-cust      { background: #f5f3ff !important; color: #6d28d9 !important; border: 1px solid #ddd6fe !important; border-left: 4px solid #8b5cf6 !important; }
-.btn-branch    { background: #fff7ed !important; color: #c2410c !important; border: 1px solid #ffedd5 !important; border-left: 4px solid #f97316 !important; }
-.btn-exp       { background: #fefce8 !important; color: #a16207 !important; border: 1px solid #fef08a !important; border-left: 4px solid #eab308 !important; }
-.btn-supplier  { background: #eff6ff !important; color: #1e40af !important; border: 1px solid #bfdbfe !important; border-left: 4px solid #2563eb !important; }
-.btn-transfer  { background: #f0fdfa !important; color: #0f766e !important; border: 1px solid #99f6e4 !important; border-left: 4px solid #14b8a6 !important; }
-.btn-sec       { background: #f8fafc !important; color: #334155 !important; border: 1px solid #e2e8f0 !important; border-left: 4px solid #64748b !important; }
-
-/* Pre-Orders button — matches Dashboard's blue */
-.sidebar .menu-btn[onclick*="preorder"],
-.sidebar .menu-btn[onclick*="Preorder"],
-.sidebar .menu-btn[onclick*="PreOrder"],
-.sidebar .menu-btn[onclick*="pre-order"] {
-    background: #eff6ff !important;
-    color: #1d4ed8 !important;
-    border: 1px solid #bfdbfe !important;
-    border-left: 4px solid #3b82f6 !important;
-}
-
-/* ===================== FIX: PRIMARY ACTION BUTTONS ===================== */
-/* When a button uses BOTH .btn-action-primary and a sidebar color class
-   (like .btn-pos on "Add to Cart"), the sidebar color's !important was
-   winning and painting dark text on a light background, making it unreadable.
-   This restores the white-on-gradient look for primary action buttons.
-   Specificity: .btn-action-primary.btn-pos (two classes) beats .btn-pos
-   (one class), so this wins even against the !important above. */
-
-.btn-action-primary.btn-pos,
-.btn-action-primary.btn-dash,
-.btn-action-primary.btn-inv,
-.btn-action-primary.btn-acc,
-.btn-action-primary.btn-rep,
-.btn-action-primary.btn-staff,
-.btn-action-primary.btn-cust,
-.btn-action-primary.btn-branch,
-.btn-action-primary.btn-exp,
-.btn-action-primary.btn-supplier,
-.btn-action-primary.btn-transfer,
-.btn-action-primary.btn-sec {
-    background: var(--gradient-brand) !important;
-    color: #ffffff !important;
-    border: none !important;
-    border-left: none !important;
-    text-align: center !important;
-    justify-content: center !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.2px !important;
-    box-shadow: 0 10px 22px rgba(13, 148, 136, 0.25) !important;
-}
-
-.btn-action-primary.btn-pos:hover,
-.btn-action-primary.btn-dash:hover,
-.btn-action-primary.btn-inv:hover,
-.btn-action-primary.btn-acc:hover,
-.btn-action-primary.btn-rep:hover,
-.btn-action-primary.btn-staff:hover,
-.btn-action-primary.btn-cust:hover,
-.btn-action-primary.btn-branch:hover,
-.btn-action-primary.btn-exp:hover,
-.btn-action-primary.btn-supplier:hover,
-.btn-action-primary.btn-transfer:hover,
-.btn-action-primary.btn-sec:hover {
-    background: var(--gradient-brand-hover) !important;
-    color: #ffffff !important;
-    box-shadow: 0 14px 30px rgba(13, 148, 136, 0.35) !important;
-    transform: translateY(-2px) !important;
 }
