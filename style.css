@@ -694,6 +694,297 @@ div[id*="mimo"] {
     }
 }
 
+/* ===================== NEW: HELPER CLASSES ===================== */
+/* These support the updated index.html. They layer on top of the existing rules,
+   so nothing here overrides anything that was already working. */
+
+/* Register button on the login screen (used by the new .btn-secondary class) */
+.btn-secondary {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-left: 1px solid #cbd5e1;
+    color: #334155;
+    justify-content: center;
+    text-align: center;
+}
+.btn-secondary:hover {
+    background: #e2e8f0;
+    color: #0f766e;
+    border-color: #99f6e4;
+}
+
+/* Sidebar branch badge pill ("Branch: Main") */
+.branch-badge {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    color: #166534;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 999px;
+    display: inline-block;
+    border: 1px solid #86efac;
+    letter-spacing: 0.2px;
+}
+
+/* POS toggle buttons (Retail/Wholesale, Pack/Piece) — smooth transition when
+   the inline styles are toggled by JS. Does not override colors; those are
+   still set by the existing inline onclick handlers. */
+.toggle-btn {
+    width: auto !important;
+    margin: 0 !important;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    border-radius: 999px !important;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+/* Filter bar rows (inventory / reports / dashboard alerts) */
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #ffffff;
+    padding: 12px 15px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 15px;
+}
+.filter-bar-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.2px;
+}
+
+/* Inline form controls (selects/inputs inside filter bars) */
+.form-control-inline {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 13px;
+    background: #fff;
+    color: var(--text);
+}
+.form-control-inline:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+/* Plain content cards */
+.surface-card {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-md);
+}
+
+/* Table wrappers with rounded corners + subtle shadow */
+.table-card {
+    background: #ffffff;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-soft);
+    box-shadow: var(--shadow-md);
+    overflow-x: auto;
+}
+
+/* Small info pill (e.g. "Viewing combined enterprise stock") */
+.info-pill {
+    font-size: 11px;
+    color: #b45309;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+/* Total-summary pills (used at top of lists) */
+.total-pill {
+    padding: 8px 15px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 14px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+.total-pill-danger {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+}
+
+/* "Selling from: Main" pill in POS */
+.branch-pill {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 700;
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    padding: 5px 12px;
+    border-radius: 999px;
+}
+
+/* Reports summary cards */
+.reports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.reports-card {
+    padding: 14px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-soft);
+}
+.reports-card-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    display: block;
+}
+.reports-card h3 {
+    font-size: 20px;
+    margin: 6px 0 0 0;
+    font-weight: 800;
+}
+.reports-card-green {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border-color: #bbf7d0;
+}
+.reports-card-green .reports-card-label { color: #166534; }
+.reports-card-green h3 { color: #15803d; }
+.reports-card-blue {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border-color: #bfdbfe;
+}
+.reports-card-blue .reports-card-label { color: #1e40af; }
+.reports-card-blue h3 { color: #1d4ed8; }
+.reports-card-purple {
+    background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+    border-color: #e9d5ff;
+}
+.reports-card-purple .reports-card-label { color: #6b21a8; }
+.reports-card-purple h3 { color: #7e22ce; }
+
+/* Net profit summary card */
+.net-profit-card {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #a7f3d0;
+    padding: 18px;
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+}
+.net-profit-card h3 {
+    font-size: 11px;
+    font-weight: 700;
+    color: #047857;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin: 0 0 4px 0;
+}
+.net-profit-card h3 span {
+    text-transform: none;
+    color: #065f46;
+}
+.net-profit-card p {
+    font-size: 26px;
+    font-weight: 800;
+    color: #065f46;
+    margin: 0 0 4px 0;
+}
+.net-profit-card span {
+    font-size: 11px;
+    color: #64748b;
+}
+
+/* Super admin shell */
+.super-admin-shell {
+    padding: 30px;
+    background: #0f172a;
+    color: #fff;
+    min-height: 100vh;
+}
+.super-admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background: #1e293b;
+    padding: 15px 20px;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.super-admin-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 20px;
+}
+.super-admin-header p {
+    margin: 3px 0 0 0;
+    font-size: 12px;
+    color: #94a3b8;
+}
+.super-admin-panel {
+    background: #ffffff;
+    color: #0f172a;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+}
+.btn-super-primary {
+    background: var(--gradient-brand);
+    color: #fff;
+    border: none;
+    border-left: none;
+}
+
+/* Dashboard "Total Sales Today" stat card */
+.stat-card {
+    background: #ffffff;
+    border: 1px solid var(--border-soft);
+    padding: 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+}
+.stat-card-green {
+    background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+    border-color: #bbf7d0;
+}
+.stat-label {
+    font-weight: 600;
+    font-size: 11px;
+    color: #166534;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.stat-value {
+    font-size: 26px;
+    margin-top: 8px;
+    font-weight: 800;
+    color: #15803d;
+}
+.stat-foot {
+    font-size: 11px;
+    margin-top: 5px;
+    color: #4ade80;
+}
+
+/* Soft ambient pulse animation (used optionally on stat cards) */
+@keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.85; }
+}
+
 /* ===================== RESPONSIVE ===================== */
 
 @media (max-width: 480px) {
