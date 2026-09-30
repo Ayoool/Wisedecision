@@ -250,10 +250,10 @@ body {
 
 .menu-btn:active { transform: translateY(0); }
 
-/* ===================== SIDEBAR BUTTONS — REFRESHED PALETTE ===================== */
-/* Each button: soft tinted background, matching colored text, a hairline border,
-   and a bold 4px left accent bar. Hover lifts the button and warms the tint
-   slightly, so the sidebar feels alive without being noisy. */
+/* ===================== SIDEBAR BUTTONS — UNIFIED PALETTE ===================== */
+/* One consistent color across every sidebar button. Active/hover states are the
+   only thing that changes, so the sidebar reads as a single navigation unit
+   instead of a rainbow. Uses the brand teal for accent. */
 
 .btn-dash,
 .btn-pos,
@@ -267,155 +267,31 @@ body {
 .btn-supplier,
 .btn-transfer,
 .btn-sec {
-    border-width: 1px;
-    border-style: solid;
-    border-left-width: 4px;
-    border-left-style: solid;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #cbd5e1;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 
-/* Dashboard — sky blue */
-.btn-dash {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-    border-left-color: #3b82f6;
-}
-.btn-dash:hover {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    color: #1e3a8a;
-}
-
-/* POS Sales — emerald green */
-.btn-pos {
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    color: #15803d;
-    border-color: #bbf7d0;
-    border-left-color: #22c55e;
-}
-.btn-pos:hover {
-    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-    color: #166534;
-}
-
-/* Inventory — amber */
-.btn-inv {
-    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-    color: #b45309;
-    border-color: #fde68a;
-    border-left-color: #f59e0b;
-}
-.btn-inv:hover {
-    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-    color: #92400e;
-}
-
-/* Accountant — fuchsia */
-.btn-acc {
-    background: linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%);
-    color: #a21caf;
-    border-color: #f5d0fe;
-    border-left-color: #d946ef;
-}
-.btn-acc:hover {
-    background: linear-gradient(135deg, #fae8ff 0%, #f5d0fe 100%);
-    color: #86198f;
-}
-
-/* Reports — red/rose */
-.btn-rep {
-    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-    color: #b91c1c;
-    border-color: #fecaca;
-    border-left-color: #ef4444;
-}
-.btn-rep:hover {
-    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-    color: #991b1b;
-}
-
-/* Staff — cyan */
-.btn-staff {
-    background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
-    color: #0e7490;
-    border-color: #a5f3fc;
-    border-left-color: #06b6d4;
-}
-.btn-staff:hover {
-    background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
-    color: #155e75;
-}
-
-/* Customers — violet */
-.btn-cust {
-    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
-    color: #6d28d9;
-    border-color: #ddd6fe;
-    border-left-color: #8b5cf6;
-}
-.btn-cust:hover {
-    background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
-    color: #5b21b6;
-}
-
-/* Branches — orange */
-.btn-branch {
-    background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
-    color: #c2410c;
-    border-color: #fed7aa;
-    border-left-color: #f97316;
-}
-.btn-branch:hover {
-    background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%);
-    color: #9a3412;
-}
-
-/* Expenses — yellow */
-.btn-exp {
-    background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
-    color: #a16207;
-    border-color: #fef08a;
-    border-left-color: #eab308;
-}
-.btn-exp:hover {
-    background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%);
-    color: #854d0e;
-}
-
-/* Suppliers — deep blue */
-.btn-supplier {
-    background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
-    color: #1e40af;
-    border-color: #c7d2fe;
-    border-left-color: #2563eb;
-}
-.btn-supplier:hover {
-    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
-    color: #1e3a8a;
-}
-
-/* Transfers — teal (brand-adjacent) */
-.btn-transfer {
+.btn-dash:hover,
+.btn-pos:hover,
+.btn-inv:hover,
+.btn-acc:hover,
+.btn-rep:hover,
+.btn-staff:hover,
+.btn-cust:hover,
+.btn-branch:hover,
+.btn-exp:hover,
+.btn-supplier:hover,
+.btn-transfer:hover,
+.btn-sec:hover {
     background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
     color: #0f766e;
     border-color: #99f6e4;
-    border-left-color: #14b8a6;
-}
-.btn-transfer:hover {
-    background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
-    color: #115e59;
-}
-
-/* Business Settings — slate */
-.btn-sec {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-    color: #334155;
-    border-color: #cbd5e1;
-    border-left-color: #64748b;
-}
-.btn-sec:hover {
-    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
-    color: #1e293b;
+    border-left-color: #0d9488;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(13, 148, 136, 0.12);
 }
 
 /* Slightly taller sidebar buttons on desktop for better breathing room */
@@ -886,6 +762,27 @@ div[id*="mimo"] {
     display: inline-block;
     border: 1px solid #86efac;
     letter-spacing: 0.2px;
+}
+
+/* Pre-Orders sidebar button — added by manager-preorder-patch.js.
+   Matches the unified sidebar palette so it blends in. */
+.sidebar .menu-btn[onclick*="preorder"],
+.sidebar .menu-btn[onclick*="Preorder"],
+.sidebar .menu-btn[onclick*="PreOrder"],
+.sidebar .menu-btn[onclick*="pre-order"] {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #cbd5e1;
+}
+.sidebar .menu-btn[onclick*="preorder"]:hover,
+.sidebar .menu-btn[onclick*="Preorder"]:hover,
+.sidebar .menu-btn[onclick*="PreOrder"]:hover,
+.sidebar .menu-btn[onclick*="pre-order"]:hover {
+    background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+    color: #0f766e;
+    border-color: #99f6e4;
+    border-left-color: #0d9488;
 }
 
 /* POS toggle buttons (Retail/Wholesale, Pack/Piece) — smooth transition when
