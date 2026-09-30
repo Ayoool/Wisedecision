@@ -250,10 +250,9 @@ body {
 
 .menu-btn:active { transform: translateY(0); }
 
-/* ===================== SIDEBAR BUTTONS — UNIFIED PALETTE ===================== */
-/* One consistent color across every sidebar button. Active/hover states are the
-   only thing that changes, so the sidebar reads as a single navigation unit
-   instead of a rainbow. Uses the brand teal for accent. */
+/* ===================== SIDEBAR BUTTONS — UNIFIED BASE ===================== */
+/* Base state for sidebar buttons. Per-button colors are defined further down
+   and override these via the .btn-* class rules in the override block. */
 
 .btn-dash,
 .btn-pos,
@@ -267,31 +266,7 @@ body {
 .btn-supplier,
 .btn-transfer,
 .btn-sec {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    color: #334155;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #cbd5e1;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-}
-
-.btn-dash:hover,
-.btn-pos:hover,
-.btn-inv:hover,
-.btn-acc:hover,
-.btn-rep:hover,
-.btn-staff:hover,
-.btn-cust:hover,
-.btn-branch:hover,
-.btn-exp:hover,
-.btn-supplier:hover,
-.btn-transfer:hover,
-.btn-sec:hover {
-    background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
-    color: #0f766e;
-    border-color: #99f6e4;
-    border-left-color: #0d9488;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgba(13, 148, 136, 0.12);
 }
 
 /* Slightly taller sidebar buttons on desktop for better breathing room */
@@ -732,11 +707,9 @@ div[id*="mimo"] {
     }
 }
 
-/* ===================== NEW: HELPER CLASSES ===================== */
-/* These support the updated index.html. They layer on top of the existing rules,
-   so nothing here overrides anything that was already working. */
+/* ===================== HELPER CLASSES ===================== */
 
-/* Register button on the login screen (used by the new .btn-secondary class) */
+/* Register button on the login screen */
 .btn-secondary {
     background: #f1f5f9;
     border: 1px solid #cbd5e1;
@@ -764,30 +737,7 @@ div[id*="mimo"] {
     letter-spacing: 0.2px;
 }
 
-/* Pre-Orders sidebar button — added by manager-preorder-patch.js.
-   Matches the unified sidebar palette so it blends in. */
-.sidebar .menu-btn[onclick*="preorder"],
-.sidebar .menu-btn[onclick*="Preorder"],
-.sidebar .menu-btn[onclick*="PreOrder"],
-.sidebar .menu-btn[onclick*="pre-order"] {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    color: #334155;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #cbd5e1;
-}
-.sidebar .menu-btn[onclick*="preorder"]:hover,
-.sidebar .menu-btn[onclick*="Preorder"]:hover,
-.sidebar .menu-btn[onclick*="PreOrder"]:hover,
-.sidebar .menu-btn[onclick*="pre-order"]:hover {
-    background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
-    color: #0f766e;
-    border-color: #99f6e4;
-    border-left-color: #0d9488;
-}
-
-/* POS toggle buttons (Retail/Wholesale, Pack/Piece) — smooth transition when
-   the inline styles are toggled by JS. Does not override colors; those are
-   still set by the existing inline onclick handlers. */
+/* POS toggle buttons (Retail/Wholesale, Pack/Piece) */
 .toggle-btn {
     width: auto !important;
     margin: 0 !important;
@@ -797,7 +747,7 @@ div[id*="mimo"] {
     transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-/* Filter bar rows (inventory / reports / dashboard alerts) */
+/* Filter bar rows */
 .filter-bar {
     display: flex;
     align-items: center;
@@ -817,7 +767,7 @@ div[id*="mimo"] {
     letter-spacing: 0.2px;
 }
 
-/* Inline form controls (selects/inputs inside filter bars) */
+/* Inline form controls */
 .form-control-inline {
     padding: 6px 10px;
     border-radius: 8px;
@@ -841,7 +791,7 @@ div[id*="mimo"] {
     box-shadow: var(--shadow-md);
 }
 
-/* Table wrappers with rounded corners + subtle shadow */
+/* Table wrappers */
 .table-card {
     background: #ffffff;
     border-radius: var(--radius);
@@ -850,7 +800,7 @@ div[id*="mimo"] {
     overflow-x: auto;
 }
 
-/* Small info pill (e.g. "Viewing combined enterprise stock") */
+/* Small info pill */
 .info-pill {
     font-size: 11px;
     color: #b45309;
@@ -861,7 +811,7 @@ div[id*="mimo"] {
     font-weight: 600;
 }
 
-/* Total-summary pills (used at top of lists) */
+/* Total-summary pills */
 .total-pill {
     padding: 8px 15px;
     border-radius: 999px;
@@ -1038,7 +988,7 @@ div[id*="mimo"] {
     color: #4ade80;
 }
 
-/* Soft ambient pulse animation (used optionally on stat cards) */
+/* Soft ambient pulse animation */
 @keyframes pulse-soft {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.85; }
@@ -1052,4 +1002,32 @@ div[id*="mimo"] {
     .auth-card .brand-title .big-w { font-size: 46px; }
     .main-content-area { padding: 18px; }
     .sidebar { padding: 18px 14px; }
+}
+
+/* ===================== SIDEBAR BUTTONS — COLOR-CODED OVERRIDE ===================== */
+/* Placed last, with !important, so these win over any earlier unified/base rules.
+   Restores the per-button color-coding you had before. */
+
+.btn-dash      { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe !important; border-left: 4px solid #3b82f6 !important; }
+.btn-pos       { background: #f0fdf4 !important; color: #15803d !important; border: 1px solid #bbf7d0 !important; border-left: 4px solid #22c55e !important; }
+.btn-inv       { background: #fffbeb !important; color: #b45309 !important; border: 1px solid #fde68a !important; border-left: 4px solid #f59e0b !important; }
+.btn-acc       { background: #fdf4ff !important; color: #a21caf !important; border: 1px solid #f5d0fe !important; border-left: 4px solid #d946ef !important; }
+.btn-rep       { background: #fef2f2 !important; color: #b91c1c !important; border: 1px solid #fecaca !important; border-left: 4px solid #ef4444 !important; }
+.btn-staff     { background: #ecfeff !important; color: #0e7490 !important; border: 1px solid #a5f3fc !important; border-left: 4px solid #06b6d4 !important; }
+.btn-cust      { background: #f5f3ff !important; color: #6d28d9 !important; border: 1px solid #ddd6fe !important; border-left: 4px solid #8b5cf6 !important; }
+.btn-branch    { background: #fff7ed !important; color: #c2410c !important; border: 1px solid #ffedd5 !important; border-left: 4px solid #f97316 !important; }
+.btn-exp       { background: #fefce8 !important; color: #a16207 !important; border: 1px solid #fef08a !important; border-left: 4px solid #eab308 !important; }
+.btn-supplier  { background: #eff6ff !important; color: #1e40af !important; border: 1px solid #bfdbfe !important; border-left: 4px solid #2563eb !important; }
+.btn-transfer  { background: #f0fdfa !important; color: #0f766e !important; border: 1px solid #99f6e4 !important; border-left: 4px solid #14b8a6 !important; }
+.btn-sec       { background: #f8fafc !important; color: #334155 !important; border: 1px solid #e2e8f0 !important; border-left: 4px solid #64748b !important; }
+
+/* Pre-Orders button — matches Dashboard's blue */
+.sidebar .menu-btn[onclick*="preorder"],
+.sidebar .menu-btn[onclick*="Preorder"],
+.sidebar .menu-btn[onclick*="PreOrder"],
+.sidebar .menu-btn[onclick*="pre-order"] {
+    background: #eff6ff !important;
+    color: #1d4ed8 !important;
+    border: 1px solid #bfdbfe !important;
+    border-left: 4px solid #3b82f6 !important;
 }
