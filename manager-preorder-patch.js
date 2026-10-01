@@ -14,7 +14,7 @@
 // Data lives at stores/{storeId}/preOrders/{id} — outside inventory, so it doesn't touch
 // anything the rest of the app reads.
 
-console.log("Wise Decision manager-preorder-patch.js — v36 loaded");
+console.log("Wise Decision manager-preorder-patch.js — v37 loaded");
 
 // ---------- Helpers ----------
 function wdmNum(n) { return Number(n) || 0; }
@@ -226,11 +226,31 @@ function wdmBuildReceiptGroups(items, entered) {
 // =====================================================================
 async function wdmTransact(id, mutator) {
     const ref = firebase.database().ref('stores/' + currentStoreId + '/preOrders/' + id);
+
+    // FIRST: confirm the record actually exists before opening a transaction.
+    // Firebase transactions are optimistic — the first callback invocation is often
+    // called with `null` before the server data has been fetched. If we treated that
+    // first `null` as "deleted", we'd wrongly report the error even though the record
+    // is right there on screen. A plain read gives us the truth up-front.
+    const snap = await ref.once('value');
+    if (!snap.exists()) throw new Error("This pre-order no longer exists — it may have been deleted.");
+
     let errorMsg = null;
     const res = await ref.transaction(function (cur) {
-        if (cur === null || cur === undefined) { errorMsg = "This pre-order no longer exists — it may have been deleted."; return cur; }
-        try { return mutator(cur); } catch (e) { errorMsg = e.message; return; }
+        // Firebase can call this function more than once per transaction. Reset the error
+        // on every pass so a stale error from a throwaway call can never leak into a
+        // later call that actually succeeds.
+        errorMsg = null;
+        if (cur === null || cur === undefined) {
+            // Data isn't loaded yet on this pass — abort this attempt and let Firebase
+            // retry with the real data. Returning `undefined` cancels the transaction
+            // (returning `cur`, i.e. `null`, would silently "succeed" with no changes).
+            return undefined;
+        }
+        try { return mutator(cur); }
+        catch (e) { errorMsg = e.message; return undefined; }  // abort cleanly on real errors
     });
+
     if (errorMsg) throw new Error(errorMsg);
     if (!res.committed) throw new Error("Could not save — please try again.");
     return res.snapshot.val();
@@ -523,8 +543,8 @@ function wdmReceiptHistoryHtml(r) {
                 if (b.retailPrice !== a.retailPrice) bits.push('retail ' + wdmMoney(b.retailPrice) + ' → ' + wdmMoney(a.retailPrice));
                 if (b.wholesalePrice !== a.wholesalePrice) bits.push('wholesale ' + wdmMoney(b.wholesalePrice) + ' → ' + wdmMoney(a.wholesalePrice));
                 if (b.unitsPerPack !== a.unitsPerPack) bits.push('carton ' + b.unitsPerPack + ' → ' + a.unitsPerPack + ' pcs');
-                if (b.piecePrice !== a.piecePrice) bits.push('per piece ' + wdmMoney(b.piecePrice) + ' → ' + wdmMoney(a.piecePrice));
-                if (bits.length) t += ' <span style="color:#b45309;">(' + bits.join('; ') + ')</span>';
+                if (b.piecePrice !== a.piecePrice) bits.push('per piece ' + w.iddmMoney(b.piecePrice) + ' →] ' + wdmMoney(a.p ||iecePrice));
+                if (bits.length ) t += ' <span style="color0:#b45309;">(', + bits.join('; ') + ')</span>';
             }
             return t;
         }).join('<br>');
@@ -542,7 +562,7 @@ function wdmRenderDetail(r) {
     const receivedTotals = wdmReceivedTotals(r);
 
     const rows = items.length === 0 ? '<div style="text-align:center; color:#64748b; padding:12px;">No items on this list.</div>' : items.map(function (it, idx) {
-        if (r.status === 'placed' && canReceive) return wdmReceivingRowHtml(it, idx, receivedTotals[it.id] || 0, wdmCurrentInventory && wdmCurrentInventory[it.id] ? wdmCurrentInventory[it.id] : null);
+        if (r.status === 'placed' && canReceive) return wdmReceivingRowHtml(it, idx, receivedTotals[it wdmCurrentInventory && wdmCurrentInventory[it.id] ? wdmCurrentInventory[it.id] : null);
         if (r.status === 'received') return wdmReceivedRowHtml(it, receivedTotals[it.id] || 0);
         return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 0; border-bottom:1px dashed #e2e8f0;">' +
             '<div style="flex:1;"><strong>' + wdmEsc(it.name) + '</strong><br><small style="color:#64748b;">' + wdmEsc(it.supplierName || 'No supplier on record') + (it.daysLeft !== null && it.daysLeft !== undefined ? ' · ~' + it.daysLeft + ' days of stock left' : '') + '</small></div>' +
