@@ -1,13 +1,17 @@
-// ==================== WISE DECISION EXTRAS PATCH (v1) ====================
+// ==================== WISE DECISION EXTRAS PATCH (v3) ====================
 // Load LAST (after all the other patches), with defer.
+//
+// v3: Shift Log now visible to all logged-in roles.
+//     - Admin sees everyone's shifts.
+//     - Manager / Cashier / Accountant / Standard Worker see only their own.
 //
 // Adds:
 //   1. Loyalty Points: every 1000 Naira spent = 1 point, auto-credited on
 //      completed sales, auto-reversed on refunds.
 //   2. Shift Log: Clock In / Clock Out button in the sidebar, "On shift since
-//      HH:MM" indicator, Admin-only Shift Log view with per-person totals.
+//      HH:MM" indicator, Shift Log view with per-person totals.
 
-console.log("Wise Decision extras-patch.js - v1 loaded (loyalty points + shift log)");
+console.log("Wise Decision extras-patch.js - v3 loaded (loyalty points + shift log)");
 
 // Config
 var WDEX_POINTS_PER_NAIRA = 1000;
@@ -68,7 +72,6 @@ function wdexAdjustPoints(customerId, delta, reason, meta) {
     });
 }
 
-// Wrap completeSplitCheckout to credit points on completed sales
 (function wdexWrapCompleteSplitCheckout() {
     var original = window.completeSplitCheckout;
     if (typeof original !== 'function' || original.__wdex) return;
@@ -95,7 +98,6 @@ function wdexAdjustPoints(customerId, delta, reason, meta) {
     window.completeSplitCheckout = wrapped;
 })();
 
-// Wrap processRefund to reverse points on refunds
 (function wdexWrapProcessRefund() {
     var original = window.processRefund;
     if (typeof original !== 'function' || original.__wdex) return;
@@ -125,7 +127,6 @@ function wdexAdjustPoints(customerId, delta, reason, meta) {
     window.processRefund = wrapped;
 })();
 
-// Show points in the POS customer badge
 (function wdexWrapUpdatePosCustomerBadge() {
     var original = window.updatePosCustomerBadge;
     if (typeof original !== 'function' || original.__wdex) return;
@@ -148,7 +149,6 @@ function wdexAdjustPoints(customerId, delta, reason, meta) {
     window.updatePosCustomerBadge = wrapped;
 })();
 
-// Add Points card into customer profile modal
 (function wdexInjectProfileCard() {
     var original = window.refreshCustomerProfileSummary;
     if (typeof original !== 'function' || original.__wdex) return;
@@ -177,7 +177,6 @@ function wdexAdjustPoints(customerId, delta, reason, meta) {
     window.refreshCustomerProfileSummary = wrapped;
 })();
 
-// Add Points column to Customers table (reads customer id from row's View button)
 (function wdexWrapRenderCustomersTable() {
     var original = window.renderCustomersTable;
     if (typeof original !== 'function' || original.__wdex) return;
@@ -322,16 +321,16 @@ function wdexToggleShift() {
 }
 
 function wdexOpenShiftLog() {
-    if (currentUserRole !== 'Admin') {
-        alert('Only the Admin can view the Shift Log.');
-        return;
-    }
     if (!currentStoreId) return;
+    var isAdmin = (currentUserRole === 'Admin');
+
     var mainWrapper = document.getElementById('dashboard-main-wrapper');
     if (mainWrapper) { mainWrapper.classList.add('active'); mainWrapper.style.display = 'block'; }
     var workspace = document.getElementById('workspace-content');
     if (!workspace) return;
-    workspace.innerHTML = '<div style="padding:20px;"><h2 style="margin-top:0;">Shift Log</h2>' +
+
+    var heading = isAdmin ? 'Shift Log - All Staff' : 'My Shift Log';
+    workspace.innerHTML = '<div style="padding:20px;"><h2 style="margin-top:0;">' + heading + '</h2>' +
         '<div id="wdex-shift-content" style="margin-top:15px; color:#64748b;">Loading shifts...</div></div>';
 
     firebase.database().ref('stores/' + currentStoreId + '/shifts').once('value').then(function (snap) {
@@ -359,7 +358,9 @@ function wdexOpenShiftLog() {
                     monthHours += Number(s.out ? s.hours : wdexHoursBetween(s.in, new Date().toISOString())) || 0;
                 }
                 var clone = {}; Object.keys(s).forEach(function(kk){ clone[kk] = s[kk]; });
-                clone.personName = p.name; clone.role = p.role || clone.role;
+                clone.personName = p.name;
+                clone.role = p.role || clone.role;
+                clone.personKey = k;
                 flat.push(clone);
             });
             p.monthHours = Math.round(monthHours * 100) / 100;
@@ -368,8 +369,10 @@ function wdexOpenShiftLog() {
 
         var html = '';
         html += '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:15px;">';
-        html += '<h3 style="margin:0 0 8px 0; font-size:15px;">This Month - Hours Per Person</h3>';
+        html += '<h3 style="margin:0 0 8px 0; font-size:15px;">' + (isAdmin ? 'This Month - Hours Per Person' : 'My Hours This Month') + '</h3>';
+        var myKey = wdexCurrentStaffKey();
         var personKeys = Object.keys(byPerson);
+        if (!isAdmin) personKeys = personKeys.filter(function (k) { return k === myKey; });
         if (personKeys.length === 0) {
             html += '<div style="color:#64748b; font-size:13px;">No shifts recorded yet.</div>';
         } else {
@@ -389,20 +392,26 @@ function wdexOpenShiftLog() {
 
         html += '<div style="background:#fff; border:1px solid #eef2f7; border-radius:10px; overflow-x:auto;">';
         html += '<table style="width:100%; font-size:13px; border-collapse:collapse;">';
-        html += '<thead><tr style="text-align:left; background:#f8fafc; border-bottom:2px solid #cbd5e1;"><th style="padding:8px;">Name</th><th style="padding:8px;">Role</th><th style="padding:8px;">Clocked In</th><th style="padding:8px;">Clocked Out</th><th style="padding:8px; text-align:right;">Hours</th></tr></thead><tbody>';
-        if (flat.length === 0) {
-            html += '<tr><td colspan="5" style="padding:15px; text-align:center; color:#64748b;">No shifts recorded yet.</td></tr>';
-        } else {
-            flat.forEach(function (s) {
-                var isOpen = s.in && !s.out;
-                html += '<tr style="border-bottom:1px dashed #e2e8f0;">' +
-                    '<td style="padding:6px 8px;">' + wdexEsc(s.personName) + '</td>' +
-                    '<td style="padding:6px 8px; color:#64748b;">' + wdexEsc(s.role || '') + '</td>' +
-                    '<td style="padding:6px 8px;">' + wdexPretty(s.in) + '</td>' +
-                    '<td style="padding:6px 8px;">' + (isOpen ? '<span style="color:#166534; font-weight:bold;">still on shift</span>' : wdexPretty(s.out)) + '</td>' +
-                    '<td style="padding:6px 8px; text-align:right; font-weight:bold;">' + (isOpen ? '--' : (Number(s.hours) || 0)) + '</td>' +
-                    '</tr>';
-            });
+        html += '<thead><tr style="text-align:left; background:#f8fafc; border-bottom:2px solid #cbd5e1;">';
+        if (isAdmin) html += '<th style="padding:8px;">Name</th>';
+        html += '<th style="padding:8px;">Role</th><th style="padding:8px;">Clocked In</th><th style="padding:8px;">Clocked Out</th><th style="padding:8px; text-align:right;">Hours</th></tr></thead><tbody>';
+
+        var shown = 0;
+        flat.forEach(function (s) {
+            if (!isAdmin && s.personKey !== myKey) return;
+            shown++;
+            var isOpen = s.in && !s.out;
+            html += '<tr style="border-bottom:1px dashed #e2e8f0;">';
+            if (isAdmin) html += '<td style="padding:6px 8px;">' + wdexEsc(s.personName) + '</td>';
+            html += '<td style="padding:6px 8px; color:#64748b;">' + wdexEsc(s.role || '') + '</td>' +
+                '<td style="padding:6px 8px;">' + wdexPretty(s.in) + '</td>' +
+                '<td style="padding:6px 8px;">' + (isOpen ? '<span style="color:#166534; font-weight:bold;">still on shift</span>' : wdexPretty(s.out)) + '</td>' +
+                '<td style="padding:6px 8px; text-align:right; font-weight:bold;">' + (isOpen ? '--' : (Number(s.hours) || 0)) + '</td>' +
+                '</tr>';
+        });
+        if (shown === 0) {
+            var colspan = isAdmin ? 5 : 4;
+            html += '<tr><td colspan="' + colspan + '" style="padding:15px; text-align:center; color:#64748b;">No shifts recorded yet.</td></tr>';
         }
         html += '</tbody></table></div>';
 
@@ -413,7 +422,8 @@ function wdexOpenShiftLog() {
 }
 
 function wdexEnsureShiftLogButton() {
-    if (currentUserRole !== 'Admin') return;
+    if (currentUserRole === 'SuperAdmin') return;
+    if (!currentStoreId) return;
     var sidebar = document.querySelector('.sidebar');
     if (!sidebar || document.getElementById('wdex-shiftlog-btn')) return;
     var btn = document.createElement('button');
@@ -430,13 +440,11 @@ function wdexEnsureShiftLogButton() {
     }
 }
 
-// Install/refresh buttons
 function wdexInstall() {
     try { wdexEnsureShiftButton(); } catch (e) { console.warn(e); }
     try { wdexEnsureShiftLogButton(); } catch (e) { console.warn(e); }
 }
 
-// Hook switchView so buttons are re-checked on every navigation
 (function wdexHookSwitchView() {
     var prev = window.switchView;
     if (typeof prev !== 'function' || prev.__wdex) return;
@@ -449,7 +457,6 @@ function wdexInstall() {
     window.switchView = wrapped;
 })();
 
-// Hook login so buttons appear right after the user logs in
 (function wdexHookLogin() {
     var prev = window.handleStoreLogin;
     if (typeof prev !== 'function' || prev.__wdex) return;
@@ -463,7 +470,6 @@ function wdexInstall() {
     window.handleStoreLogin = wrapped;
 })();
 
-// Install on load + watch DOM
 (function wdexWatchDom() {
     var scheduled = false;
     function fire() {
@@ -482,7 +488,6 @@ function wdexInstall() {
     }
 })();
 
-// Reset on logout
 (function wdexWrapLogout() {
     var original = window.logout;
     if (typeof original !== 'function' || original.__wdex) return;
