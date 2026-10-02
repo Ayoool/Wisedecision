@@ -4,7 +4,7 @@
 // DevTools > Console and look for this line. Bump the number whenever you deploy
 // a change, alongside the ?v= query string on the <script>/<link> tags in
 // index.html (see the comment there).
-console.log("Wise Decision script.js — build v19 (perf: deferred scripts, lazy-loaded PDF library)");
+console.log("Wise Decision script.js — build v20 (receipt: added 'THANKS FOR YOUR PATRONAGE' footer line)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -2658,7 +2658,7 @@ function renderReceiptView(orderData, isReprint = false) {
             const promoDiv = document.createElement('div');
             promoDiv.className = 'receipt-promo-footer';
             promoDiv.style.cssText = 'text-align: center; margin-top: 15px; font-size: 11px; font-weight: bold; border-top: 1px dashed #ccc; padding-top: 10px;';
-            promoDiv.innerHTML = 'FOR SIMILAR RECEIPT FOR YOUR BUSINESS: 09168140710';
+            promoDiv.innerHTML = 'THANKS FOR YOUR PATRONAGE !!!<br>FOR SIMILAR RECEIPT FOR YOUR BUSINESS: 09168140710';
             printableBox.appendChild(promoDiv);
         }
 
