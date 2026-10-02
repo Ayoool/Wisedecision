@@ -1,9 +1,13 @@
-// ==================== WISE DECISION DASHBOARD & CATEGORIES PATCH (v1) ====================
+// ==================== WISE DECISION REPORT CHART & CATEGORIES PATCH (v2) ====================
 // Load LAST (after all the other patches), with defer.
 //
-// Adds:
-//   B. Sales chart on the Dashboard — pure SVG bar chart of daily sales,
-//      7-day / 30-day toggle, respects the currently-selected branch.
+// v2: Sales chart moved from the Dashboard to the Reports view (top of the
+//     page, above the Net Profit card). It now also respects the Reports
+//     date picker and branch filter, so it acts as a live 7-day / 30-day
+//     trend for whatever the user is currently looking at.
+//
+//   B. Sales chart on Reports — pure SVG bar chart of daily sales,
+//      7-day / 30-day toggle, filtered by the currently-selected branch.
 //      No external library, no cost, no new service.
 //
 //   J. Category Management inside Inventory — a "Manage Categories" button
@@ -15,16 +19,16 @@
 // Both are additive. Nothing here replaces existing functions except for a
 // few thin wrappers, so existing behaviour is preserved.
 
-console.log("Wise Decision dashboard-categories-patch.js - v1 loaded");
+console.log("Wise Decision dashboard-categories-patch.js - v2 loaded (chart in Reports)");
 
 // =====================================================================
-// B. SALES CHART ON DASHBOARD
+// B. SALES CHART ON REPORTS
 // =====================================================================
 
 // Range in days for the chart. 7 by default; toggle switches to 30.
 var wdbcChartRange = 7;
 
-// Reads recent transactions once and returns an array of { date: 'YYYY-MM-DD', label: 'Mon 23', total: N }
+// Reads recent transactions once and returns an array of { date, label, total }
 // for the last `range` calendar days ending today (today is the last entry).
 function wdbcLoadDailySales(branchId, range, callback) {
     var since = new Date();
@@ -65,9 +69,7 @@ function wdbcDayLabel(d) {
     return names[d.getDay()] + ' ' + d.getDate();
 }
 
-// Builds an inline SVG bar chart. Width 100%, height fixed, Y-axis scaled to
-// the max day. Each bar has a title attribute (native tooltip on hover) and a
-// data-label so we can show a summary line beneath.
+// Builds an inline SVG bar chart.
 function wdbcRenderChart(days) {
     var container = document.getElementById('wdbc-chart-area');
     if (!container) return;
@@ -82,10 +84,10 @@ function wdbcRenderChart(days) {
         totalAll += d.total;
     });
 
-    var W = 100;                 // viewBox width  (SVG units)
-    var H = 40;                  // viewBox height
-    var padLeft = 0, padRight = 0, padTop = 4, padBottom = 6;
-    var chartW = W - padLeft - padRight;
+    var W = 100;
+    var H = 40;
+    var padTop = 4, padBottom = 6;
+    var chartW = W;
     var chartH = H - padTop - padBottom;
     var barGap = 0.6;
     var barW = Math.max(0.6, (chartW / days.length) - barGap);
@@ -93,7 +95,7 @@ function wdbcRenderChart(days) {
 
     var barsSvg = '';
     days.forEach(function (d, i) {
-        var x = padLeft + i * (chartW / days.length) + barGap / 2;
+        var x = i * (chartW / days.length) + barGap / 2;
         var h = d.total * yScale;
         var y = padTop + (chartH - h);
         var isBest = (d === bestDay && maxTotal > 0);
@@ -103,18 +105,17 @@ function wdbcRenderChart(days) {
             '<title>' + wdbcEsc(d.label) + ': ' + wdbcMoney(d.total) + '</title></rect>';
     });
 
-    // X labels — show only some when 30 days to avoid clutter
     var labelStep = days.length <= 7 ? 1 : (days.length <= 14 ? 2 : 5);
     var labelsSvg = '';
     days.forEach(function (d, i) {
         if (i % labelStep !== 0 && i !== days.length - 1) return;
-        var x = padLeft + i * (chartW / days.length) + (chartW / days.length) / 2;
+        var x = i * (chartW / days.length) + (chartW / days.length) / 2;
         labelsSvg += '<text x="' + x.toFixed(2) + '" y="' + (H - 1) + '" font-size="2.2" text-anchor="middle" fill="#64748b">' +
             wdbcEsc(d.label.split(' ')[0]) + '</text>';
     });
 
     var summary = 'Total: ' + wdbcMoney(totalAll);
-    if (maxTotal > 0) summary += ' · Best day: ' + wdbcMoney(maxTotal) + ' (' + bestDay.label + ')';
+    if (maxTotal > 0) summary += ' | Best day: ' + wdbcMoney(maxTotal) + ' (' + bestDay.label + ')';
 
     container.innerHTML =
         '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%; height:120px; display:block;">' +
@@ -128,31 +129,46 @@ function wdbcEsc(s) {
 }
 function wdbcMoney(n) { return String.fromCharCode(8358) + (Number(n) || 0).toLocaleString(); }
 
-// Injects the chart card into the dashboard view, right below the "TOTAL SALES
-// (TODAY)" card. Called every time the dashboard renders.
+// Injects the chart card at the very top of the Reports view, above the Net
+// Profit card. Called after switchView('reports-view') and on DOM change.
 function wdbcInjectChartCard() {
-    var dashboard = document.getElementById('dash-today-sales');
-    if (!dashboard) return;                       // not the dashboard view
+    // Only inject if the Reports view is on screen — we look for a distinctive
+    // element that exists only in reports-view-template.
+    var netProfit = document.getElementById('net-profit-display');
+    var dateFilter = document.getElementById('sales-date-filter');
+    if (!netProfit || !dateFilter) return;   // not the Reports view
+
     var existing = document.getElementById('wdbc-chart-card');
     if (existing) {
         wdbcRefreshChart();
         return;
     }
 
-    // Find the parent grid — the small green "TOTAL SALES (TODAY)" card sits in
-    // a grid of stat cards. Insert our chart card into the same grid.
-    var todayCard = dashboard.closest('div');
-    while (todayCard && todayCard.parentElement && !todayCard.parentElement.style.gridTemplateColumns) {
-        todayCard = todayCard.parentElement;
+    // Find the wrapping container of the Net Profit card so we can insert our
+    // chart card above it.
+    var netProfitCard = netProfit.closest('div');
+    while (netProfitCard && netProfitCard.parentElement && netProfitCard.parentElement.tagName !== 'DIV') {
+        netProfitCard = netProfitCard.parentElement;
     }
-    var grid = todayCard && todayCard.parentElement ? todayCard.parentElement : null;
+    // The Net Profit card is inside a <div style="padding:20px"> block. Insert
+    // our chart card as the first child of that block, right after the h2/p
+    // header — but simplest and most reliable is: insert it directly above the
+    // Net Profit card.
+    var insertAnchor = netProfit.closest('div');
+    // Walk up until we find the div that contains BOTH the netProfit and the
+    // "This Month's Net Profit" heading — that's the net profit card wrapper.
+    while (insertAnchor && !insertAnchor.querySelector('h3')) {
+        insertAnchor = insertAnchor.parentElement;
+        if (!insertAnchor || insertAnchor.id === 'workspace-content') break;
+    }
+    if (!insertAnchor || !insertAnchor.parentElement) return;
 
     var card = document.createElement('div');
     card.id = 'wdbc-chart-card';
-    card.style.cssText = 'grid-column: 1 / -1; background:#ffffff; border:1px solid #eef2f7; padding:20px; border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,0.06); margin-top:10px;';
+    card.style.cssText = 'background:#ffffff; border:1px solid #eef2f7; padding:18px; border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,0.06); margin-bottom:20px;';
     card.innerHTML =
         '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px;">' +
-            '<div style="font-weight:600; font-size:11px; color:#166534; letter-spacing:0.5px;">SALES TREND</div>' +
+            '<div style="font-weight:600; font-size:11px; color:#166534; letter-spacing:0.5px; text-transform:uppercase;">Daily Sales Trend</div>' +
             '<div style="display:flex; gap:6px;">' +
                 '<button id="wdbc-range-7" type="button" style="padding:4px 10px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#0284c7; color:#fff;">7 days</button>' +
                 '<button id="wdbc-range-30" type="button" style="padding:4px 10px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#e2e8f0; color:#1e293b;">30 days</button>' +
@@ -160,12 +176,7 @@ function wdbcInjectChartCard() {
         '</div>' +
         '<div id="wdbc-chart-area" style="min-height:100px;"><div style="color:#64748b; font-size:12px; padding:20px; text-align:center;">Loading chart...</div></div>';
 
-    if (grid) grid.appendChild(card);
-    else {
-        // Fallback: append after the wrapper of the today card
-        var wrapper = dashboard.closest('div');
-        if (wrapper && wrapper.parentElement) wrapper.parentElement.insertBefore(card, wrapper.nextSibling);
-    }
+    insertAnchor.parentElement.insertBefore(card, insertAnchor);
 
     document.getElementById('wdbc-range-7').onclick = function () { wdbcSetRange(7); };
     document.getElementById('wdbc-range-30').onclick = function () { wdbcSetRange(30); };
@@ -188,19 +199,23 @@ function wdbcRefreshChart() {
     if (!currentStoreId) return;
     var area = document.getElementById('wdbc-chart-area');
     if (area) area.innerHTML = '<div style="color:#64748b; font-size:12px; padding:20px; text-align:center;">Loading chart...</div>';
-    var branchId = (typeof currentBranch !== 'undefined' && currentBranch) ? currentBranch : 'main';
+    // Use the current Reports branch filter if set; otherwise fall back to the
+    // current operating branch. 'all' means include every branch.
+    var branchId = (typeof currentReportBranchFilter !== 'undefined' && currentReportBranchFilter)
+        ? currentReportBranchFilter
+        : ((typeof currentBranch !== 'undefined' && currentBranch) ? currentBranch : 'main');
     wdbcLoadDailySales(branchId, wdbcChartRange, function (days) {
         wdbcRenderChart(days);
     });
 }
 
-// Re-render on every switchView to main-dashboard-view, and after metrics load
+// Re-render on switchView('reports-view') and when the Reports filters change
 (function wdbcHookSwitchView() {
     var prev = window.switchView;
     if (typeof prev !== 'function' || prev.__wdbc) return;
     var wrapped = function (viewId) {
         var result = prev.apply(this, arguments);
-        if (viewId === 'main-dashboard-view') {
+        if (viewId === 'reports-view') {
             setTimeout(function () { try { wdbcInjectChartCard(); } catch (e) { console.warn(e); } }, 200);
             setTimeout(function () { try { wdbcInjectChartCard(); } catch (e) {} }, 800);
         }
@@ -210,7 +225,21 @@ function wdbcRefreshChart() {
     window.switchView = wrapped;
 })();
 
-// Watch DOM so chart re-injects if dashboard re-renders internally
+// Hook the existing Reports branch filter so switching branches also refreshes
+// the chart. This wraps onReportsBranchFilterChange without replacing it.
+(function wdbcHookReportsBranchFilter() {
+    var prev = window.onReportsBranchFilterChange;
+    if (typeof prev !== 'function' || prev.__wdbc) return;
+    var wrapped = function () {
+        var result = prev.apply(this, arguments);
+        setTimeout(function () { try { wdbcRefreshChart(); } catch (e) {} }, 300);
+        return result;
+    };
+    wrapped.__wdbc = true;
+    window.onReportsBranchFilterChange = wrapped;
+})();
+
+// Watch DOM so the chart re-injects when Reports is (re)rendered
 (function wdbcWatchDom() {
     var scheduled = false;
     function fire() {
@@ -219,7 +248,9 @@ function wdbcRefreshChart() {
         requestAnimationFrame(function () {
             scheduled = false;
             try {
-                if (document.getElementById('dash-today-sales')) wdbcInjectChartCard();
+                if (document.getElementById('net-profit-display') && document.getElementById('sales-date-filter')) {
+                    wdbcInjectChartCard();
+                }
             } catch (e) {}
         });
     }
@@ -235,14 +266,10 @@ function wdbcRefreshChart() {
 // J. CATEGORY MANAGEMENT (button inside Inventory)
 // =====================================================================
 
-// Ensures stores/{storeId}/categories exists as an object; migrates any
-// categories currently in use on products into this node so the manager view
-// doesn't appear empty on first open.
 function wdbcEnsureCategoriesNode(callback) {
     var ref = firebase.database().ref('stores/' + currentStoreId + '/categories');
     ref.once('value').then(function (snap) {
         var existing = snap.val() || {};
-        // Also collect categories in use across all branches
         firebase.database().ref('stores/' + currentStoreId + '/inventory').once('value').then(function (invSnap) {
             var inUse = {};
             invSnap.forEach(function (branchChild) {
@@ -268,7 +295,6 @@ function wdbcEnsureCategoriesNode(callback) {
     });
 }
 
-// Opens the Category Management modal
 function wdbcOpenCategoryManager() {
     if (currentUserRole !== 'Admin') {
         alert('Only the Admin can manage categories.');
@@ -276,7 +302,6 @@ function wdbcOpenCategoryManager() {
     }
     if (!currentStoreId) return;
 
-    // Build the modal shell
     var modal = document.getElementById('wdbc-cat-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -315,7 +340,6 @@ function wdbcRenderCategoryList() {
     list.innerHTML = '<div style="padding:15px; text-align:center; color:#64748b;">Loading categories...</div>';
 
     wdbcEnsureCategoriesNode(function (cats) {
-        // Count products per category (across all branches)
         firebase.database().ref('stores/' + currentStoreId + '/inventory').once('value').then(function (invSnap) {
             var counts = {};
             invSnap.forEach(function (branchChild) {
@@ -334,13 +358,14 @@ function wdbcRenderCategoryList() {
 
             var rows = names.map(function (c) {
                 var count = counts[c] || 0;
+                var safe = wdbcEsc(c).replace(/'/g, '&#39;');
                 return '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px dashed #e2e8f0;">' +
                     '<div style="flex:1;">' +
                         '<strong>' + wdbcEsc(c) + '</strong>' +
                         '<br><small style="color:#64748b;">' + count + ' product' + (count === 1 ? '' : 's') + ' using this</small>' +
                     '</div>' +
-                    '<button class="menu-btn" style="width:auto; margin:0; padding:6px 10px; font-size:11px; background:#f0f9ff; border:1px solid #bae6fd; color:#0369a1;" onclick="wdbcRenameCategory(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')">Rename</button>' +
-                    '<button class="menu-btn btn-logout" style="width:auto; margin:0; padding:6px 10px; font-size:11px;" onclick="wdbcDeleteCategory(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')">Delete</button>' +
+                    '<button class="menu-btn" style="width:auto; margin:0; padding:6px 10px; font-size:11px; background:#f0f9ff; border:1px solid #bae6fd; color:#0369a1;" onclick="wdbcRenameCategory(\'' + safe + '\')">Rename</button>' +
+                    '<button class="menu-btn btn-logout" style="width:auto; margin:0; padding:6px 10px; font-size:11px;" onclick="wdbcDeleteCategory(\'' + safe + '\')">Delete</button>' +
                 '</div>';
             }).join('');
             list.innerHTML = rows;
@@ -375,14 +400,12 @@ function wdbcRenameCategory(oldName) {
         var existing = snap.val() || {};
         if (existing[newName]) { alert('A category with that name already exists.'); return; }
 
-        // Move the category record
         catRef.child(oldName).once('value').then(function (oldSnap) {
             var oldData = oldSnap.val() || { name: oldName };
             var updates = {};
             updates[newName] = Object.assign({}, oldData, { name: newName, renamedFrom: oldName, renamedAt: new Date().toISOString() });
             updates[oldName] = null;
             catRef.update(updates).then(function () {
-                // Update every product using this category, across all branches
                 firebase.database().ref('stores/' + currentStoreId + '/inventory').once('value').then(function (invSnap) {
                     var prodUpdates = {};
                     invSnap.forEach(function (branchChild) {
@@ -473,8 +496,6 @@ function wdbcRemoveCategoryRecord(name) {
     }).catch(function (e) { alert('Delete failed: ' + e.message); });
 }
 
-// Injects a "Manage Categories" button into the Inventory view, next to "+ Add
-// New Product". Called after switchView('inventory-view') and on DOM mutation.
 function wdbcInjectCategoryButton() {
     if (currentUserRole !== 'Admin') return;
     var addBtn = document.getElementById('add-product-trigger-btn');
@@ -490,7 +511,6 @@ function wdbcInjectCategoryButton() {
     addBtn.parentElement.insertBefore(btn, addBtn);
 }
 
-// Re-inject button after each switchView + on DOM change
 (function wdbcHookSwitchViewForCats() {
     var prev = window.switchView;
     if (typeof prev !== 'function' || prev.__wdbc2) return;
@@ -523,9 +543,6 @@ function wdbcInjectCategoryButton() {
     }
 })();
 
-// =====================================================================
-// Export for debugging
-// =====================================================================
 window.WDBC = {
     setRange: wdbcSetRange,
     refreshChart: wdbcRefreshChart,
