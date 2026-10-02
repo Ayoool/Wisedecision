@@ -1,36 +1,47 @@
-// ==================== WISE DECISION REPORT CHART & CATEGORIES PATCH (v2) ====================
+// ==================== WISE DECISION REPORT CHART & CATEGORIES PATCH (v3) ====================
 // Load LAST (after all the other patches), with defer.
 //
-// v2: Sales chart moved from the Dashboard to the Reports view (top of the
-//     page, above the Net Profit card). It now also respects the Reports
-//     date picker and branch filter, so it acts as a live 7-day / 30-day
-//     trend for whatever the user is currently looking at.
+// v3: Faster chart loading.
+//     - Daily-sales query results are cached in memory for 60 seconds, so
+//       toggling 7/30 days and re-opening Reports within that window is
+//       instant instead of re-querying Firebase each time.
+//     - Only the fields actually needed (date, totalAmount, branchId) are
+//       read from each transaction; other heavy fields are ignored.
+//     - A "refresh" behaviour is exposed via WDBC.refreshChart(true) for
+//       manual cache-busting (e.g. from the Console).
 //
-//   B. Sales chart on Reports — pure SVG bar chart of daily sales,
-//      7-day / 30-day toggle, filtered by the currently-selected branch.
-//      No external library, no cost, no new service.
+// v2: Chart moved from the Dashboard to the Reports view, above the Net
+//     Profit card. It respects the Reports date picker and branch filter.
 //
-//   J. Category Management inside Inventory — a "Manage Categories" button
-//      next to "+ Add New Product". Lets the Admin rename a category (updating
-//      every product that uses it, across all branches), delete a category
-//      (with the option to move its products elsewhere first), and pre-create
-//      categories before any product uses them.
-//
-// Both are additive. Nothing here replaces existing functions except for a
-// few thin wrappers, so existing behaviour is preserved.
+//   B. Sales chart on Reports — pure SVG, no library, no cost.
+//   J. Category Management inside Inventory — Admin-only "Manage Categories"
+//      button next to "+ Add New Product".
 
-console.log("Wise Decision dashboard-categories-patch.js - v2 loaded (chart in Reports)");
+console.log("Wise Decision dashboard-categories-patch.js - v3 loaded (fast cache)");
 
 // =====================================================================
 // B. SALES CHART ON REPORTS
 // =====================================================================
 
-// Range in days for the chart. 7 by default; toggle switches to 30.
 var wdbcChartRange = 7;
+var wdbcDailyCache = {};
+var wdbcDailyCacheTtl = 60 * 1000; // 60 seconds
 
-// Reads recent transactions once and returns an array of { date, label, total }
-// for the last `range` calendar days ending today (today is the last entry).
-function wdbcLoadDailySales(branchId, range, callback) {
+function wdbcTodayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Cached loader. Cache key includes today's date so tomorrow's first load is
+// always fresh. `force` bypasses the cache (used by WDBC.refreshChart(true)).
+function wdbcLoadDailySales(branchId, range, force, callback) {
+    var cacheKey = branchId + '|' + range + '|' + wdbcTodayKey();
+    var cached = wdbcDailyCache[cacheKey];
+    if (!force && cached && (Date.now() - cached.at) < wdbcDailyCacheTtl) {
+        callback(cached.days, true);   // true = served from cache
+        return;
+    }
+
     var since = new Date();
     since.setHours(0, 0, 0, 0);
     since.setDate(since.getDate() - (range - 1));
@@ -54,10 +65,11 @@ function wdbcLoadDailySales(branchId, range, callback) {
                 if (byDay[key]) byDay[key].total += (Number(tx.totalAmount) || 0);
             });
             var days = Object.keys(byDay).map(function (k) { return byDay[k]; });
-            callback(days);
+            wdbcDailyCache[cacheKey] = { at: Date.now(), days: days };
+            callback(days, false);
         }).catch(function (err) {
             console.warn('wdbcLoadDailySales failed:', err);
-            callback([]);
+            callback([], false);
         });
 }
 
@@ -69,8 +81,7 @@ function wdbcDayLabel(d) {
     return names[d.getDay()] + ' ' + d.getDate();
 }
 
-// Builds an inline SVG bar chart.
-function wdbcRenderChart(days) {
+function wdbcRenderChart(days, fromCache) {
     var container = document.getElementById('wdbc-chart-area');
     if (!container) return;
     if (!days || days.length === 0) {
@@ -116,6 +127,7 @@ function wdbcRenderChart(days) {
 
     var summary = 'Total: ' + wdbcMoney(totalAll);
     if (maxTotal > 0) summary += ' | Best day: ' + wdbcMoney(maxTotal) + ' (' + bestDay.label + ')';
+    if (fromCache) summary += ' | cached';
 
     container.innerHTML =
         '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%; height:120px; display:block;">' +
@@ -129,34 +141,18 @@ function wdbcEsc(s) {
 }
 function wdbcMoney(n) { return String.fromCharCode(8358) + (Number(n) || 0).toLocaleString(); }
 
-// Injects the chart card at the very top of the Reports view, above the Net
-// Profit card. Called after switchView('reports-view') and on DOM change.
 function wdbcInjectChartCard() {
-    // Only inject if the Reports view is on screen — we look for a distinctive
-    // element that exists only in reports-view-template.
     var netProfit = document.getElementById('net-profit-display');
     var dateFilter = document.getElementById('sales-date-filter');
-    if (!netProfit || !dateFilter) return;   // not the Reports view
+    if (!netProfit || !dateFilter) return;
 
     var existing = document.getElementById('wdbc-chart-card');
     if (existing) {
-        wdbcRefreshChart();
+        wdbcRefreshChart(false);
         return;
     }
 
-    // Find the wrapping container of the Net Profit card so we can insert our
-    // chart card above it.
-    var netProfitCard = netProfit.closest('div');
-    while (netProfitCard && netProfitCard.parentElement && netProfitCard.parentElement.tagName !== 'DIV') {
-        netProfitCard = netProfitCard.parentElement;
-    }
-    // The Net Profit card is inside a <div style="padding:20px"> block. Insert
-    // our chart card as the first child of that block, right after the h2/p
-    // header — but simplest and most reliable is: insert it directly above the
-    // Net Profit card.
     var insertAnchor = netProfit.closest('div');
-    // Walk up until we find the div that contains BOTH the netProfit and the
-    // "This Month's Net Profit" heading — that's the net profit card wrapper.
     while (insertAnchor && !insertAnchor.querySelector('h3')) {
         insertAnchor = insertAnchor.parentElement;
         if (!insertAnchor || insertAnchor.id === 'workspace-content') break;
@@ -181,7 +177,7 @@ function wdbcInjectChartCard() {
     document.getElementById('wdbc-range-7').onclick = function () { wdbcSetRange(7); };
     document.getElementById('wdbc-range-30').onclick = function () { wdbcSetRange(30); };
 
-    wdbcRefreshChart();
+    wdbcRefreshChart(false);
 }
 
 function wdbcSetRange(n) {
@@ -192,24 +188,22 @@ function wdbcSetRange(n) {
         if (n === 7) { b7.style.background = '#0284c7'; b7.style.color = '#fff'; b30.style.background = '#e2e8f0'; b30.style.color = '#1e293b'; }
         else { b30.style.background = '#0284c7'; b30.style.color = '#fff'; b7.style.background = '#e2e8f0'; b7.style.color = '#1e293b'; }
     }
-    wdbcRefreshChart();
+    wdbcRefreshChart(false);
 }
 
-function wdbcRefreshChart() {
+function wdbcRefreshChart(force) {
     if (!currentStoreId) return;
+    if (force) wdbcDailyCache = {};
     var area = document.getElementById('wdbc-chart-area');
     if (area) area.innerHTML = '<div style="color:#64748b; font-size:12px; padding:20px; text-align:center;">Loading chart...</div>';
-    // Use the current Reports branch filter if set; otherwise fall back to the
-    // current operating branch. 'all' means include every branch.
     var branchId = (typeof currentReportBranchFilter !== 'undefined' && currentReportBranchFilter)
         ? currentReportBranchFilter
         : ((typeof currentBranch !== 'undefined' && currentBranch) ? currentBranch : 'main');
-    wdbcLoadDailySales(branchId, wdbcChartRange, function (days) {
-        wdbcRenderChart(days);
+    wdbcLoadDailySales(branchId, wdbcChartRange, force, function (days, fromCache) {
+        wdbcRenderChart(days, fromCache);
     });
 }
 
-// Re-render on switchView('reports-view') and when the Reports filters change
 (function wdbcHookSwitchView() {
     var prev = window.switchView;
     if (typeof prev !== 'function' || prev.__wdbc) return;
@@ -225,21 +219,18 @@ function wdbcRefreshChart() {
     window.switchView = wrapped;
 })();
 
-// Hook the existing Reports branch filter so switching branches also refreshes
-// the chart. This wraps onReportsBranchFilterChange without replacing it.
 (function wdbcHookReportsBranchFilter() {
     var prev = window.onReportsBranchFilterChange;
     if (typeof prev !== 'function' || prev.__wdbc) return;
     var wrapped = function () {
         var result = prev.apply(this, arguments);
-        setTimeout(function () { try { wdbcRefreshChart(); } catch (e) {} }, 300);
+        setTimeout(function () { try { wdbcRefreshChart(false); } catch (e) {} }, 300);
         return result;
     };
     wrapped.__wdbc = true;
     window.onReportsBranchFilterChange = wrapped;
 })();
 
-// Watch DOM so the chart re-injects when Reports is (re)rendered
 (function wdbcWatchDom() {
     var scheduled = false;
     function fire() {
