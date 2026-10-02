@@ -9,6 +9,10 @@
 //                     suggested quantities and a WhatsApp order message per supplier
 //   3. Debt reminders – "Remind" button for customers who owe (opens WhatsApp)
 //   4. Exports      – Inventory, Sales, Customers and Expenses to CSV (opens in Excel)
+//
+// Escaping invariant:
+//   - Anything reaching HTML goes through wdfEsc()
+//   - Anything reaching WhatsApp text goes through wdfWaEsc()
 
 console.log("Wise Decision features-patch.js — v25 loaded");
 
@@ -18,6 +22,10 @@ function wdfRound2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function wdfMoney(n) { return '₦' + wdfRound2(n).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 function wdfEsc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+// [FIX 11] WhatsApp markdown-escape: * _ ~ `
+function wdfWaEsc(s) {
+    return String(s == null ? '' : s).replace(/([*_~`])/g, '\\$1');
 }
 function wdfWithTimeout(promise, ms) {
     return new Promise((resolve, reject) => {
@@ -45,7 +53,32 @@ function wdfBranchLabel(branchId) {
     if (branchId === 'all') return 'All Branches';
     return typeof branchNameOf === 'function' ? branchNameOf(branchId) : branchId;
 }
-function wdfUnitLabel(u) { return u === 'Piece' ? 'pc' : ((u === 'Kg' || u === 'g') ? u.toLowerCase() : 'pack'); }
+
+// [FIX 7] Unit labels — lookup table, unknown units preserved as-is
+const WDF_UNIT_LABELS = {
+    'piece': 'pc', 'pieces': 'pcs', 'pc': 'pc', 'pcs': 'pcs',
+    'pack': 'pack', 'packs': 'packs', 'packet': 'packet', 'packets': 'packets',
+    'kg': 'kg', 'g': 'g', 'gram': 'g', 'grams': 'g', 'kilogram': 'kg', 'kilograms': 'kg',
+    'litre': 'L', 'liter': 'L', 'litres': 'L', 'liters': 'L', 'l': 'L',
+    'ml': 'ml', 'millilitre': 'ml', 'milliliter': 'ml',
+    'carton': 'carton', 'cartons': 'cartons',
+    'crate': 'crate', 'crates': 'crates',
+    'dozen': 'dozen', 'dozens': 'dozen',
+    'bag': 'bag', 'bags': 'bag',
+    'bottle': 'btl', 'bottles': 'btls',
+    'sachet': 'sachet', 'sachets': 'sachets',
+    'tin': 'tin', 'tins': 'tins',
+    'roll': 'roll', 'rolls': 'rolls',
+    'bunch': 'bunch', 'bunches': 'bunches',
+    'yard': 'yd', 'yards': 'yd',
+    'metre': 'm', 'meter': 'm', 'metres': 'm', 'meters': 'm'
+};
+function wdfUnitLabel(u) {
+    if (u === null || u === undefined || u === '') return '';
+    const key = String(u).trim().toLowerCase();
+    if (WDF_UNIT_LABELS[key]) return WDF_UNIT_LABELS[key];
+    return String(u).trim();
+}
 
 // Nigerian-friendly WhatsApp number: 0801… -> 234801…, +234… -> 234…
 function wdfWaNumber(phone) {
@@ -235,9 +268,10 @@ function wdfSummaryHtml(s, counted) {
     return html;
 }
 
+// [FIX 11] WhatsApp text: markdown-escape names + add cashier & top-item sections
 function wdfSummaryText(s, counted) {
     const L = [];
-    L.push(`*${wdfBusinessName()} — DAY SUMMARY*`);
+    L.push(`*${wdfWaEsc(wdfBusinessName())} — DAY SUMMARY*`);
     L.push(`${wdfSumCtx.date} · ${wdfBranchLabel(wdfSumCtx.branch)}`);
     L.push('');
     L.push(`Receipts: ${s.count}`);
@@ -255,6 +289,16 @@ function wdfSummaryText(s, counted) {
     if (counted !== null && counted !== undefined && counted !== '') {
         const diff = wdfRound2(wdfNum(counted) - s.expectedCash);
         L.push(`Cash counted: ${wdfMoney(counted)} (${diff === 0 ? 'balances' : (diff > 0 ? 'OVER by ' : 'SHORT by ') + wdfMoney(Math.abs(diff))})`);
+    }
+    if (s.cashiers.length) {
+        L.push('');
+        L.push('*Sales by cashier:*');
+        s.cashiers.forEach(c => { L.push(`  ${wdfWaEsc(c.name)} (${c.count}): ${wdfMoney(c.total)}`); });
+    }
+    if (s.topItems.length) {
+        L.push('');
+        L.push('*Top items:*');
+        s.topItems.forEach(i => { L.push(`  ${wdfWaEsc(i.name)} × ${wdfRound2(i.qty)} ${wdfUnitLabel(i.unit)}: ${wdfMoney(i.amount)}`); });
     }
     return L.join('\n');
 }
@@ -486,9 +530,10 @@ async function wdfOpenReorder() {
     }
 }
 
+// [FIX 11] WhatsApp reorder message: markdown-escape names
 function wdfReorderMessage(g) {
-    const lines = g.items.map(i => `• ${i.name}: ${i.suggestLabel || '____'}`);
-    return `Hello ${g.supplierName}, please we need to restock the following for ${wdfBusinessName()}:\n\n${lines.join('\n')}\n\nKindly confirm availability and price. Thank you.`;
+    const lines = g.items.map(i => `• ${wdfWaEsc(i.name)}: ${wdfWaEsc(i.suggestLabel || '____')}`);
+    return `Hello ${wdfWaEsc(g.supplierName)}, please we need to restock the following for ${wdfWaEsc(wdfBusinessName())}:\n\n${lines.join('\n')}\n\nKindly confirm availability and price. Thank you.`;
 }
 function wdfReorderWhatsapp(gi) {
     const g = wdfReorderState.groups[gi];
@@ -496,6 +541,8 @@ function wdfReorderWhatsapp(gi) {
     const sup = g.supplierId && typeof suppliersCache !== 'undefined' ? suppliersCache[g.supplierId] : null;
     wdfOpenWhatsApp(sup ? sup.phone : '', wdfReorderMessage(g));
 }
+
+// [FIX 12] Escape wdfTodayStr() for consistency
 function wdfPrintReorder() {
     let html = `<div style="text-align:center; font-weight:bold;">${wdfEsc(wdfBusinessName())}</div>
         <div style="text-align:center; font-weight:bold;">REORDER LIST</div>
@@ -511,13 +558,14 @@ function wdfPrintReorder() {
 // =====================================================================
 // 3. DEBT REMINDERS
 // =====================================================================
+// [FIX 11] WhatsApp reminder: markdown-escape customer + business name
 function wdfRemindCustomer(id) {
     const c = customersCache[id];
     if (!c) return;
     const bal = wdfNum(c.balance);
     if (bal <= 0) { alert(`${c.name} doesn't owe anything.`); return; }
 
-    const msg = `Hello ${c.name}, this is ${wdfBusinessName()}. Our records show an outstanding balance of ${wdfMoney(bal)} as at ${new Date().toLocaleDateString()}. Kindly make the payment at your earliest convenience. Thank you for your patronage.`;
+    const msg = `Hello ${wdfWaEsc(c.name)}, this is ${wdfWaEsc(wdfBusinessName())}. Our records show an outstanding balance of ${wdfMoney(bal)} as at ${new Date().toLocaleDateString()}. Kindly make the payment at your earliest convenience. Thank you for your patronage.`;
     if (!wdfWaNumber(c.phone)) {
         prompt(`${c.name} has no phone number saved. Copy this message:`, msg);
         return;
