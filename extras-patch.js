@@ -1,17 +1,20 @@
-// ==================== WISE DECISION EXTRAS PATCH (v3) ====================
+// ==================== WISE DECISION EXTRAS PATCH (v4) ====================
 // Load LAST (after all the other patches), with defer.
 //
-// v3: Shift Log now visible to all logged-in roles.
-//     - Admin sees everyone's shifts.
-//     - Manager / Cashier / Accountant / Standard Worker see only their own.
+// v4: Clock In / Shift Log now works for Standard Workers.
+//     Because staff-sidebar-patch.js hides most sidebar buttons for that role,
+//     the shift controls are also injected at the top of the POS screen where
+//     Standard Workers actually spend their time. Everyone else keeps the
+//     sidebar versions too.
+//
+// v3: Shift Log visible to all roles. Admin sees everyone; others see only
+//     their own shifts.
 //
 // Adds:
-//   1. Loyalty Points: every 1000 Naira spent = 1 point, auto-credited on
-//      completed sales, auto-reversed on refunds.
-//   2. Shift Log: Clock In / Clock Out button in the sidebar, "On shift since
-//      HH:MM" indicator, Shift Log view with per-person totals.
+//   1. Loyalty Points: every 1000 Naira spent = 1 point.
+//   2. Shift Log: Clock In / Clock Out + hours report.
 
-console.log("Wise Decision extras-patch.js - v3 loaded (loyalty points + shift log)");
+console.log("Wise Decision extras-patch.js - v4 loaded (loyalty points + shift log)");
 
 // Config
 var WDEX_POINTS_PER_NAIRA = 1000;
@@ -233,15 +236,18 @@ function wdexCurrentStaffDisplay() {
 
 var wdexShiftOpenRef = null;
 var wdexShiftOpenListenerKey = null;
+var wdexLastOpenShift = null;
 
+// Sidebar version — for everyone except Standard Workers (whose sidebar is trimmed)
 function wdexEnsureShiftButton() {
     if (!currentStoreId) return;
     if (currentUserRole === 'SuperAdmin') return;
     var sidebar = document.querySelector('.sidebar');
     if (!sidebar) return;
 
-    if (!document.getElementById('wdex-shift-btn')) {
-        var btn = document.createElement('button');
+    var btn = document.getElementById('wdex-shift-btn');
+    if (!btn) {
+        btn = document.createElement('button');
         btn.id = 'wdex-shift-btn';
         btn.className = 'menu-btn';
         btn.style.cssText = 'background:#f8fafc; border:1px solid #cbd5e1;';
@@ -250,8 +256,46 @@ function wdexEnsureShiftButton() {
         var logoutBtn = sidebar.querySelector('button[onclick="logout()"]');
         if (logoutBtn && logoutBtn.parentElement) logoutBtn.parentElement.insertBefore(btn, logoutBtn);
         else sidebar.appendChild(btn);
+    } else if (btn.style.display === 'none') {
+        btn.style.display = 'block';
     }
     wdexLoadShiftState();
+}
+
+// POS version — for Standard Workers (and anyone else, since it's harmless there too)
+function wdexEnsurePosShiftPill() {
+    if (!currentStoreId) return;
+    if (currentUserRole === 'SuperAdmin') return;
+    var posLabel = document.getElementById('pos-branch-label');
+    if (!posLabel) return;                          // not the POS view
+    var pillWrap = posLabel.parentElement;
+    if (!pillWrap || !pillWrap.parentElement) return;
+
+    var pill = document.getElementById('wdex-pos-shift-pill');
+    if (!pill) {
+        pill = document.createElement('button');
+        pill.id = 'wdex-pos-shift-pill';
+        pill.style.cssText = 'margin-left:auto; font-size:12px; font-weight:bold; padding:6px 12px; border-radius:8px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc; color:#1e293b;';
+        pill.onclick = wdexToggleShift;
+        pillWrap.parentElement.insertBefore(pill, pillWrap.nextSibling);
+    }
+    wdexUpdatePosShiftPill();
+}
+
+function wdexUpdatePosShiftPill() {
+    var pill = document.getElementById('wdex-pos-shift-pill');
+    if (!pill) return;
+    if (wdexLastOpenShift) {
+        pill.textContent = 'On shift since ' + wdexHHMM(wdexLastOpenShift.in) + ' - Clock Out';
+        pill.style.background = '#dcfce7';
+        pill.style.borderColor = '#86efac';
+        pill.style.color = '#166534';
+    } else {
+        pill.textContent = 'Clock In';
+        pill.style.background = '#f8fafc';
+        pill.style.borderColor = '#cbd5e1';
+        pill.style.color = '#1e293b';
+    }
 }
 
 function wdexLoadShiftState() {
@@ -270,7 +314,9 @@ function wdexLoadShiftState() {
                 if (!openShift || s.in > openShift.in) openShift = { id: id, in: s.in };
             }
         });
+        wdexLastOpenShift = openShift;
         wdexUpdateShiftButton(openShift);
+        wdexUpdatePosShiftPill();
     });
 }
 
@@ -292,8 +338,8 @@ function wdexUpdateShiftButton(openShift) {
 
 function wdexToggleShift() {
     var btn = document.getElementById('wdex-shift-btn');
-    if (!btn) return;
-    var openShiftId = btn.dataset.openShiftId;
+    var pill = document.getElementById('wdex-pos-shift-pill');
+    var openShiftId = (btn && btn.dataset.openShiftId) || (wdexLastOpenShift && wdexLastOpenShift.id) || null;
     var key = wdexCurrentStaffKey();
     var ref = firebase.database().ref('stores/' + currentStoreId + '/shifts/' + key);
 
@@ -421,11 +467,22 @@ function wdexOpenShiftLog() {
     });
 }
 
+// Opens shift log from POS pill (uses same view renderer as sidebar button)
+function wdexOpenShiftLogFromPos() {
+    wdexOpenShiftLog();
+}
+
 function wdexEnsureShiftLogButton() {
     if (currentUserRole === 'SuperAdmin') return;
     if (!currentStoreId) return;
     var sidebar = document.querySelector('.sidebar');
-    if (!sidebar || document.getElementById('wdex-shiftlog-btn')) return;
+    if (!sidebar) return;
+
+    var existing = document.getElementById('wdex-shiftlog-btn');
+    if (existing) {
+        if (existing.style.display === 'none') existing.style.display = 'block';
+        return;
+    }
     var btn = document.createElement('button');
     btn.id = 'wdex-shiftlog-btn';
     btn.className = 'menu-btn btn-staff';
@@ -440,9 +497,29 @@ function wdexEnsureShiftLogButton() {
     }
 }
 
+// POS shift log button — injected next to the POS pill so workers can see their hours
+function wdexEnsurePosShiftLogButton() {
+    if (currentUserRole === 'SuperAdmin') return;
+    if (!currentStoreId) return;
+    var posLabel = document.getElementById('pos-branch-label');
+    if (!posLabel) return;
+    var wrap = posLabel.parentElement;
+    if (!wrap || !wrap.parentElement) return;
+    if (document.getElementById('wdex-pos-shiftlog-btn')) return;
+
+    var btn = document.createElement('button');
+    btn.id = 'wdex-pos-shiftlog-btn';
+    btn.style.cssText = 'margin-left:8px; font-size:12px; font-weight:bold; padding:6px 12px; border-radius:8px; cursor:pointer; border:1px solid #cbd5e1; background:#f0f9ff; color:#0369a1;';
+    btn.textContent = 'Shift Log';
+    btn.onclick = wdexOpenShiftLog;
+    wrap.parentElement.appendChild(btn);
+}
+
 function wdexInstall() {
     try { wdexEnsureShiftButton(); } catch (e) { console.warn(e); }
     try { wdexEnsureShiftLogButton(); } catch (e) { console.warn(e); }
+    try { wdexEnsurePosShiftPill(); } catch (e) { console.warn(e); }
+    try { wdexEnsurePosShiftLogButton(); } catch (e) { console.warn(e); }
 }
 
 (function wdexHookSwitchView() {
@@ -451,6 +528,7 @@ function wdexInstall() {
     var wrapped = function () {
         var result = prev.apply(this, arguments);
         setTimeout(function () { try { wdexInstall(); } catch (e) {} }, 80);
+        setTimeout(function () { try { wdexInstall(); } catch (e) {} }, 400);
         return result;
     };
     wrapped.__wdex = true;
@@ -493,10 +571,15 @@ function wdexInstall() {
     if (typeof original !== 'function' || original.__wdex) return;
     var wrapped = function () {
         if (wdexShiftOpenRef) { wdexShiftOpenRef.off(); wdexShiftOpenRef = null; wdexShiftOpenListenerKey = null; }
+        wdexLastOpenShift = null;
         var b = document.getElementById('wdex-shift-btn');
         if (b) b.remove();
         var l = document.getElementById('wdex-shiftlog-btn');
         if (l) l.remove();
+        var p = document.getElementById('wdex-pos-shift-pill');
+        if (p) p.remove();
+        var pl = document.getElementById('wdex-pos-shiftlog-btn');
+        if (pl) pl.remove();
         return original.apply(this, arguments);
     };
     wrapped.__wdex = true;
