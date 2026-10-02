@@ -1,8 +1,12 @@
-// ==================== WISE DECISION PERFORMANCE PATCH (v21) ====================
+// ==================== WISE DECISION PERFORMANCE PATCH (v22) ====================
 // Load this AFTER script.js (both with `defer`). It replaces the slow functions in
 // script.js with faster versions and adds a loading spinner for login.
+//
+// v22: Receipt footer now says "THANKS FOR YOUR PATRONAGE !!!" above the promo line.
+//      NOTE: This file OVERRIDES renderReceiptView from script.js, so any receipt
+//      text changes must be made HERE, not in script.js.
 
-console.log("Wise Decision perf-patch.js — v21 loaded");
+console.log("Wise Decision perf-patch.js — v22 loaded (receipt: added THANKS FOR YOUR PATRONAGE footer)");
 
 // ---------- 1. Loading spinner ----------
 (function injectLoaderStyles() {
@@ -768,7 +772,7 @@ function renderReceiptView(orderData, isReprint = false) {
             const promoDiv = document.createElement('div');
             promoDiv.className = 'receipt-promo-footer';
             promoDiv.style.cssText = 'text-align: center; margin-top: 15px; font-size: 11px; font-weight: bold; border-top: 1px dashed #ccc; padding-top: 10px;';
-            promoDiv.innerHTML = 'FOR SIMILAR RECEIPT FOR YOUR BUSINESS: 09168140710';
+            promoDiv.innerHTML = 'THANKS FOR YOUR PATRONAGE !!!<br>FOR SIMILAR RECEIPT FOR YOUR BUSINESS: 09168140710';
             printableBox.appendChild(promoDiv);
         }
 
