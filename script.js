@@ -1,10 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-// Prints to the browser console on every page load so it's possible to confirm
-// which copy of script.js is actually running (vs. a stale cached one) — open
-// DevTools > Console and look for this line. Bump the number whenever you deploy
-// a change, alongside the ?v= query string on the <script>/<link> tags in
-// index.html (see the comment there).
-console.log("Wise Decision script.js — build v20 (receipt: added 'THANKS FOR YOUR PATRONAGE' footer line)");
+console.log("Wise Decision script.js — build v21 (bandwidth: capped transaction reads, fewer live listeners, atomic stock deduction, login reads 4 fields)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -31,23 +26,17 @@ try {
 }
 
 // ==================== LAZY-LOADED html2pdf LIBRARY ====================
-// html2pdf.bundle.min.js (which itself bundles html2canvas + jsPDF) is a large
-// library that used to be loaded as a blocking <script> in <head> on EVERY page
-// load, even though it's only ever needed if someone clicks "Download PDF" — a
-// small fraction of visits. Loading it on demand instead means the app itself
-// loads faster for everyone, and the ~1s extra delay only happens for the person
-// who actually wants a PDF, right when they ask for one.
 let html2pdfLoadPromise = null;
 function loadHtml2PdfLibrary() {
-    if (typeof html2pdf !== 'undefined') return Promise.resolve(); // already loaded
-    if (html2pdfLoadPromise) return html2pdfLoadPromise; // a load is already in flight — reuse it
+    if (typeof html2pdf !== 'undefined') return Promise.resolve();
+    if (html2pdfLoadPromise) return html2pdfLoadPromise;
 
     html2pdfLoadPromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
         script.onload = () => resolve();
         script.onerror = () => {
-            html2pdfLoadPromise = null; // allow retrying on a later click instead of staying permanently broken
+            html2pdfLoadPromise = null;
             reject(new Error('Failed to load the PDF library. Check your internet connection and try again.'));
         };
         document.head.appendChild(script);
@@ -57,53 +46,44 @@ function loadHtml2PdfLibrary() {
 
 // ==================== GLOBAL APP STATE ====================
 let currentStoreId = null;
-let currentBranch = "main";           // Branch ID the logged-in user is currently operating in
+let currentBranch = "main";
 let currentUserRole = "Admin";
-let inventoryCache = {};              // { branchId: { productId: item } }  (nested, per-branch)
+let inventoryCache = {};
 let currentCart = [];
 let currentActiveOrder = null;
-let currentCustomerType = "Retail"; // Default customer type
-let currentSaleUnit = "Pack";       // "Pack" or "Piece" — which unit the next POS line item is sold in
+let currentCustomerType = "Retail";
+let currentSaleUnit = "Pack";
 
 // ==================== BRANCH MODULE STATE ====================
-let branchesCache = {};               // { branchId: { name, phone, address, isMain, createdAt } }
-let currentInventoryBranchFilter = "main"; // "all" (Admin aggregate view) or a specific branchId
-let currentInventoryCategoryFilter = "all"; // "all" or a specific category string (free-text, set on products)
-let currentReportBranchFilter = "all";     // "all" or a specific branchId, Admin-only reports scope
+let branchesCache = {};
+let currentInventoryBranchFilter = "main";
+let currentInventoryCategoryFilter = "all";
+let currentReportBranchFilter = "all";
 let currentActiveTransfer = null;
 
-// Customer module state
 let customersCache = {};
-let currentSelectedCustomer = null; // { id, name, phone, balance, creditLimit } attached to the active POS sale
-let currentProfileCustomerId = null; // customer currently open in the profile modal
+let currentSelectedCustomer = null;
+let currentProfileCustomerId = null;
 
-// Supplier module state
 let suppliersCache = {};
-let supplyBranchProductNames = []; // product names in the currently-selected supply branch, for autocomplete
+let supplyBranchProductNames = [];
 let supplyItemRowCounter = 0;
 
-// Refund module state
-let currentActiveRefund = null; // { txId, transaction, branchId, customerId, customerName } for the order currently open in the Refund modal
+let currentActiveRefund = null;
 
 // ==================== SESSION IDLE TIMEOUT ====================
-// Auto-logs out an unattended, logged-in session — protects an unlocked terminal
-// (PINs, customer balances, cash handling) from anyone who walks up after the
-// cashier/admin steps away. Warns with a countdown first so a genuinely-present
-// user isn't logged out mid-task.
-const IDLE_TIMEOUT_MINUTES = 6;    // total inactivity allowed before logout
-const IDLE_WARNING_SECONDS = 60;   // how long the "Still there?" countdown runs, counted out of the total above
+const IDLE_TIMEOUT_MINUTES = 6;
+const IDLE_WARNING_SECONDS = 60;
 
-let idleTimer = null;              // fires once inactivity reaches (timeout - warning)
-let idleCountdownInterval = null;  // ticks the visible countdown once the warning is showing
+let idleTimer = null;
+let idleCountdownInterval = null;
 let idleSecondsRemaining = IDLE_WARNING_SECONDS;
 
-// Called on every tracked user interaction. Clears any pending idle timer/warning
-// and starts counting down again from zero — the normal "user is active" path.
 function resetIdleTimer() {
     if (idleTimer) clearTimeout(idleTimer);
     hideIdleWarningModal();
 
-    if (!currentStoreId) return; // nothing to protect on the login/register screens
+    if (!currentStoreId) return;
 
     const msUntilWarning = Math.max(0, (IDLE_TIMEOUT_MINUTES * 60 - IDLE_WARNING_SECONDS) * 1000);
     idleTimer = setTimeout(showIdleWarningModal, msUntilWarning);
@@ -111,7 +91,7 @@ function resetIdleTimer() {
 
 function showIdleWarningModal() {
     const modal = document.getElementById('idle-warning-modal');
-    if (!modal) return; // stale/cached index.html without this modal — fail quietly rather than break the app
+    if (!modal) return;
 
     idleSecondsRemaining = IDLE_WARNING_SECONDS;
     const counterEl = document.getElementById('idle-countdown-seconds');
@@ -144,18 +124,14 @@ function hideIdleWarningModal() {
     }
 }
 
-// "Stay Logged In" button in the warning modal
 function extendSession() {
     resetIdleTimer();
 }
 
-// Any of these count as "the user is here" and push the idle clock back to zero.
-// Passive listeners since none of these need to block/alter the native behavior.
 ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evt => {
     window.addEventListener(evt, resetIdleTimer, { passive: true });
 });
 
-// Initialize application on load
 window.onload = function() {
     console.log("Wise Decision Enterprise Suite Initialized.");
 };
@@ -235,9 +211,6 @@ function syncOfflineQueueToFirebase() {
 
 // ==================== VIEW & ROUTING ENGINE ====================
 function switchView(viewId) {
-    // Accountants and Cashiers can view the accountant queue, receipt view, business settings,
-    // POS view, and customers (to record debt repayments) — but never staff management,
-    // inventory, reports, expenses, transfers, branches, or suppliers.
     if (currentUserRole === 'Accountant' || currentUserRole === 'Cashier') {
         const allowedAccountantViews = [
             'accountant-view', 'accountant-view-template', 
@@ -254,16 +227,13 @@ function switchView(viewId) {
         }
     }
 
-    // Standard Workers are restricted to making sales only (POS view).
-    // NOTE: the role value stored for these staff is "Standard Worker" (matches the
-    // staff-role-input dropdown), not "Staff" — the old check here never matched
-    // anything real, which is why standard workers previously saw the full sidebar.
     if (currentUserRole === 'Standard Worker' && viewId !== 'pos-view' && viewId !== 'pos-view-template') {
         alert("Access Restricted: Standard workers are only permitted to make sales for their assigned branch.");
         return;
     }
 
-    if (viewId.includes('dashboard') || viewId.includes('view') && viewId !== 'login-view' && viewId !== 'register-view' && viewId !== 'super-admin-view') {
+    // [v21] Fixed operator precedence — added explicit parens.
+    if ((viewId.includes('dashboard') || viewId.includes('view')) && viewId !== 'login-view' && viewId !== 'register-view' && viewId !== 'super-admin-view') {
         document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
         
         const templateId = viewId.includes('-template') ? viewId : viewId + '-template';
@@ -297,8 +267,6 @@ function switchView(viewId) {
                 loadPendingOrdersQueue();
                 const accBranchLabel = document.getElementById('accountant-branch-label');
                 if (accBranchLabel) accBranchLabel.textContent = branchNameOf(currentBranch);
-                // Always land on the Pending tab when the view is (re)opened, rather
-                // than remembering whatever tab was showing on a previous visit.
                 switchAccountantTab('pending');
             }
             if (viewId === 'staff-view') {
@@ -344,13 +312,6 @@ function switchView(viewId) {
 
 // ==================== SIDEBAR ROLE RESTRICTIONS ====================
 function adjustSidebarForRole(role) {
-    // FIX: scoped to the actual sidebar element only (class="sidebar" in the HTML).
-    // The old selector included the bare `.menu-btn` class, which also matches
-    // buttons OUTSIDE the sidebar (e.g. the "Accept Payment & Print Receipt" and
-    // "Cancel" buttons inside the split payment modal). Because those buttons'
-    // onclick attributes don't contain "accountant-view", "pos-view", or "logout",
-    // they were being hidden for Accountant and Staff roles — which is why the
-    // Accountant couldn't see the Accept Payment / Print button.
     const menuButtons = document.querySelectorAll('.sidebar button');
     
     menuButtons.forEach(btn => {
@@ -386,9 +347,6 @@ function branchNameOf(branchId) {
     return branchId === 'main' ? 'Main' : branchId;
 }
 
-// Loads all branches for the current store, seeds a default "Main" branch if none
-// exist yet (covers stores registered before this module existed), and refreshes
-// every branch-aware UI element currently on screen.
 function loadBranchesCache(afterLoadCallback) {
     if (!currentStoreId) return;
 
@@ -412,10 +370,6 @@ function finishBranchLoad(afterLoadCallback) {
     updateBranchBadge();
     if (afterLoadCallback) afterLoadCallback();
 
-    // Keep it live so Admins adding/renaming branches reflect instantly across the app.
-    // .off() first: this is called once per login, but re-attaching without clearing
-    // the old listener (e.g. a re-login in the same tab) would stack duplicate
-    // listeners that each re-render on every future branch change.
     const branchesRef = firebase.database().ref(`stores/${currentStoreId}/branches`);
     branchesRef.off();
     branchesRef.on('value', snapshot => {
@@ -429,9 +383,6 @@ function finishBranchLoad(afterLoadCallback) {
     });
 }
 
-// Renders the sidebar branch indicator. Admin gets a live switcher (to change which
-// branch's POS/Inventory/Dashboard they are currently operating in); branch-locked
-// staff just see a read-only badge for their assigned branch.
 function updateBranchBadge() {
     const container = document.getElementById('branch-badge-container');
     if (!container) return;
@@ -451,18 +402,14 @@ function updateBranchBadge() {
     }
 }
 
-// Admin switches which branch they're currently "standing in" — affects POS, live
-// Inventory default scope, Dashboard metrics, and the Accountant queue.
 function switchCurrentBranch(branchId) {
     currentBranch = branchId;
     currentInventoryBranchFilter = branchId;
     currentCart = [];
     clearPosCustomer();
     updateBranchBadge();
-    // Re-render whichever workspace view is currently open so it reflects the new branch
     const workspace = document.getElementById('workspace-content');
     if (workspace && workspace.innerHTML.trim() !== '') {
-        // Detect current view by a distinctive element and re-run its loader
         if (document.getElementById('pos-product-select')) switchView('pos-view');
         else if (document.getElementById('inventory-body')) switchView('inventory-view');
         else if (document.getElementById('dashboard-alerts-tbody')) switchView('main-dashboard-view');
@@ -503,13 +450,28 @@ function handleStoreLogin() {
         return;
     }
 
-    firebase.database().ref('stores/' + storeId).once('value').then(snapshot => {
-        if (!snapshot.exists()) {
+    // [v21] Read only the 4 fields login needs, instead of the whole store node
+    // (which pulled every transaction, inventory record, etc. — huge on login for
+    // stores with thousands of sales).
+    Promise.all([
+        firebase.database().ref(`stores/${storeId}/status`).once('value'),
+        firebase.database().ref(`stores/${storeId}/adminPin`).once('value'),
+        firebase.database().ref(`stores/${storeId}/staff`).once('value'),
+        firebase.database().ref(`stores/${storeId}/businessName`).once('value')
+    ]).then(([statusSnap, pinSnap, staffSnap, nameSnap]) => {
+        const hasAdminPin = pinSnap.exists();
+        const hasStaff = staffSnap.exists();
+        if (!hasAdminPin && !hasStaff) {
             alert("Store ID not found on cloud database.");
             return;
         }
 
-        const storeData = snapshot.val();
+        const storeData = {
+            status: statusSnap.val() || 'active',
+            adminPin: pinSnap.val(),
+            staff: staffSnap.val() || null,
+            businessName: nameSnap.val() || ''
+        };
 
         if (storeData.status === "suspended") {
             alert("ACCOUNT SUSPENDED: Your monthly maintenance fee is overdue or your account has been locked. Please contact Wise Decision Support to pay and restore access.");
@@ -527,7 +489,7 @@ function handleStoreLogin() {
             loadBranchesCache(() => switchView('main-dashboard-view'));
             syncOfflineQueueToFirebase();
             subscribeCustomersCache();
-            subscribeSuppliersCache();
+            loadSuppliersCache();       // [v21] was subscribeSuppliersCache()
             resetIdleTimer();
             return;
         }
@@ -548,8 +510,9 @@ function handleStoreLogin() {
                     loadBranchesCache(() => switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view'));
                     syncOfflineQueueToFirebase();
                     subscribeCustomersCache();
-                    subscribeSuppliersCache();
+                    loadSuppliersCache();       // [v21] was subscribeSuppliersCache()
                     resetIdleTimer();
+                    return;   // [v21] stop scanning once a matching PIN is found
                 }
             });
         }
@@ -598,7 +561,6 @@ function registerBusinessAccount() {
             status: "active",
             createdAt: new Date().toISOString()
         }).then(() => {
-            // Seed the default "Main" branch so inventory/POS/reports have somewhere to live from day one
             return firebase.database().ref(`stores/${storeId}/branches/main`).set({
                 name: "Main",
                 phone,
@@ -635,11 +597,6 @@ function logout() {
 }
 
 // ==================== SUPER ADMIN DASHBOARD CONTROL ====================
-
-// Changes the Master PIN used to log in as "superadmin" (see handleStoreLogin()).
-// Requires typing the new PIN twice to guard against a mistyped PIN locking the
-// Super Admin out of their own dashboard — there's no "forgot password" recovery
-// for this account, so a typo here has no other way back in.
 function changeSuperAdminMasterPin() {
     if (currentUserRole !== 'SuperAdmin') {
         alert("Access Restricted: Only the Super Admin can change the Master PIN.");
@@ -647,14 +604,14 @@ function changeSuperAdminMasterPin() {
     }
 
     const newPin = prompt("Enter the new Super Admin Master PIN:");
-    if (newPin === null) return; // cancelled
+    if (newPin === null) return;
     if (newPin.trim() === '') {
         alert("Master PIN cannot be empty. No changes were made.");
         return;
     }
 
     const confirmPin = prompt("Re-enter the new Master PIN to confirm:");
-    if (confirmPin === null) return; // cancelled
+    if (confirmPin === null) return;
 
     if (newPin.trim() !== confirmPin.trim()) {
         alert("The two entries didn't match. Master PIN was not changed — please try again.");
@@ -669,12 +626,12 @@ function changeSuperAdminMasterPin() {
 }
 
 function loadSuperAdminDashboard() {
-    // .off() first — the "🔄 Refresh List" button calls this function directly, so
-    // without clearing the previous listener each click stacked another one on top,
-    // meaning every future update re-rendered the table N times instead of once.
-    const storesRef = firebase.database().ref('stores');
-    storesRef.off();
-    storesRef.on('value', snapshot => {
+    // [v21] Once instead of a live listener. The old .on('value') on the whole
+    // /stores node downloaded every store's data on any change anywhere in the
+    // tree — brutal on bandwidth with 50+ stores. The superadmin-patch.js side
+    // (wdsReload) does its own refresh, and its 🔄 button calls this function
+    // again to re-fetch.
+    firebase.database().ref('stores').once('value').then(snapshot => {
         const tbody = document.getElementById('super-admin-stores-body');
         if (!tbody) return;
 
@@ -703,7 +660,7 @@ function loadSuperAdminDashboard() {
             `);
         });
         tbody.innerHTML = rowsHtml.join('');
-    });
+    }).catch(err => console.error("loadSuperAdminDashboard error:", err));
 }
 
 function toggleStoreLock(storeId, currentStatus) {
@@ -713,6 +670,7 @@ function toggleStoreLock(storeId, currentStatus) {
     if (confirm(`Are you sure you want to ${actionText} store ID: ${storeId}?`)) {
         firebase.database().ref(`stores/${storeId}`).update({ status: newStatus }).then(() => {
             alert(`Store ${storeId} has been successfully ${newStatus}.`);
+            loadSuperAdminDashboard();   // [v21] refresh the once-read table
         });
     }
 }
@@ -743,8 +701,13 @@ function deleteBusinessAccount(storeId) {
     if (confirm(`⚠ DANGER: Are you absolutely sure you want to completely delete store ID "${storeId}" and all its associated data (inventory, transactions, staff, expenses)? This action cannot be undone!`)) {
         const confirmationCode = prompt(`Type the exact store ID "${storeId}" to confirm permanent deletion:`);
         if (confirmationCode === storeId) {
+            // [v21] Also clear the billing node so a deleted store doesn't leave
+            // stale billing data hanging around in the Super Admin dashboard.
             firebase.database().ref(`stores/${storeId}`).remove().then(() => {
+                return firebase.database().ref(`billing/${storeId}`).remove();
+            }).then(() => {
                 alert(`Store ${storeId} has been permanently deleted from the database.`);
+                loadSuperAdminDashboard();
             }).catch(error => {
                 alert("Failed to delete store: " + error.message);
             });
@@ -755,15 +718,15 @@ function deleteBusinessAccount(storeId) {
 }
 
 // ==================== DASHBOARD METRICS & ALERTS ====================
-// Scoped to currentBranch — the branch the logged-in user (or Admin, via the sidebar
-// switcher) is currently operating in.
 function loadDashboardMetrics() {
     if (!currentStoreId) return;
 
     const branchLabelEl = document.getElementById('dash-branch-label');
     if (branchLabelEl) branchLabelEl.textContent = branchNameOf(currentBranch);
     
-    firebase.database().ref(`stores/${currentStoreId}/transactions`).once('value').then(snapshot => {
+    // [v21] Capped at last 300 — this fires on every dashboard open and only
+    // needs today's sales, but was reading the entire history.
+    firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(300).once('value').then(snapshot => {
         let todaySales = 0;
         const todayStr = new Date().toDateString();
         
@@ -790,10 +753,6 @@ function loadDashboardMetrics() {
             const itemName = item.name || item.productName || 'Unnamed Item';
             const category = item.category || '';
 
-            // Falls back to 5 when no per-product threshold is set — but a fixed "5"
-            // only makes sense for pack/piece counts, so weight-based products really
-            // should have their own threshold set (see the product form) since 5kg
-            // and 5g mean very different things depending on the product.
             const threshold = (item.lowStockThreshold !== null && item.lowStockThreshold !== undefined) ? Number(item.lowStockThreshold) : 5;
             const isLowStock = stock <= threshold;
             const isExpiringSoon = expiryDate && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
@@ -808,15 +767,10 @@ function loadDashboardMetrics() {
     });
 }
 
-// Cached raw alert list built by loadDashboardMetrics() — kept separately from the
-// rendered table so the category filter can re-slice it instantly without another
-// Firebase read every time the dropdown changes.
 let dashboardAlertsCache = [];
 let currentDashboardAlertsCategoryFilter = 'all';
-let currentDashboardAlertsTypeFilter = 'all'; // 'all' | 'low_stock' | 'expiring_soon'
+let currentDashboardAlertsTypeFilter = 'all';
 
-// Toggles which kind of alert the table shows — asked up front via the three
-// buttons above the table, rather than mixing both kinds together by default.
 function setDashboardAlertsTypeFilter(type) {
     currentDashboardAlertsTypeFilter = type;
 
@@ -848,10 +802,6 @@ function renderDashboardAlerts() {
 
     const typeFilter = currentDashboardAlertsTypeFilter || 'all';
 
-    // Sync the three toggle buttons' styling with the active filter — needed
-    // because switchView() re-injects this template's HTML fresh every time the
-    // Dashboard is opened, which would otherwise reset the buttons to their
-    // default "All Alerts" look even if a different filter was left selected.
     ['all', 'low_stock', 'expiring_soon'].forEach(t => {
         const btn = document.getElementById(`dash-alert-type-${t}`);
         if (!btn) return;
@@ -868,10 +818,6 @@ function renderDashboardAlerts() {
         ? dashboardAlertsCache
         : dashboardAlertsCache.filter(a => typeFilter === 'low_stock' ? a.isLowStock : a.isExpiringSoon);
 
-    // Keep the category dropdown in sync with whatever categories actually show up
-    // among alerts of the currently selected type (not the whole branch's
-    // inventory, and not alerts of the other type) — an "All Categories" list
-    // scoped to what's actually visible right now is more useful than a fixed list.
     const categorySelect = document.getElementById('dashboard-alerts-category-filter');
     if (categorySelect) {
         const categories = Array.from(new Set(byType.map(a => a.category).filter(c => c && c.trim()))).sort((a, b) => a.localeCompare(b));
@@ -924,16 +870,9 @@ function renderDashboardAlerts() {
 }
 
 // ==================== BULLETPROOF INVENTORY LOADER (branch-aware) ====================
-// inventoryCache is nested: { branchId: { productId: item } }. We always listen to the
-// whole /inventory node (all branches) so an Admin can flip between "All Branches"
-// (aggregated, read-only) and any single branch (full CRUD) without re-subscribing.
 function loadInventoryTable() {
     if (!currentStoreId) return;
 
-    // .off() first — switchView('inventory-view') calls this every time the sidebar
-    // Inventory button is clicked, so without clearing the old listener each visit
-    // stacked another one, and renderInventoryTable() ended up running once per
-    // stacked listener on every future inventory change.
     const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory`);
     invRef.off();
     invRef.on('value', snapshot => {
@@ -966,7 +905,6 @@ function populateInventoryBranchFilter() {
         });
         select.disabled = false;
     } else {
-        // Non-admin staff are locked to their assigned branch
         options = `<option value="${currentBranch}" selected>${branchNameOf(currentBranch)}</option>`;
         select.disabled = true;
         currentInventoryBranchFilter = currentBranch;
@@ -978,9 +916,6 @@ function onInventoryBranchFilterChange() {
     const select = document.getElementById('inventory-branch-filter');
     if (!select) return;
     currentInventoryBranchFilter = select.value;
-    // Categories differ per branch (and the aggregate view spans all of them), so
-    // a category selected under the old scope may no longer exist here — reset
-    // rather than silently filtering to something that isn't shown in the dropdown.
     currentInventoryCategoryFilter = 'all';
     resetInventoryForm();
     populateInventoryCategoryFilter();
@@ -988,10 +923,6 @@ function onInventoryBranchFilterChange() {
     renderInventoryTable();
 }
 
-// Builds the "All Categories" + one option per distinct category dropdown, scoped
-// to whatever the branch filter currently shows (a single branch, or every branch
-// combined in the aggregate "All Branches" view). Categories are free text set on
-// each product, so this list is derived from the data rather than a fixed set.
 function populateInventoryCategoryFilter() {
     const select = document.getElementById('inventory-category-filter');
     if (!select) return;
@@ -1017,16 +948,12 @@ function populateInventoryCategoryFilter() {
     });
     select.innerHTML = options;
 
-    // If the previously selected category no longer exists in this scope, fall back to "all"
     if (previousValue !== 'all' && !sorted.includes(previousValue)) {
         currentInventoryCategoryFilter = 'all';
         select.value = 'all';
     }
 }
 
-// Refreshes the <datalist> the Add/Edit Product "Category" field autocompletes
-// against, so typing starts suggesting categories already used in this branch
-// instead of staff having to remember/retype exact spelling each time.
 function updateCategoryDatalist() {
     const datalist = document.getElementById('inv-category-datalist');
     if (!datalist) return;
@@ -1048,8 +975,6 @@ function onInventoryCategoryFilterChange() {
     renderInventoryTable();
 }
 
-// Builds the small "1 pack = N pcs · Piece: ₦X" helper string used in the inventory
-// table and the POS dropdown so staff can see the piece breakdown at a glance.
 function packPieceInfoLabel(item) {
     if (item.soldByWeight) {
         const wUnit = item.weightUnit || 'Kg';
@@ -1062,8 +987,6 @@ function packPieceInfoLabel(item) {
     return `1 pack = ${unitsPerPack} pcs<br>Piece: ₦${Number(piecePrice).toLocaleString()}`;
 }
 
-// Returns the per-piece price for an item, given the customer tier. Falls back to
-// dividing the pack price by unitsPerPack when no explicit piece price was set.
 function getPiecePrice(item, customerType) {
     const unitsPerPack = Number(item.unitsPerPack) || 1;
     const explicitPiece = Number(item.piecePrice) || 0;
@@ -1075,9 +998,6 @@ function getPiecePrice(item, customerType) {
     return Math.round((packPrice / unitsPerPack) * 100) / 100;
 }
 
-// Formats a total piece count as "2 Pks + 4 Pcs" for products sold in pieces, so
-// stock audits show packs/loose pieces instead of one raw number. Falls back to the
-// plain number for whole-only products (unitsPerPack <= 1).
 function stockBreakdownLabel(totalStock, unitsPerPack) {
     const total = Number(totalStock) || 0;
     const perPack = Number(unitsPerPack) || 1;
@@ -1088,10 +1008,6 @@ function stockBreakdownLabel(totalStock, unitsPerPack) {
     return `${packs} Pks + ${loose} Pcs`;
 }
 
-// Stock display for a full product/item object — routes to a "12.5 kg" / "500 g"
-// format for weight-based products, or the existing Packs/Pieces breakdown
-// otherwise. Prefer this over calling stockBreakdownLabel() directly wherever the
-// full item is at hand.
 function formatStockLabel(item) {
     const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     if (item.soldByWeight) {
@@ -1115,8 +1031,7 @@ function renderInventoryTable() {
     if (addProductBtn) addProductBtn.style.opacity = isAggregate ? '0.6' : '1';
 
     if (isAggregate) {
-        // Combined enterprise view: sum stock for matching product names across all branches
-        const combined = {}; // name -> { costPrice, price, wholesalePrice, stock, expiry, category, branches: {branchName: stock} }
+        const combined = {};
         Object.keys(inventoryCache).forEach(branchId => {
             const branchName = branchNameOf(branchId);
             Object.values(inventoryCache[branchId] || {}).forEach(item => {
@@ -1131,10 +1046,6 @@ function renderInventoryTable() {
             });
         });
 
-        // Build every row as a string in an array and join once at the end — setting
-        // innerHTML += inside the loop forces the browser to re-parse the whole
-        // accumulated HTML on every iteration, which gets quadratically slower as the
-        // product list grows. A single join()/assignment is one parse regardless of size.
         const keys = Object.keys(combined).filter(key => categoryFilter === 'all' || combined[key].category === categoryFilter);
         const rowsHtml = [];
         keys.forEach(key => {
@@ -1284,8 +1195,6 @@ function filterInventoryTable() {
 }
 
 // ==================== PRODUCT FORM MODAL (Add / Edit) ====================
-// The Add/Edit product form now lives in a popup modal instead of an inline card, so
-// staff editing an item lower down the table don't have to scroll back up to reach it.
 function openAddProductModal() {
     if (currentInventoryBranchFilter === 'all') {
         alert("Please select a specific branch before adding a new product — stock is tracked per branch.");
@@ -1303,18 +1212,7 @@ function closeProductModal() {
 }
 
 // ==================== SOLD-BY-WEIGHT (Kg / g) MODE ====================
-// For goods priced and stocked by weight (rice, sugar, flour, etc.) sold loose off
-// a scale, rather than as whole packs/pieces. When enabled: hides the "Sell in
-// Pieces" block (doesn't apply — there's no pack) and the package-weight-label
-// field (redundant — this mode already tracks its own unit), relabels Cost/
-// Retail/Wholesale Price as "per Kg" or "per g" (whichever is chosen), and
-// switches the Stock field to a decimal amount in that unit instead of a pack count.
 function toggleSoldByWeightMode() {
-    // Defensive: if index.html is stale/cached (missing this checkbox), fail
-    // quietly instead of throwing and silently breaking the caller — this exact
-    // function was reached via openAddProductModal() -> resetInventoryForm(), so
-    // an uncaught error here used to prevent "+ Add New Product" from opening
-    // the modal at all, with no visible error.
     const weightCheckbox = document.getElementById('inv-sold-by-weight');
     if (!weightCheckbox) {
         console.warn("toggleSoldByWeightMode: #inv-sold-by-weight not found — index.html appears to be an older cached version. Hard-refresh or redeploy the latest index.html.");
@@ -1350,10 +1248,6 @@ function toggleSoldByWeightMode() {
             stockInput.step = weightUnit === 'g' ? '1' : '0.01';
         }
 
-        // Pieces-per-pack doesn't apply to weight-based stock — force it to 1 so
-        // saveProduct()'s existing math (stock = packs × unitsPerPack) stays correct
-        // (i.e. the Kg/g figure is stored as-is, unmultiplied), and the split
-        // Packs/Loose-Pieces stock entry never applies to weight products.
         const unitsField = document.getElementById('inv-units-per-pack');
         if (unitsField) unitsField.value = '';
         const stockSplitGroup = document.getElementById('stock-split-group');
@@ -1373,10 +1267,6 @@ function toggleSoldByWeightMode() {
     }
 }
 
-// Live "Price per Bag" preview shown under the Weight per Bag field — purely
-// informational (Weight per Bag × the per-Kg/g Retail/Wholesale Price above).
-// Doesn't change how POS sells (still loose by weight); just answers "so what
-// does a whole bag of this cost" without needing separate bag pricing fields.
 function recalcBagPricePreview() {
     const previewEl = document.getElementById('inv-bag-price-preview');
     if (!previewEl) return;
@@ -1400,19 +1290,12 @@ function recalcBagPricePreview() {
     previewEl.textContent = text;
 }
 
-
-// Shows the simple single "Stock Qty" field for whole-only products, or the
-// Packs-in-Stock / Loose-Pieces-in-Stock pair once "Pieces per Pack" > 1. Called on
-// every keystroke in the Pieces per Pack field so the form reacts live while editing.
 function toggleStockInputMode() {
     const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
     const simpleGroup = document.getElementById('stock-simple-group');
     const splitGroup = document.getElementById('stock-split-group');
     if (!simpleGroup || !splitGroup) return;
 
-    // "Stock Qty" in simple mode is always a PACK count, so when the user switches
-    // to split mode after already typing a number there, carry it over as the
-    // starting Packs-in-Stock value instead of discarding it.
     if (unitsPerPack > 1 && splitGroup.style.display === 'none') {
         const existingPacks = parseInt(document.getElementById('inv-stock').value) || 0;
         const packsField = document.getElementById('inv-stock-packs');
@@ -1429,9 +1312,6 @@ function toggleStockInputMode() {
     recalcSplitStockTotal();
 }
 
-// Recomputes the read-only total shown under Packs/Loose Pieces, and keeps the
-// hidden/simple "inv-stock" field (the actual value saveProduct() reads) in sync
-// so the rest of the app can keep treating stock as one number of pieces.
 function recalcSplitStockTotal() {
     const unitsPerPack = parseInt(document.getElementById('inv-units-per-pack').value) || 1;
     const totalLabel = document.getElementById('inv-stock-computed-total');
@@ -1470,18 +1350,9 @@ function saveProduct() {
     const costPrice = parseFloat(document.getElementById('inv-cost-price').value) || 0;
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
-    // Weight-based products have no "pack" concept, so pieces-per-pack is always 1
-    // and there's no separate piece price — the Retail/Wholesale Price fields above
-    // already mean "per Kg" for these (see toggleSoldByWeightMode()).
     const unitsPerPack = soldByWeight ? 1 : (parseInt(document.getElementById('inv-units-per-pack').value) || 1);
     const piecePrice = soldByWeight ? 0 : (parseFloat(document.getElementById('inv-piece-price').value) || 0);
 
-    // Stock: "Stock Qty" (simple mode) and "Packs in Stock" (split mode) are both
-    // PACK counts, not raw pieces — total pieces = packs × unitsPerPack, plus any
-    // loose pieces in split mode. For whole-only products unitsPerPack is 1, so a
-    // pack and a piece are the same thing and the total comes out unchanged. For
-    // weight-based products the "Stock Qty" field is a decimal Kg amount and is
-    // used as-is (parseFloat, not parseInt, so fractional Kg isn't truncated).
     let stock;
     if (soldByWeight) {
         stock = parseFloat(document.getElementById('inv-stock').value) || 0;
@@ -1574,13 +1445,10 @@ function editProduct(branchId, id) {
     const totalStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
 
     if (item.soldByWeight) {
-        // Decimal Kg amount, entered directly into the (repurposed) simple stock field.
         document.getElementById('inv-stock').value = totalStock || '';
         document.getElementById('inv-stock-packs').value = '';
         document.getElementById('inv-stock-loose').value = '';
     } else if (unitsPerPack > 1) {
-        // Decompose the stored total (always in pieces) back into whole packs +
-        // leftover loose pieces so the split fields reflect what's really on the shelf.
         document.getElementById('inv-stock-packs').value = Math.floor(totalStock / unitsPerPack);
         document.getElementById('inv-stock-loose').value = totalStock % unitsPerPack;
         document.getElementById('inv-stock').value = totalStock;
@@ -1596,8 +1464,6 @@ function editProduct(branchId, id) {
     document.getElementById('inv-form-title').textContent = `Edit Product (${branchNameOf(branchId)})`;
     document.getElementById('save-product-btn').textContent = "Update Product";
 
-    // Pop the form up as a modal right where the user is, instead of making them
-    // scroll back up the page to find it.
     document.getElementById('product-form-modal').style.display = 'flex';
 }
 
@@ -1637,11 +1503,6 @@ function deleteProduct(branchId, id) {
 }
 
 // ==================== SEQUENTIAL TRANSACTION ID GENERATOR ====================
-// Replaces the old random 6-digit txId with a clean, incrementing one padded to
-// at least 3 digits (WD-001, WD-002, ... WD-010, ... rolls to WD-1000+ naturally
-// once the counter exceeds 999). Uses a Firebase transaction() on a per-store
-// counter so two terminals submitting at the same moment can never be handed the
-// same number.
 function generateNextTransactionId() {
     if (!currentStoreId || !db) {
         return Promise.reject(new Error("No active store or database connection."));
@@ -1656,8 +1517,6 @@ function generateNextTransactionId() {
     });
 }
 
-// Same pattern as generateNextTransactionId(), but for refund receipt IDs (RF-001,
-// RF-002, ...) so refunds get a clean sequential identifier instead of a random one.
 function generateNextRefundId() {
     if (!currentStoreId || !db) {
         return Promise.reject(new Error("No active store or database connection."));
@@ -1694,9 +1553,6 @@ function setCustomerType(type) {
     onPosProductChange();
 }
 
-// Toggles whether the next cart line item is sold as a whole Pack or as individual
-// Pieces. Piece pricing/quantity/stock is only meaningful for products that have
-// unitsPerPack > 1 set in Inventory — see getPiecePrice() / packPieceInfoLabel().
 function setSaleUnit(unit) {
     currentSaleUnit = unit;
     applySaleUnitUI();
@@ -1726,8 +1582,6 @@ function applySaleUnitUI() {
     if (priceLabel) priceLabel.textContent = currentSaleUnit === 'Piece' ? 'Selling Price (₦ / Piece)' : 'Selling Price (₦ / Pack)';
 }
 
-// POS always sells from the logged-in user's active branch (currentBranch) — never
-// the aggregate "All Branches" view, since a sale must draw down one physical location's stock.
 function loadPosInventoryDropdown() {
     if (!currentStoreId) return;
     
@@ -1791,10 +1645,6 @@ function onPosProductChange() {
         const wPrice = item.wholesalePrice || rPrice;
         const packPrice = (currentCustomerType === 'Wholesale') ? wPrice : rPrice;
 
-        // Weight-based products (rice, sugar, flour, etc.) always sell by their
-        // configured weight unit (Kg or g), regardless of the global Pack/Piece
-        // toggle — the Retail/Wholesale Price fields on this product mean "per
-        // Kg"/"per g", so no piece-price conversion applies.
         if (item.soldByWeight) {
             const wUnit = item.weightUnit || 'Kg';
             priceInput.value = packPrice;
@@ -1819,15 +1669,12 @@ function onPosProductChange() {
     } else {
         priceInput.value = '';
         if (unitInfoEl) unitInfoEl.textContent = '';
-        applySaleUnitUI(); // restore the normal Pack/Piece labels once nothing weight-based is selected
+        applySaleUnitUI();
     }
 }
 
 function addToCart() {
     const id = document.getElementById('pos-product-select').value;
-    // parseFloat (not parseInt) so half-quantities like 0.5 are honored — lets
-    // staff sell half a product (e.g. half a bag, half a pack) instead of being
-    // forced to round to a whole unit.
     const qty = parseFloat(document.getElementById('pos-qty').value) || 1;
     const customPrice = parseFloat(document.getElementById('pos-custom-price').value);
     const branchItems = inventoryCache[currentBranch] || {};
@@ -1848,28 +1695,14 @@ function addToCart() {
     const rPrice = item.price || item.retailPrice || 0;
     const wPrice = item.wholesalePrice || rPrice;
     const unitsPerPack = Number(item.unitsPerPack) || 1;
-    // Weight-based products always sell in their configured weight unit (Kg or g),
-    // overriding the global Pack/Piece toggle — there's no pack/piece concept for
-    // something sold by weight.
     const saleUnit = item.soldByWeight ? (item.weightUnit || 'Kg') : currentSaleUnit;
     const isWeightSale = saleUnit === 'Kg' || saleUnit === 'g';
 
-    // piecesNeeded = how many individual pieces this line item will draw down from
-    // stock (stock is always tracked in pieces — or, for weight-based products, in
-    // that product's own weight unit). Selling by Pack converts qty*unitsPerPack;
-    // weight-based products always have unitsPerPack=1, so qty passes through
-    // unchanged either way.
-    // Also account for pieces of this same product already sitting in the cart from
-    // an earlier line, so a second add can't push the combined total past stock.
-    // Rounded to 2dp to avoid floating-point artifacts (e.g. 0.1 + 0.2 = 0.30000000000000004).
     const piecesNeeded = Math.round(((saleUnit === 'Piece' || isWeightSale) ? qty : (qty * unitsPerPack)) * 100) / 100;
     const piecesAlreadyInCart = currentCart
         .filter(ci => ci.id === id)
         .reduce((sum, ci) => sum + (Number(ci.piecesNeeded) || 0), 0);
 
-    // Stock check happens BEFORE anything is added — if the requested quantity
-    // (combined with what's already in the cart for this product) exceeds available
-    // stock, the item is rejected outright rather than being added anyway.
     if (piecesAlreadyInCart + piecesNeeded > pStock) {
         const remaining = Math.max(0, pStock - piecesAlreadyInCart);
         const unitWord = isWeightSale ? saleUnit.toLowerCase() : 'piece(s)';
@@ -1936,8 +1769,6 @@ function renderCart() {
     totalEl.textContent = grandTotal.toLocaleString();
 }
 
-// The cart's +/- buttons step by 0.5 so a line item can be nudged down to a half
-// quantity (e.g. 1 → 0.5) instead of only ever moving in whole-unit increments.
 const CART_QTY_STEP = 0.5;
 
 function increaseQty(index) {
@@ -1949,8 +1780,6 @@ function increaseQty(index) {
     const nextQty = Math.round((item.qty + CART_QTY_STEP) * 100) / 100;
     const nextPiecesNeeded = Math.round((item.saleUnit === 'Piece' ? nextQty : (nextQty * unitsPerPack)) * 100) / 100;
 
-    // Include pieces reserved by any OTHER cart lines for this same product so the
-    // combined total across all lines never exceeds stock.
     const piecesInOtherLines = currentCart
         .filter((ci, i) => i !== index && ci.id === item.id)
         .reduce((sum, ci) => sum + (Number(ci.piecesNeeded) || 0), 0);
@@ -2051,7 +1880,6 @@ function processDirectPosPayment() {
             customerName: currentSelectedCustomer ? currentSelectedCustomer.name : 'Walk-In Customer'
         };
 
-        // Temporarily push to pending/active processing so the split checkout can process it directly
         firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).set(orderData).then(() => {
             currentCart = [];
             renderCart();
@@ -2072,9 +1900,6 @@ function loadPendingOrdersQueue() {
         return;
     }
 
-    // .off() first — switchView('accountant-view') and the "🔄 Refresh Queue" button
-    // both call this directly, so without clearing the previous listener each visit
-    // or click stacked another one on top of the pendingOrders node.
     const pendingRef = firebase.database().ref(`stores/${currentStoreId}/pendingOrders`);
     pendingRef.off();
     pendingRef.on('value', snapshot => {
@@ -2084,8 +1909,6 @@ function loadPendingOrdersQueue() {
         const rowsHtml = [];
         snapshot.forEach(child => {
             const order = child.val();
-            // Accountants/Cashiers only ever process their own branch's queue. Admin sees
-            // the queue for whichever branch they're currently standing in (see branch switcher).
             if ((order.branchId || 'main') !== currentBranch) return;
 
             if (order.status === 'Pending Verification') {
@@ -2113,13 +1936,9 @@ function loadPendingOrdersQueue() {
     });
 }
 
-// Cancels a pending (unpaid) order — used when a customer walks away before paying.
-// No inventory reversal is needed here because stock is only deducted once payment
-// is actually completed in completeSplitCheckout(). We log the cancellation for
-// audit purposes before removing it from the live queue.
 function cancelPendingOrder(txId) {
     const reason = prompt(`Cancel order ${txId}?\n\nOptional: enter a reason (e.g. "Customer changed mind", "Wrong item added"). Leave blank to skip.`);
-    if (reason === null) return; // user pressed Cancel on the prompt itself
+    if (reason === null) return;
 
     firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
         if (!snapshot.exists()) {
@@ -2138,7 +1957,6 @@ function cancelPendingOrder(txId) {
             cancelReason: reason || 'No reason given'
         };
 
-        // Log it for record-keeping, then remove from the live pending queue
         firebase.database().ref(`stores/${currentStoreId}/cancelledOrders/${txId}`).set(cancelledRecord).then(() => {
             return firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
         }).then(() => {
@@ -2150,10 +1968,7 @@ function cancelPendingOrder(txId) {
 }
 
 // ==================== ACCOUNTANT DASHBOARD: PENDING / COMPLETED TAB TOGGLE ====================
-// Lets the Accountant/Cashier (and Admin, when standing in the accountant view) flip
-// between the live payment queue and a read-only list of already-completed sales for
-// their branch, without leaving the Accountant Dashboard.
-let currentAccountantTab = 'pending'; // 'pending' | 'completed'
+let currentAccountantTab = 'pending';
 
 function switchAccountantTab(tab) {
     currentAccountantTab = tab;
@@ -2176,17 +1991,13 @@ function switchAccountantTab(tab) {
     }
 }
 
-// Branch-scoped completed sales list for the Accountant Dashboard. Reuses the same
-// stores/{storeId}/transactions node as Reports, but Accountants/Cashiers never see
-// Reports (blocked in switchView), so this gives them read access to just their own
-// branch's history and lets them reprint via the existing viewPastReceipt().
 function loadCompletedTransactionsForAccountant() {
     if (!currentStoreId) return;
     if (currentUserRole !== 'Accountant' && currentUserRole !== 'Cashier' && currentUserRole !== 'Admin') return;
 
-    // .off() first — switching tabs back and forth re-triggers this, so without
-    // clearing the old listener each switch would stack another one.
-    const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`);
+    // [v21] Capped at last 300 — was pulling the entire transaction history on
+    // every new sale.
+    const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(300);
     txRef.off();
     txRef.on('value', snapshot => {
         const tbody = document.getElementById('accountant-completed-body');
@@ -2228,9 +2039,6 @@ function loadCompletedTransactionsForAccountant() {
 }
 
 // ==================== ACCOUNTANT DASHBOARD: PENDING ORDER DETAILS MODAL ====================
-// Lets the Accountant/Cashier inspect exactly what's in a pending order (items, unit,
-// qty, price) before committing to Process Payment — instead of only ever seeing the
-// grand total in the queue row.
 function viewPendingOrderDetails(txId) {
     firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
         if (!snapshot.exists()) {
@@ -2266,8 +2074,6 @@ function viewPendingOrderDetails(txId) {
             }
         }
 
-        // Wire "Process Payment" inside the modal straight into the existing split
-        // payment flow, closing this modal first so it doesn't sit behind the next one.
         const processBtn = document.getElementById('pending-details-process-btn');
         if (processBtn) {
             processBtn.onclick = () => {
@@ -2301,7 +2107,6 @@ function openSplitModal(txId, totalAmount) {
     const creditContainer = document.getElementById('split-credit-container');
     const custInfo = document.getElementById('split-modal-customer-info');
 
-    // Look up the full pending order so we know whether a registered customer is attached
     firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
         if (snapshot.exists()) {
             const order = snapshot.val();
@@ -2343,7 +2148,6 @@ function calcSplit() {
     let statusField = document.getElementById('split-status');
     let acceptBtn = document.getElementById('dynamic-accept-print-btn');
 
-    // Enforce the customer's credit limit before allowing the credit portion through
     if (creditVal > 0 && currentActiveOrder && currentActiveOrder.customerId && customersCache[currentActiveOrder.customerId]) {
         const c = customersCache[currentActiveOrder.customerId];
         const available = Math.max(0, (Number(c.creditLimit) || 0) - (Number(c.balance) || 0));
@@ -2387,58 +2191,6 @@ function calcSplit() {
     }
 }
 
-// ==================== NEW FINALIZATION & METRICS INTEGRATION ====================
-function finalizeCompleteSale() {
-    const cashTendered = parseFloat(document.getElementById('cash-amount').value) || 0;
-    const transferTendered = parseFloat(document.getElementById('transfer-amount').value) || 0;
-    const totalDue = currentActiveOrder ? currentActiveOrder.totalAmount : 0;
-
-    // 1. Validation sanity check
-    if ((cashTendered + transferTendered) < totalDue) {
-        alert("Amount tendered is less than total due!");
-        return;
-    }
-
-    // 2. Build the transaction payload for dashboard and storage sync
-    const receiptNo = document.getElementById('modal-receipt-no') ? document.getElementById('modal-receipt-no').innerText : (currentActiveOrder ? currentActiveOrder.txId : 'WD-000');
-    const transactionData = {
-        receiptNo,
-        total: totalDue,
-        cash: cashTendered,
-        transfer: transferTendered,
-        timestamp: new Date().toISOString(),
-        cashier: document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : "Accountant"
-    };
-
-    // 3. Save transaction (LocalStorage, Firebase, or Backend API)
-    saveTransactionToDatabase(transactionData);
-
-    // 4. Update Accountant Dashboard metrics immediately
-    updateAccountantDashboardMetrics(transactionData);
-
-    // 5. Close payment modal and trigger receipt print
-    closeSplitModal();
-    if (typeof triggerThermalReceiptPrint === 'function') {
-        triggerThermalReceiptPrint(transactionData);
-    }
-}
-
-function saveTransactionToDatabase(data) {
-    let salesHistory = JSON.parse(localStorage.getItem('wd_sales_history')) || [];
-    salesHistory.push(data);
-    localStorage.setItem('wd_sales_history', JSON.stringify(salesHistory));
-}
-
-function updateAccountantDashboardMetrics(data) {
-    let currentRevenue = parseFloat(localStorage.getItem('wd_total_revenue') || '0');
-    currentRevenue += data.total;
-    localStorage.setItem('wd_total_revenue', currentRevenue);
-    
-    if (typeof refreshDashboardUI === 'function') {
-        refreshDashboardUI();
-    }
-}
-
 // ==================== UPDATED SPLIT CHECKOUT & INVENTORY DEDUCTION (branch-scoped) ====================
 function completeSplitCheckout() {
     if (!currentActiveOrder) return;
@@ -2466,11 +2218,12 @@ function completeSplitCheckout() {
             orderData.customerId = customerId;
             orderData.customerName = customerName;
             
-            // 1. Save transaction and remove from pending queue
             firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).set(orderData);
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
-            // 2. DEDUCT INVENTORY FOR EACH SOLD ITEM (from the branch that made the sale)
+            // [v21] Stock deduction now uses transaction() so two simultaneous
+            // sales of the same product can't both read the same stock value and
+            // silently lose one deduction.
             if (Array.isArray(orderData.items)) {
                 orderData.items.forEach(cartItem => {
                     const productId = cartItem.id;
@@ -2478,29 +2231,25 @@ function completeSplitCheckout() {
 
                     if (productId && soldPieces > 0) {
                         const productRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}/${productId}`);
-                        
-                        productRef.once('value').then(prodSnap => {
-                            if (prodSnap.exists()) {
-                                const prodData = prodSnap.val();
-                                let currentStock = Number(prodData.stock !== undefined ? prodData.stock : (prodData.stockQty || 0));
-                                let newStock = Math.max(0, currentStock - soldPieces);
 
-                                productRef.update({
-                                    stock: newStock,
-                                    stockQty: newStock
-                                });
-
-                                if (inventoryCache[branchId] && inventoryCache[branchId][productId]) {
-                                    inventoryCache[branchId][productId].stock = newStock;
-                                    inventoryCache[branchId][productId].stockQty = newStock;
-                                }
+                        productRef.transaction(prodData => {
+                            if (!prodData) return prodData;
+                            const currentStock = Number(prodData.stock !== undefined ? prodData.stock : (prodData.stockQty || 0));
+                            const newStock = Math.max(0, Math.round((currentStock - soldPieces) * 100) / 100);
+                            prodData.stock = newStock;
+                            prodData.stockQty = newStock;
+                            return prodData;
+                        }).then(result => {
+                            if (result.committed && result.snapshot && result.snapshot.val() && inventoryCache[branchId] && inventoryCache[branchId][productId]) {
+                                const newStock = result.snapshot.val().stock;
+                                inventoryCache[branchId][productId].stock = newStock;
+                                inventoryCache[branchId][productId].stockQty = newStock;
                             }
-                        });
+                        }).catch(err => console.warn("Stock transaction failed:", err));
                     }
                 });
             }
 
-            // 3. CUSTOMER LEDGER, CREDIT BALANCE & LIFETIME VALUE UPDATE
             if (customerId) {
                 const custRef = firebase.database().ref(`stores/${currentStoreId}/customers/${customerId}`);
                 custRef.once('value').then(custSnap => {
@@ -2532,7 +2281,6 @@ function completeSplitCheckout() {
                 });
             }
 
-            // 4. Render and print the receipt
             renderReceiptView(orderData, false);
         }
     }).catch(error => {
@@ -2793,8 +2541,6 @@ function onReportsBranchFilterChange() {
     loadProfitAndLossModule();
 }
 
-// Small helper so both Reports and the Accountant "Completed Sales" tab can show a
-// consistent inline badge next to a transaction's amount when it's been refunded.
 function refundStatusBadge(tx) {
     if (!tx || !tx.refundStatus || tx.refundStatus === 'Completed') return '';
     const isFull = tx.refundStatus === 'Refunded';
@@ -2806,7 +2552,9 @@ function refundStatusBadge(tx) {
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
-    const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`);
+    // [v21] Capped at last 300 — was reading the entire transaction history and
+    // redownloading it on every new sale.
+    const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(300);
     txRef.off();
     txRef.on('value', snapshot => {
         const tbody = document.getElementById('sales-history-body');
@@ -2921,14 +2669,9 @@ function loadPastSalesHistory(selectedDateString = null) {
         if (monthEl) monthEl.textContent = '₦' + monthRevenue.toLocaleString();
     });
 
-    // Refunds total for the selected day, shown in its own summary card. Kept as a
-    // separate read (rather than folded into the transactions listener above) since
-    // refunds live in their own node.
     loadRefundsSummaryForDate(selectedDateString);
 }
 
-// Sums refunds.totalRefund for the selected day (defaults to today), respecting the
-// current branch filter, and updates the "Total Refunds (Selected Day)" card.
 function loadRefundsSummaryForDate(selectedDateString = null) {
     if (!currentStoreId) return;
     const card = document.getElementById('total-refunds-card');
@@ -3108,9 +2851,6 @@ function deleteStaff(id) {
     }
 }
 
-// Lets the Admin reset a staff member's login PIN — e.g. if they forgot it or a
-// device with it saved was lost. Same prompt()-based pattern already used for
-// resetting a store's Admin PIN from the Super Admin dashboard.
 function changeStaffPin(id, name) {
     if (currentUserRole !== 'Admin') {
         alert("Access Restricted: Only the Admin can change a staff member's PIN.");
@@ -3118,7 +2858,7 @@ function changeStaffPin(id, name) {
     }
 
     const newPin = prompt(`Enter a new login PIN for ${name || 'this staff member'}:`);
-    if (newPin === null) return; // user cancelled the prompt
+    if (newPin === null) return;
     if (newPin.trim() === '') {
         alert("PIN cannot be empty. No changes were made.");
         return;
@@ -3148,9 +2888,6 @@ function loadBusinessSettings() {
         if (addressInput) addressInput.value = storeData.address || '';
     });
 
-    // "Change My PIN" is the store Admin's own PIN (stores/{storeId}/adminPin) —
-    // Accountants/Cashiers also reach this Business Settings view, but they don't
-    // own this PIN, so the section stays hidden for anyone but the Admin.
     const pinSection = document.getElementById('settings-pin-change-section');
     if (pinSection) pinSection.style.display = (currentUserRole === 'Admin') ? 'block' : 'none';
 
@@ -3184,10 +2921,6 @@ function updateBusinessProfile() {
     });
 }
 
-// Lets the store Admin change their own login PIN (stores/{storeId}/adminPin)
-// from Business Settings, without needing Super Admin to reset it for them.
-// Requires the current PIN to match (so someone briefly at an unlocked Admin
-// session can't silently lock the real Admin out) and the new PIN entered twice.
 function changeAdminOwnPin() {
     if (!currentStoreId) return;
     if (currentUserRole !== 'Admin') {
@@ -3235,9 +2968,10 @@ function changeAdminOwnPin() {
 function loadExpensesTable() {
     if (!currentStoreId) return;
 
-    const expRef = firebase.database().ref(`stores/${currentStoreId}/expenses`);
-    expRef.off();
-    expRef.on('value', snapshot => {
+    // [v21] Once instead of a live listener — was redownloading the entire
+    // expenses history on every new expense anywhere. Refresh is called
+    // explicitly by saveExpense and deleteExpense.
+    firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value').then(snapshot => {
         const tbody = document.getElementById('expenses-body');
         if (!tbody) return;
 
@@ -3274,7 +3008,7 @@ function loadExpensesTable() {
         if (totalLabel) {
             totalLabel.textContent = '₦' + totalExpenses.toLocaleString();
         }
-    });
+    }).catch(err => console.error("loadExpensesTable error:", err));
 }
 
 function saveExpense() {
@@ -3327,7 +3061,9 @@ function loadProfitAndLossModule() {
     if (plLabel) plLabel.textContent = plBranchFilter === 'all' ? '(All Branches)' : `(${branchNameOf(plBranchFilter)})`;
 
     Promise.all([
-        firebase.database().ref(`stores/${currentStoreId}/transactions`).once('value'),
+        // [v21] Capped at last 1000 transactions — P&L only needs the current
+        // month, and a thousand is generous cover even for very busy stores.
+        firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(1000).once('value'),
         firebase.database().ref(`stores/${currentStoreId}/inventory`).once('value'),
         firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value'),
         firebase.database().ref(`stores/${currentStoreId}/refunds`).once('value')
@@ -3390,8 +3126,6 @@ function loadProfitAndLossModule() {
             }
         });
 
-        // Refunds reduce both revenue (money given back) and COGS (restocked items are no
-        // longer "sold" from a cost-accounting standpoint) for the month they were issued in.
         refundSnapshot.forEach(child => {
             const r = child.val();
             const rBranch = r.branchId || 'main';
@@ -3814,19 +3548,20 @@ function printWaybill(transferId) {
 }
 
 // ==================== SUPPLIER MANAGEMENT MODULE ====================
-function subscribeSuppliersCache() {
+// [v21] Renamed from subscribeSuppliersCache — one-time read instead of a
+// persistent listener. Suppliers change rarely, so a live listener just
+// downloaded the whole suppliers node on every unrelated update.
+function loadSuppliersCache() {
     if (!currentStoreId) return;
 
-    const suppliersRef = firebase.database().ref(`stores/${currentStoreId}/suppliers`);
-    suppliersRef.off();
-    suppliersRef.on('value', snapshot => {
+    firebase.database().ref(`stores/${currentStoreId}/suppliers`).once('value').then(snapshot => {
         suppliersCache = {};
         snapshot.forEach(child => { suppliersCache[child.key] = child.val(); });
 
         if (document.getElementById('suppliers-body')) {
             renderSuppliersTable(suppliersCache);
         }
-    }, error => console.error("subscribeSuppliersCache error:", error));
+    }).catch(error => console.error("loadSuppliersCache error:", error));
 }
 
 function renderSuppliersTable(dataset) {
@@ -3918,6 +3653,7 @@ function saveSupplier() {
         suppRef.child(editId).update({ name, phone, email, address }).then(() => {
             alert("Supplier updated successfully!");
             closeSupplierModal();
+            loadSuppliersCache();   // [v21] refresh the once-read cache
         }).catch(err => alert("Failed to update supplier: " + err.message));
     } else {
         suppRef.push().set({
@@ -3932,6 +3668,7 @@ function saveSupplier() {
         }).then(() => {
             alert("Supplier added successfully!");
             closeSupplierModal();
+            loadSuppliersCache();   // [v21]
         }).catch(err => alert("Failed to save supplier: " + err.message));
     }
 }
@@ -3941,7 +3678,9 @@ function deleteSupplier(id) {
     if (!s) return;
 
     if (confirm(`Are you sure you want to delete supplier "${s.name}"? Past supply records will remain for your history.`)) {
-        firebase.database().ref(`stores/${currentStoreId}/suppliers/${id}`).remove();
+        firebase.database().ref(`stores/${currentStoreId}/suppliers/${id}`).remove().then(() => {
+            loadSuppliersCache();   // [v21]
+        });
     }
 }
 
@@ -4066,9 +3805,6 @@ function saveSupply() {
 
     rows.forEach(row => {
         const name = row.querySelector('.supply-item-name')?.value.trim() || '';
-        // parseFloat (not parseInt) so a weight-based product's "Packs Received"
-        // entry can carry a decimal Kg amount without truncation — behaves
-        // identically to parseInt for ordinary whole-number pack counts.
         const qty = parseFloat(row.querySelector('.supply-item-qty')?.value) || 0;
         const loosePieces = parseFloat(row.querySelector('.supply-item-loose')?.value) || 0;
         const cost = parseFloat(row.querySelector('.supply-item-cost')?.value) || 0;
@@ -4145,9 +3881,6 @@ function saveSupply() {
             supplierId,
             supplierName: suppliersCache[supplierId].name,
             branchId,
-            // productId is kept (when matched to an existing item) so per-product
-            // restock history can look supplies up directly by id instead of only
-            // by name — see openProductRestockHistory().
             items: items.map(({ _matchId, ...rest }) => ({ ...rest, productId: _matchId || null })),
             totalCost,
             notes,
@@ -4201,6 +3934,7 @@ function saveSupply() {
         alert(`Supply recorded successfully! Inventory at ${branchNameOf(branchId)} has been updated automatically.`);
         closeRecordSupplyModal();
         loadSuppliesHistory();
+        loadSuppliersCache();   // [v21] refresh the once-read supplier cache
     }).catch(err => {
         console.error("saveSupply error:", err);
         alert("⚠️ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
@@ -4219,12 +3953,12 @@ function togglePurchaseOrderHistory() {
     }
 }
 
+// [v21] Once instead of a live listener — refresh is called manually by
+// saveSupply, saveQuickRestock, and switchView('suppliers-view').
 function loadSuppliesHistory() {
     if (!currentStoreId) return;
 
-    const suppliesRef = firebase.database().ref(`stores/${currentStoreId}/supplies`);
-    suppliesRef.off();
-    suppliesRef.on('value', snapshot => {
+    firebase.database().ref(`stores/${currentStoreId}/supplies`).once('value').then(snapshot => {
         const tbody = document.getElementById('supplies-history-body');
         if (!tbody) return;
 
@@ -4251,7 +3985,7 @@ function loadSuppliesHistory() {
         tbody.innerHTML = rows.length === 0
             ? `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:20px;">No supply records yet. Click "+ Record New Supply" to log stock received from a supplier.</td></tr>`
             : rowsHtml.join('');
-    });
+    }).catch(err => console.error("loadSuppliesHistory error:", err));
 }
 
 function viewSupplyDetails(supplyId) {
@@ -4313,16 +4047,7 @@ function closeSupplyDetailsModal() {
 }
 
 // ==================== QUICK RESTOCK (per-product, from Inventory) ====================
-// Same underlying effect as "Record New Supply" — creates a real supply record
-// (so it also shows up in Suppliers → Purchase Order History), updates the
-// product's stock/cost price, and updates the supplier's totals — just reachable
-// with one click from the product's own row instead of going through Suppliers
-// and re-typing the product name.
 function openQuickRestockModal(branchId, productId) {
-    // Defensive check: if index.html wasn't updated/deployed alongside script.js
-    // (or the browser is serving a cached copy), the quick-restock-modal markup
-    // won't exist yet and every getElementById below would silently fail. Fail
-    // loudly here instead so it's obvious what's wrong rather than nothing happening.
     if (!document.getElementById('quick-restock-modal')) {
         alert("Restock modal is missing from the page (index.html may be out of date or cached). Please make sure you've deployed the latest index.html and hard-refresh the page (Ctrl/Cmd+Shift+R).");
         console.error("openQuickRestockModal: #quick-restock-modal not found in the DOM.");
@@ -4362,10 +4087,6 @@ function openQuickRestockModal(branchId, productId) {
     document.getElementById('restock-cost-price').value = item.costPrice || '';
     document.getElementById('restock-notes').value = '';
 
-    // Weight-based products: restocked as (Number of Bags) × (Weight per Bag),
-    // entered fresh each time since bag weight varies delivery to delivery — see
-    // restock-weight-bag-group. Non-weight products keep the existing
-    // Packs/Loose-Pieces fields.
     const simpleGroup = document.getElementById('restock-simple-group');
     const looseGroup = document.getElementById('restock-loose-group');
     const weightBagGroup = document.getElementById('restock-weight-bag-group');
@@ -4382,9 +4103,6 @@ function openQuickRestockModal(branchId, productId) {
         if (perBagInput) {
             perBagInput.placeholder = wUnit === 'g' ? 'e.g. 500' : 'e.g. 30';
             perBagInput.step = wUnit === 'g' ? '1' : '0.01';
-            // Pre-fill from the product's own Weight per Bag if one was set when
-            // adding/editing it — still editable, since this delivery's bags might
-            // weigh a bit more or less than usual.
             if (item.weightPerBag) perBagInput.value = item.weightPerBag;
         }
         if (costLabel) costLabel.textContent = `Cost Price (₦ per ${wUnit})`;
@@ -4407,7 +4125,6 @@ function closeQuickRestockModal() {
     document.getElementById('quick-restock-modal').style.display = 'none';
 }
 
-// Live "Stock before -> Stock after" preview as the input fields are edited.
 function recalcQuickRestockPreview() {
     const branchId = document.getElementById('restock-branch-id').value;
     const productId = document.getElementById('restock-product-id').value;
@@ -4459,19 +4176,15 @@ function saveQuickRestock() {
     const unitsPerPack = Number(item.unitsPerPack) || 1;
     const costPrice = parseFloat(document.getElementById('restock-cost-price').value) || 0;
 
-    // parseFloat (not parseInt) so weight-based products / bag counts can carry a
-    // decimal amount (e.g. 12.5 Kg) without truncation — for normal pack-based
-    // products this behaves identically to parseInt since whole numbers parse the
-    // same way either way.
     let packs, loose, piecesReceived, lineCost, bagsReceived, weightPerBag;
 
     if (item.soldByWeight) {
         bagsReceived = parseFloat(document.getElementById('restock-weight-bags').value) || 0;
         weightPerBag = parseFloat(document.getElementById('restock-weight-per-bag').value) || 0;
         piecesReceived = Math.round((bagsReceived * weightPerBag) * 100) / 100;
-        packs = piecesReceived; // kept for the shared supply-record shape below
+        packs = piecesReceived;
         loose = 0;
-        lineCost = Math.round((costPrice * piecesReceived) * 100) / 100; // costPrice is already "per Kg/g"
+        lineCost = Math.round((costPrice * piecesReceived) * 100) / 100;
 
         if (piecesReceived <= 0) {
             alert("Enter both the number of bags and the weight per bag (or the total weight received).");
@@ -4509,8 +4222,6 @@ function saveQuickRestock() {
             productId,
             qty: packs,
             loosePieces: loose,
-            // Recorded for weight-based restocks specifically, so restock history
-            // can show "3 bags × 30kg" instead of just a raw total.
             bagsReceived: item.soldByWeight ? bagsReceived : null,
             weightPerBag: item.soldByWeight ? weightPerBag : null,
             costPrice,
@@ -4544,7 +4255,8 @@ function saveQuickRestock() {
     }).then(() => {
         alert(`Restocked "${productName}" — stock is now ${item.soldByWeight ? newStock.toLocaleString() + ' ' + (item.weightUnit || 'Kg').toLowerCase() : stockBreakdownLabel(newStock, unitsPerPack)}.`);
         closeQuickRestockModal();
-        // Refresh an already-open history modal for this product, if any
+        loadSuppliesHistory();       // [v21]
+        loadSuppliersCache();        // [v21]
         const historyModal = document.getElementById('restock-history-modal');
         if (historyModal && historyModal.style.display === 'flex' && historyModal.dataset.productId === productId) {
             openProductRestockHistory(branchId, productId);
@@ -4554,11 +4266,6 @@ function saveQuickRestock() {
     });
 }
 
-// ---------- Per-product Restock History (popup modal) ----------
-// Shows every past supply line for this exact product (matched by productId,
-// falling back to a case-insensitive name match for older supply records saved
-// before productId was tracked) — each with stock before, qty added, stock
-// after, supplier, and date, newest first.
 function openProductRestockHistory(branchId, productId) {
     const modal = document.getElementById('restock-history-modal');
     if (!modal) {
@@ -4604,8 +4311,6 @@ function openProductRestockHistory(branchId, productId) {
         });
         entries.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
-        // The modal may have been closed, or reopened for a different product,
-        // while this fetch was in flight — don't clobber it with stale results.
         if (modal.style.display !== 'flex' || modal.dataset.productId !== productId || modal.dataset.branchId !== branchId) return;
 
         if (entries.length === 0) {
@@ -4942,7 +4647,6 @@ function startSaleForCustomer() {
     switchView('pos-view');
 }
 
-// ---------- Debt Repayment (full or partial) & Receipt ----------
 function openDebtPaymentModal() {
     const id = currentProfileCustomerId;
     const c = customersCache[id];
@@ -5047,7 +4751,6 @@ function processDebtPayment() {
     });
 }
 
-// ---------- Debt Repayment Receipt (thermal-compatible) ----------
 function renderDebtReceiptView(paymentData) {
     const mainWrapper = document.getElementById('dashboard-main-wrapper');
     if (mainWrapper) {
@@ -5110,17 +4813,6 @@ function downloadDebtReceiptPDF() {
 }
 
 // ==================== REFUNDS MODULE ====================
-// Restricted to Admin + Accountant (checked in openRefundModal). A refund can cover
-// the whole order or just a subset of items/quantities. It always:
-//   1. Restocks the refunded pieces back into the branch's inventory.
-//   2. Marks the original transaction's items with a cumulative refundedQty, and
-//      sets transaction.refundStatus to 'Partially Refunded' or 'Refunded'.
-//   3. Writes a standalone record under stores/{storeId}/refunds/{refundId} for
-//      audit history and for the Reports "Total Refunds" card / P&L adjustment.
-//   4. Optionally reduces the attached customer's outstanding balance (and their
-//      lifetime totalSpent) if "Reduce Customer's Outstanding Balance" is chosen.
-//   5. Prints a refund receipt.
-
 function openRefundModal(txId) {
     if (currentUserRole !== 'Admin' && currentUserRole !== 'Accountant') {
         alert("Access Restricted: Only an Admin or Accountant can process refunds.");
@@ -5178,8 +4870,6 @@ function closeRefundModal() {
     currentActiveRefund = null;
 }
 
-// Builds one row per sold item, with a quantity input capped at whatever hasn't
-// already been refunded on a prior partial refund (item.refundedQty).
 function renderRefundModalItems(tx) {
     const container = document.getElementById('refund-items-container');
     if (!container) return;
@@ -5220,7 +4910,6 @@ function renderRefundModalItems(tx) {
     container.innerHTML = rowsHtml.join('');
 }
 
-// Quick-fills every quantity input to its maximum refundable amount (full order refund).
 function setFullRefundQuantities() {
     document.querySelectorAll('.refund-qty-input').forEach(input => {
         input.value = input.getAttribute('data-max-refundable');
@@ -5228,8 +4917,6 @@ function setFullRefundQuantities() {
     recalcRefundTotal();
 }
 
-// Recomputes the total from whatever quantities are currently entered, and
-// enables/disables the Confirm button accordingly.
 function recalcRefundTotal() {
     const inputs = document.querySelectorAll('.refund-qty-input');
     let total = 0;
@@ -5318,7 +5005,6 @@ function processRefund() {
         const processedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
         const nowIso = new Date().toISOString();
 
-        // 1. Restock each refunded line, and look up its per-piece cost for P&L
         const invRef = firebase.database().ref(`stores/${currentStoreId}/inventory/${branchId}`);
         const restockChain = refundLines.map(line => {
             if (!line.id) return Promise.resolve(line);
@@ -5344,7 +5030,6 @@ function processRefund() {
         });
 
         return Promise.all(restockChain).then(() => {
-            // 2. Update the original transaction: per-item refundedQty + overall status
             const updatedItems = Array.isArray(transaction.items) ? transaction.items.map(it => ({ ...it })) : [];
             refundLines.forEach(line => {
                 if (updatedItems[line.itemIndex]) {
@@ -5362,7 +5047,6 @@ function processRefund() {
                 refundStatus: newRefundStatus
             }).then(() => ({ updatedItems, newRefundedAmount, newRefundStatus }));
         }).then(({ newRefundedAmount, newRefundStatus }) => {
-            // 3. Write the standalone refund record
             const refundData = {
                 refundId,
                 txId,
@@ -5379,7 +5063,6 @@ function processRefund() {
 
             return firebase.database().ref(`stores/${currentStoreId}/refunds/${refundId}`).set(refundData).then(() => refundData);
         }).then(refundData => {
-            // 4. Customer balance / lifetime spend adjustments
             if (customerId && customersCache[customerId]) {
                 const custRef = firebase.database().ref(`stores/${currentStoreId}/customers/${customerId}`);
                 return custRef.once('value').then(custSnap => {
@@ -5419,7 +5102,6 @@ function processRefund() {
     });
 }
 
-// ---------- Refund Receipt (thermal-compatible) ----------
 function renderRefundReceiptView(refundData) {
     const mainWrapper = document.getElementById('dashboard-main-wrapper');
     if (mainWrapper) {
@@ -5571,13 +5253,6 @@ function updatePosCustomerBadge() {
 }
 
 // ==================== HELD / PARKED CARTS (POS) ====================
-// Lets staff temporarily set aside an in-progress cart (customer steps away, or
-// another customer needs serving urgently) and resume it later without losing
-// items, the attached customer, or the Retail/Wholesale + Pack/Piece selections.
-// Stored flat at stores/{storeId}/heldCarts with a branchId field on each record —
-// same pattern as pendingOrders/expenses — so switching branches never leaves a
-// stale listener attached to an old per-branch path.
-
 function holdCurrentCart() {
     if (currentCart.length === 0) {
         alert("Cart is empty — nothing to hold.");
@@ -5586,7 +5261,7 @@ function holdCurrentCart() {
     if (!currentStoreId) return;
 
     const label = prompt("Optional label for this held cart (e.g. customer name or note):", currentSelectedCustomer ? currentSelectedCustomer.name : "");
-    if (label === null) return; // user cancelled the prompt
+    if (label === null) return;
 
     const heldBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
     const heldCartData = {
@@ -5611,9 +5286,6 @@ function holdCurrentCart() {
     });
 }
 
-// Live badge count of held carts for the branch currently open in POS. Also keeps
-// an already-open Held Carts modal in sync if another terminal holds/resumes a
-// cart on the same branch while it's showing.
 function loadHeldCartsBadge() {
     if (!currentStoreId) return;
 
@@ -5685,8 +5357,6 @@ function renderHeldCartsList(rows) {
         : rowsHtml.join('');
 }
 
-// Resuming replaces whatever's currently in the active cart, so we confirm first
-// if the active cart isn't empty — no silently losing in-progress work.
 function resumeHeldCart(holdId) {
     if (currentCart.length > 0) {
         if (!confirm("Your current cart isn't empty. Resuming this held cart will replace it. Continue?")) return;
