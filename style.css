@@ -1,11 +1,11 @@
 :root {
-    --bg: #f5f7fb;
+    --bg: #f5f4fb;
     --card-bg: #ffffff;
     --text: #0b1220;
     --text-muted: #5b6b85;
-    --accent: #0d9488;
-    --accent-2: #0284c7;
-    --accent-hover: #0f766e;
+    --accent: #7c3aed;
+    --accent-2: #8b5cf6;
+    --accent-hover: #6d28d9;
     --border: #e2e8f0;
     --border-soft: #eef2f7;
     --success: #16a34a;
@@ -16,8 +16,8 @@
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
     --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.06);
     --shadow-lg: 0 20px 45px rgba(15, 23, 42, 0.10);
-    --gradient-brand: linear-gradient(135deg, #0d9488 0%, #0284c7 100%);
-    --gradient-brand-hover: linear-gradient(135deg, #0f766e 0%, #0369a1 100%);
+    --gradient-brand: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+    --gradient-brand-hover: linear-gradient(135deg, #6d28d9 0%, #9333ea 100%);
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -25,8 +25,8 @@
 body {
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background:
-        radial-gradient(1200px 600px at 10% -10%, #d1fae5 0%, transparent 55%),
-        radial-gradient(1000px 600px at 100% 0%, #dbeafe 0%, transparent 55%),
+        radial-gradient(1200px 600px at 10% -10%, #ede9fe 0%, transparent 55%),
+        radial-gradient(1000px 600px at 100% 0%, #f3e8ff 0%, transparent 55%),
         var(--bg);
     color: var(--text);
     margin: 0;
@@ -57,9 +57,9 @@ body {
     position: relative;
     overflow: hidden;
     background:
-        radial-gradient(circle at 20% 20%, rgba(13, 148, 136, 0.35), transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(2, 132, 199, 0.30), transparent 50%),
-        linear-gradient(135deg, #0f172a 0%, #020617 100%);
+        radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.40), transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.32), transparent 50%),
+        linear-gradient(135deg, #1e1b4b 0%, #0f0a26 100%);
 }
 
 .auth-wrapper::before,
@@ -74,17 +74,17 @@ body {
 
 .auth-wrapper::before {
     width: 420px; height: 420px;
-    background: #14b8a6;
+    background: #a855f7;
     top: -140px; left: -140px;
-    opacity: 0.40;
+    opacity: 0.45;
     animation: auth-float 18s ease-in-out infinite;
 }
 
 .auth-wrapper::after {
     width: 460px; height: 460px;
-    background: #0ea5e9;
+    background: #8b5cf6;
     bottom: -170px; right: -170px;
-    opacity: 0.35;
+    opacity: 0.38;
     animation: auth-float 22s ease-in-out infinite reverse;
 }
 
@@ -145,14 +145,14 @@ body {
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    text-shadow: 0 3px 14px rgba(13, 148, 136, 0.20);
+    text-shadow: 0 3px 14px rgba(124, 58, 237, 0.25);
     transition: transform 0.3s ease, text-shadow 0.3s ease;
     display: inline-block;
 }
 
 .auth-card .brand-title:hover .big-w {
     transform: scale(1.15) rotate(-6deg);
-    text-shadow: 0 5px 22px rgba(13, 148, 136, 0.45);
+    text-shadow: 0 5px 22px rgba(124, 58, 237, 0.55);
 }
 
 .subtitle {
@@ -204,7 +204,7 @@ body {
     outline: none;
     background: #ffffff;
     border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.12);
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.14);
 }
 
 .form-group textarea { resize: vertical; }
@@ -236,16 +236,17 @@ body {
 
 .menu-btn:active { transform: translateY(0); }
 
-/* ===================== SIDEBAR BUTTONS — RAINBOW ===================== */
-/* One rule per button. Hover darkens the tint slightly. No !important. */
+/* ===================== SIDEBAR BUTTONS ===================== */
+/* Dashboard, Pre-Orders, Customers now use purple family.
+   Other buttons keep their distinct colour-coding for quick scanning. */
 
 .btn-dash {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-    border-left-color: #3b82f6;
+    background: #f5f3ff;
+    color: #6d28d9;
+    border-color: #ddd6fe;
+    border-left-color: #8b5cf6;
 }
-.btn-dash:hover { background: #dbeafe; color: #1e3a8a; }
+.btn-dash:hover { background: #ede9fe; color: #5b21b6; }
 
 .btn-pos {
     background: #f0fdf4;
@@ -280,20 +281,20 @@ body {
 .btn-rep:hover { background: #fee2e2; color: #991b1b; }
 
 .btn-staff {
-    background: #ecfeff;
-    color: #0e7490;
-    border-color: #a5f3fc;
-    border-left-color: #06b6d4;
-}
-.btn-staff:hover { background: #cffafe; color: #155e75; }
-
-.btn-cust {
     background: #f5f3ff;
     color: #6d28d9;
     border-color: #ddd6fe;
     border-left-color: #8b5cf6;
 }
-.btn-cust:hover { background: #ede9fe; color: #5b21b6; }
+.btn-staff:hover { background: #ede9fe; color: #5b21b6; }
+
+.btn-cust {
+    background: #fdf4ff;
+    color: #a21caf;
+    border-color: #f5d0fe;
+    border-left-color: #d946ef;
+}
+.btn-cust:hover { background: #fae8ff; color: #86198f; }
 
 .btn-branch {
     background: #fff7ed;
@@ -312,12 +313,12 @@ body {
 .btn-exp:hover { background: #fef9c3; color: #854d0e; }
 
 .btn-supplier {
-    background: #eff6ff;
-    color: #1e40af;
-    border-color: #bfdbfe;
-    border-left-color: #2563eb;
+    background: #f5f3ff;
+    color: #6d28d9;
+    border-color: #ddd6fe;
+    border-left-color: #8b5cf6;
 }
-.btn-supplier:hover { background: #e0e7ff; color: #1e3a8a; }
+.btn-supplier:hover { background: #ede9fe; color: #5b21b6; }
 
 .btn-transfer {
     background: #f0fdfa;
@@ -335,22 +336,22 @@ body {
 }
 .btn-sec:hover { background: #e2e8f0; color: #1e293b; }
 
-/* Pre-Orders (injected by manager-preorder-patch.js) — blue like Dashboard */
+/* Pre-Orders (injected by manager-preorder-patch.js) — purple like Dashboard */
 .sidebar .menu-btn[onclick*="preorder"],
 .sidebar .menu-btn[onclick*="Preorder"],
 .sidebar .menu-btn[onclick*="PreOrder"],
 .sidebar .menu-btn[onclick*="pre-order"] {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #bfdbfe;
-    border-left-color: #3b82f6;
+    background: #f5f3ff;
+    color: #6d28d9;
+    border-color: #ddd6fe;
+    border-left-color: #8b5cf6;
 }
 .sidebar .menu-btn[onclick*="preorder"]:hover,
 .sidebar .menu-btn[onclick*="Preorder"]:hover,
 .sidebar .menu-btn[onclick*="PreOrder"]:hover,
 .sidebar .menu-btn[onclick*="pre-order"]:hover {
-    background: #dbeafe;
-    color: #1e3a8a;
+    background: #ede9fe;
+    color: #5b21b6;
 }
 
 /* Slightly taller sidebar buttons on desktop */
@@ -363,9 +364,6 @@ body {
 
 /* ===================== OTHER BUTTONS ===================== */
 
-/* Primary action button (gradient) — this is the base style.
-   It intentionally comes AFTER .btn-pos etc so on buttons that carry both
-   classes, this one wins by source order (same specificity, later wins). */
 .btn-action-primary {
     background: var(--gradient-brand);
     color: #ffffff;
@@ -375,13 +373,13 @@ body {
     justify-content: center;
     font-weight: 700;
     letter-spacing: 0.2px;
-    box-shadow: 0 10px 22px rgba(13, 148, 136, 0.25);
+    box-shadow: 0 10px 22px rgba(124, 58, 237, 0.30);
 }
 
 .btn-action-primary:hover {
     background: var(--gradient-brand-hover);
     color: #ffffff;
-    box-shadow: 0 14px 30px rgba(13, 148, 136, 0.35);
+    box-shadow: 0 14px 30px rgba(124, 58, 237, 0.40);
     transform: translateY(-2px);
 }
 
@@ -413,9 +411,9 @@ body {
     text-align: center;
 }
 .btn-secondary:hover {
-    background: #e2e8f0;
-    color: #0f766e;
-    border-color: #99f6e4;
+    background: #ede9fe;
+    color: #6d28d9;
+    border-color: #ddd6fe;
 }
 
 .btn-complete-sale {
@@ -467,14 +465,14 @@ body {
 /* ===================== BRANCH BADGE ===================== */
 
 .branch-badge {
-    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-    color: #166534;
+    background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+    color: #5b21b6;
     font-size: 11px;
     font-weight: 700;
     padding: 5px 12px;
     border-radius: 999px;
     display: inline-block;
-    border: 1px solid #86efac;
+    border: 1px solid #c4b5fd;
     letter-spacing: 0.2px;
 }
 
@@ -507,20 +505,20 @@ body {
 }
 
 .sidebar {
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
     border-right: 1px solid var(--border-soft);
     padding: 22px 18px;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    box-shadow: 4px 0 24px rgba(15, 23, 42, 0.03);
+    box-shadow: 4px 0 24px rgba(124, 58, 237, 0.04);
 }
 
 .main-content-area {
     padding: 26px;
     background:
-        radial-gradient(900px 500px at 100% 0%, #ecfeff 0%, transparent 55%),
-        radial-gradient(700px 500px at 0% 100%, #ecfdf5 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #f3e8ff 0%, transparent 55%),
+        radial-gradient(700px 500px at 0% 100%, #ede9fe 0%, transparent 55%),
         #f8fafc;
     box-sizing: border-box;
     width: 100%;
@@ -548,8 +546,8 @@ th, td {
 }
 
 th {
-    background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%);
-    color: #0369a1;
+    background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%);
+    color: #5b21b6;
     font-weight: 700;
     letter-spacing: 0.2px;
     text-transform: uppercase;
@@ -557,7 +555,7 @@ th {
 }
 
 tr:last-child td { border-bottom: none; }
-tbody tr:hover { background: #f8fafc; }
+tbody tr:hover { background: #faf5ff; }
 
 /* ===================== POS GRID ===================== */
 
@@ -661,8 +659,8 @@ tbody tr:hover { background: #f8fafc; }
     padding: 7px 16px;
     font-size: 12px;
     font-weight: 700;
-    background: #e2e8f0;
-    color: #1e293b;
+    background: #ede9fe;
+    color: #5b21b6;
     border: none;
     border-left: none;
     box-shadow: none;
@@ -677,7 +675,7 @@ tbody tr:hover { background: #f8fafc; }
 .accountant-tab-btn.active {
     background: var(--gradient-brand);
     color: #fff;
-    box-shadow: 0 6px 16px rgba(13, 148, 136, 0.25);
+    box-shadow: 0 6px 16px rgba(124, 58, 237, 0.30);
 }
 
 #pending-order-details-modal table th { text-align: left; }
