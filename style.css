@@ -37,7 +37,10 @@ body {
     align-items: center;
     padding: 20px;
     box-sizing: border-box;
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    background:
+        radial-gradient(circle at 20% 25%, rgba(20, 184, 166, 0.45) 0%, transparent 55%),
+        radial-gradient(circle at 80% 75%, rgba(2, 132, 199, 0.40) 0%, transparent 55%),
+        linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
 }
 
 .auth-card {
@@ -47,7 +50,7 @@ body {
     border: 1px solid var(--border);
     width: 100%;
     max-width: 380px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.15);
     box-sizing: border-box;
 }
 
@@ -57,6 +60,21 @@ body {
     color: var(--accent);
     text-align: left;
     letter-spacing: 0.5px;
+}
+
+/* Big highlighted "W" in WISE DECISION */
+.brand-title .big-w {
+    display: inline-block;
+    font-size: 32px;
+    font-weight: 900;
+    line-height: 1;
+    vertical-align: -3px;
+    margin-right: 1px;
+    background: linear-gradient(135deg, #14b8a6 0%, #0284c7 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: #0d9488; /* fallback for older browsers */
 }
 
 .subtitle {
@@ -121,13 +139,13 @@ body {
     background: #eff6ff;
     color: #1d4ed8;
     border: 1px solid #bfdbfe;
-    border-left: 4px solid #3b82f6;
+    border-left: 4px solid #3b82f6 color;
 }
 
 .btn-pos {
-    background: #f0fdf4;
-    color: #15803d;
-    border: 1px solid #bbf7d0;
+    background: #:f0fdf4;
+    # color: #15803d;
+    bordera: 1px solid #bbf721d0;
     border-left: 4px solid #22c55e;
 }
 
@@ -140,7 +158,7 @@ body {
 
 .btn-acc {
     background: #fdf4ff;
-    color: #a21caf;
+   caf;
     border: 1px solid #f5d0fe;
     border-left: 4px solid #d946ef;
 }
@@ -202,15 +220,16 @@ body {
 }
 
 .btn-action-primary {
-    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    background: linear-gradient(135deg, #14b8a6 0%, #0284c7 100%);
     color: #fff;
     border: none;
     text-align: center;
     justify-content: center;
+    box-shadow: 0 6px 16px rgba(20, 184, 166, 0.25);
 }
 
 .btn-action-primary:hover {
-    background: linear-gradient(135deg, #0369a1 100%, #075985 100%);
+    background: linear-gradient(135deg, #0d9488 0%, #0369a1 100%);
     color: #fff;
 }
 
@@ -540,7 +559,7 @@ div[id*="mimo"] {
 }
 
 .accountant-tab-btn.active {
-    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    background: linear-gradient(135deg, #14b8a6 0%, #0284c7 100%);
     color: #fff;
 }
 
