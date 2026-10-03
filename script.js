@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v21 (bandwidth: capped transaction reads, fewer live listeners, atomic stock deduction, login reads 4 fields)");
+console.log("Wise Decision script.js — build v25 (suppliers load on view open, login false-alarm fix, bandwidth fixes retained)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -232,7 +232,6 @@ function switchView(viewId) {
         return;
     }
 
-    // [v21] Fixed operator precedence — added explicit parens.
     if ((viewId.includes('dashboard') || viewId.includes('view')) && viewId !== 'login-view' && viewId !== 'register-view' && viewId !== 'super-admin-view') {
         document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
         
@@ -296,7 +295,12 @@ function switchView(viewId) {
                 loadTransfersView();
             }
             if (viewId === 'suppliers-view') {
+                // [v25] Paint whatever we already have, then fetch fresh from the
+                // server. Without this, opening the view showed an empty table if
+                // the login-time load hadn't finished, or a supplier had been
+                // added from another tab since login.
                 renderSuppliersTable(suppliersCache);
+                loadSuppliersCache();
                 loadSuppliesHistory();
             }
         } else {
@@ -450,9 +454,6 @@ function handleStoreLogin() {
         return;
     }
 
-    // [v21] Read only the 4 fields login needs, instead of the whole store node
-    // (which pulled every transaction, inventory record, etc. — huge on login for
-    // stores with thousands of sales).
     Promise.all([
         firebase.database().ref(`stores/${storeId}/status`).once('value'),
         firebase.database().ref(`stores/${storeId}/adminPin`).once('value'),
@@ -486,11 +487,19 @@ function handleStoreLogin() {
             document.getElementById('dashboard-store-title').textContent = storeData.businessName || "";
             document.getElementById('user-role-label').textContent = "Admin (Owner)";
             adjustSidebarForRole("Admin");
-            loadBranchesCache(() => switchView('main-dashboard-view'));
-            syncOfflineQueueToFirebase();
-            subscribeCustomersCache();
-            loadSuppliersCache();       // [v21] was subscribeSuppliersCache()
             resetIdleTimer();
+
+            // [v25] Post-login setup wrapped in try/catch so a DOM/read failure
+            // here can't reject the outer login promise (which was causing a
+            // "Connection error" alert even though login succeeded).
+            try {
+                loadBranchesCache(() => switchView('main-dashboard-view'));
+                syncOfflineQueueToFirebase();
+                subscribeCustomersCache();
+                loadSuppliersCache();
+            } catch (e) {
+                console.warn("Post-login setup error (login itself succeeded):", e);
+            }
             return;
         }
 
@@ -507,12 +516,17 @@ function handleStoreLogin() {
                     document.getElementById('dashboard-store-title').textContent = storeData.businessName || "";
                     document.getElementById('user-role-label').textContent = `${staff.name} (${staff.role})`;
                     adjustSidebarForRole(staff.role);
-                    loadBranchesCache(() => switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view'));
-                    syncOfflineQueueToFirebase();
-                    subscribeCustomersCache();
-                    loadSuppliersCache();       // [v21] was subscribeSuppliersCache()
                     resetIdleTimer();
-                    return;   // [v21] stop scanning once a matching PIN is found
+
+                    try {
+                        loadBranchesCache(() => switchView(staff.role === 'Accountant' ? 'accountant-view' : 'pos-view'));
+                        syncOfflineQueueToFirebase();
+                        subscribeCustomersCache();
+                        loadSuppliersCache();
+                    } catch (e) {
+                        console.warn("Post-login setup error (login itself succeeded):", e);
+                    }
+                    return;   // stop scanning once a matching PIN is found
                 }
             });
         }
@@ -522,7 +536,14 @@ function handleStoreLogin() {
         }
     }).catch(error => {
         console.error("Login error:", error);
-        alert("Connection error during login. Check network.");
+        // [v25] Only show the alert if we're genuinely NOT logged in. If
+        // currentStoreId is set, login actually succeeded and this catch is
+        // firing on a post-login side-effect (e.g. a missing DOM element or a
+        // read on a permission-restricted path) — showing "Connection error"
+        // in that case is a false alarm.
+        if (!currentStoreId) {
+            alert("Connection error during login. Check network.");
+        }
     });
 }
 
@@ -626,11 +647,6 @@ function changeSuperAdminMasterPin() {
 }
 
 function loadSuperAdminDashboard() {
-    // [v21] Once instead of a live listener. The old .on('value') on the whole
-    // /stores node downloaded every store's data on any change anywhere in the
-    // tree — brutal on bandwidth with 50+ stores. The superadmin-patch.js side
-    // (wdsReload) does its own refresh, and its 🔄 button calls this function
-    // again to re-fetch.
     firebase.database().ref('stores').once('value').then(snapshot => {
         const tbody = document.getElementById('super-admin-stores-body');
         if (!tbody) return;
@@ -670,7 +686,7 @@ function toggleStoreLock(storeId, currentStatus) {
     if (confirm(`Are you sure you want to ${actionText} store ID: ${storeId}?`)) {
         firebase.database().ref(`stores/${storeId}`).update({ status: newStatus }).then(() => {
             alert(`Store ${storeId} has been successfully ${newStatus}.`);
-            loadSuperAdminDashboard();   // [v21] refresh the once-read table
+            loadSuperAdminDashboard();
         });
     }
 }
@@ -701,8 +717,6 @@ function deleteBusinessAccount(storeId) {
     if (confirm(`⚠ DANGER: Are you absolutely sure you want to completely delete store ID "${storeId}" and all its associated data (inventory, transactions, staff, expenses)? This action cannot be undone!`)) {
         const confirmationCode = prompt(`Type the exact store ID "${storeId}" to confirm permanent deletion:`);
         if (confirmationCode === storeId) {
-            // [v21] Also clear the billing node so a deleted store doesn't leave
-            // stale billing data hanging around in the Super Admin dashboard.
             firebase.database().ref(`stores/${storeId}`).remove().then(() => {
                 return firebase.database().ref(`billing/${storeId}`).remove();
             }).then(() => {
@@ -724,8 +738,6 @@ function loadDashboardMetrics() {
     const branchLabelEl = document.getElementById('dash-branch-label');
     if (branchLabelEl) branchLabelEl.textContent = branchNameOf(currentBranch);
     
-    // [v21] Capped at last 300 — this fires on every dashboard open and only
-    // needs today's sales, but was reading the entire history.
     firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(300).once('value').then(snapshot => {
         let todaySales = 0;
         const todayStr = new Date().toDateString();
@@ -1995,8 +2007,6 @@ function loadCompletedTransactionsForAccountant() {
     if (!currentStoreId) return;
     if (currentUserRole !== 'Accountant' && currentUserRole !== 'Cashier' && currentUserRole !== 'Admin') return;
 
-    // [v21] Capped at last 300 — was pulling the entire transaction history on
-    // every new sale.
     const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(300);
     txRef.off();
     txRef.on('value', snapshot => {
@@ -2221,9 +2231,6 @@ function completeSplitCheckout() {
             firebase.database().ref(`stores/${currentStoreId}/transactions/${txId}`).set(orderData);
             firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).remove();
 
-            // [v21] Stock deduction now uses transaction() so two simultaneous
-            // sales of the same product can't both read the same stock value and
-            // silently lose one deduction.
             if (Array.isArray(orderData.items)) {
                 orderData.items.forEach(cartItem => {
                     const productId = cartItem.id;
@@ -2552,8 +2559,6 @@ function refundStatusBadge(tx) {
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
-    // [v21] Capped at last 300 — was reading the entire transaction history and
-    // redownloading it on every new sale.
     const txRef = firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(300);
     txRef.off();
     txRef.on('value', snapshot => {
@@ -2968,9 +2973,6 @@ function changeAdminOwnPin() {
 function loadExpensesTable() {
     if (!currentStoreId) return;
 
-    // [v21] Once instead of a live listener — was redownloading the entire
-    // expenses history on every new expense anywhere. Refresh is called
-    // explicitly by saveExpense and deleteExpense.
     firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value').then(snapshot => {
         const tbody = document.getElementById('expenses-body');
         if (!tbody) return;
@@ -3061,8 +3063,6 @@ function loadProfitAndLossModule() {
     if (plLabel) plLabel.textContent = plBranchFilter === 'all' ? '(All Branches)' : `(${branchNameOf(plBranchFilter)})`;
 
     Promise.all([
-        // [v21] Capped at last 1000 transactions — P&L only needs the current
-        // month, and a thousand is generous cover even for very busy stores.
         firebase.database().ref(`stores/${currentStoreId}/transactions`).limitToLast(1000).once('value'),
         firebase.database().ref(`stores/${currentStoreId}/inventory`).once('value'),
         firebase.database().ref(`stores/${currentStoreId}/expenses`).once('value'),
@@ -3548,9 +3548,6 @@ function printWaybill(transferId) {
 }
 
 // ==================== SUPPLIER MANAGEMENT MODULE ====================
-// [v21] Renamed from subscribeSuppliersCache — one-time read instead of a
-// persistent listener. Suppliers change rarely, so a live listener just
-// downloaded the whole suppliers node on every unrelated update.
 function loadSuppliersCache() {
     if (!currentStoreId) return;
 
@@ -3563,6 +3560,10 @@ function loadSuppliersCache() {
         }
     }).catch(error => console.error("loadSuppliersCache error:", error));
 }
+
+// [v25] Backwards-compat alias — some patches may still call the old name
+// subscribeSuppliersCache(). Safe to remove once you've confirmed nothing does.
+window.subscribeSuppliersCache = loadSuppliersCache;
 
 function renderSuppliersTable(dataset) {
     const tbody = document.getElementById('suppliers-body');
@@ -3653,7 +3654,7 @@ function saveSupplier() {
         suppRef.child(editId).update({ name, phone, email, address }).then(() => {
             alert("Supplier updated successfully!");
             closeSupplierModal();
-            loadSuppliersCache();   // [v21] refresh the once-read cache
+            loadSuppliersCache();
         }).catch(err => alert("Failed to update supplier: " + err.message));
     } else {
         suppRef.push().set({
@@ -3668,7 +3669,7 @@ function saveSupplier() {
         }).then(() => {
             alert("Supplier added successfully!");
             closeSupplierModal();
-            loadSuppliersCache();   // [v21]
+            loadSuppliersCache();
         }).catch(err => alert("Failed to save supplier: " + err.message));
     }
 }
@@ -3679,7 +3680,7 @@ function deleteSupplier(id) {
 
     if (confirm(`Are you sure you want to delete supplier "${s.name}"? Past supply records will remain for your history.`)) {
         firebase.database().ref(`stores/${currentStoreId}/suppliers/${id}`).remove().then(() => {
-            loadSuppliersCache();   // [v21]
+            loadSuppliersCache();
         });
     }
 }
@@ -3934,7 +3935,7 @@ function saveSupply() {
         alert(`Supply recorded successfully! Inventory at ${branchNameOf(branchId)} has been updated automatically.`);
         closeRecordSupplyModal();
         loadSuppliesHistory();
-        loadSuppliersCache();   // [v21] refresh the once-read supplier cache
+        loadSuppliersCache();
     }).catch(err => {
         console.error("saveSupply error:", err);
         alert("⚠️ This supply was NOT saved. Nothing was changed — please check your connection and try again.\n\nError: " + err.message);
@@ -3953,8 +3954,6 @@ function togglePurchaseOrderHistory() {
     }
 }
 
-// [v21] Once instead of a live listener — refresh is called manually by
-// saveSupply, saveQuickRestock, and switchView('suppliers-view').
 function loadSuppliesHistory() {
     if (!currentStoreId) return;
 
@@ -4255,8 +4254,8 @@ function saveQuickRestock() {
     }).then(() => {
         alert(`Restocked "${productName}" — stock is now ${item.soldByWeight ? newStock.toLocaleString() + ' ' + (item.weightUnit || 'Kg').toLowerCase() : stockBreakdownLabel(newStock, unitsPerPack)}.`);
         closeQuickRestockModal();
-        loadSuppliesHistory();       // [v21]
-        loadSuppliersCache();        // [v21]
+        loadSuppliesHistory();
+        loadSuppliersCache();
         const historyModal = document.getElementById('restock-history-modal');
         if (historyModal && historyModal.style.display === 'flex' && historyModal.dataset.productId === productId) {
             openProductRestockHistory(branchId, productId);
