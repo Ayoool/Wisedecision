@@ -1035,7 +1035,6 @@
                 <input type="text" id="split-status" readonly style="width: 100%; padding: 8px; border: none; font-weight: bold; text-align: center; background: #e2e8f0; color: #334155; border-radius: 8px;" value="Status: Pending">
             </div>
             <div style="display: flex; gap: 10px;" id="split-modal-buttons-container">
-                <!-- Updated button to invoke completeSplitCheckout() with corrected ID and label -->
                 <button id="dynamic-accept-print-btn" class="menu-btn btn-action-primary btn-pos" style="margin-bottom:0; justify-content: center;" onclick="completeSplitCheckout()" disabled>Accept Payment & Print Receipt 🖨</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="closeSplitModal()">Cancel</button>
             </div>
@@ -1058,7 +1057,6 @@
     </div>
 
     <!-- ================= ADD / EDIT PRODUCT MODAL ================= -->
-    <!-- Popped up so staff can edit a product without scrolling back to the top of the page. -->
     <div id="product-form-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <h3 id="inv-form-title" style="margin-top:0; font-size: 15px; color: var(--text);">Add New Product</h3>
@@ -1123,14 +1121,18 @@
 
             <div id="sell-in-pieces-block" style="background:#f5f3ff; border:1px solid #ddd6fe; border-radius:10px; padding:10px; margin-bottom:12px;">
                 <div style="font-size:11px; font-weight:bold; color:#6d28d9; margin-bottom:8px;">🔹 SELL IN PIECES (optional)</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label id="inv-units-per-pack-label">Pieces per Pack</label>
+                    <input type="number" id="inv-units-per-pack" placeholder="e.g. 10" min="1" oninput="toggleStockInputMode()">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
                     <div class="form-group" style="margin-bottom:0;">
-                        <label id="inv-units-per-pack-label">Pieces per Pack</label>
-                        <input type="number" id="inv-units-per-pack" placeholder="e.g. 10" min="1" oninput="toggleStockInputMode()">
+                        <label>Piece Retail Price (₦)</label>
+                        <input type="number" id="inv-piece-price" placeholder="e.g. 150">
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
-                        <label>Piece Price (₦)</label>
-                        <input type="number" id="inv-piece-price" placeholder="Price per piece">
+                        <label>Piece Wholesale Price (₦)</label>
+                        <input type="number" id="inv-piece-wholesale-price" placeholder="e.g. 130">
                     </div>
                 </div>
                 <div style="font-size:10px; color:var(--text-muted); margin-top:6px;">Leave "Pieces per Pack" as 1 (or blank) if this product is only ever sold whole.</div>
@@ -1619,7 +1621,7 @@
 
 
     <!-- Link your external JavaScript file -->
-        <script src="script.js?v=26" defer></script>
+        <script src="script.js?v=27" defer></script>
         <script src="perf-patch.js?v=24" defer></script>
         <script src="bugfix-patch.js?v=23" defer></script>
         <script src="offline-patch.js?v=23" defer></script>
