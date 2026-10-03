@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v27 (piece retail + wholesale prices)");
+console.log("Wise Decision script.js — build v28 (default POS sale unit is Piece)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -106,7 +106,7 @@ let inventoryCache = {};
 let currentCart = [];
 let currentActiveOrder = null;
 let currentCustomerType = "Retail";
-let currentSaleUnit = "Pack";
+let currentSaleUnit = "Piece";   // [v28] default POS sale unit — Piece, not Pack
 
 // ==================== BRANCH MODULE STATE ====================
 let branchesCache = {};
@@ -5348,8 +5348,7 @@ function updatePosCustomerBadge() {
     if (!badge) return;
 
     if (currentSelectedCustomer) {
-        const owesText = currentSelectedCustomer.balance > 0            ? ` <span style="color:#b91c1c;">(Owes ₦${currentSelectedCustomer.balance.toLocaleString()})</span>`
-            : '';
+        const owesText = currentSelectedCustomer.balance > 0 ? ` <span style="color:#b91c1c;">(Owes ₦${currentSelectedCustomer.balance.toLocaleString()})</span>` : '';
         badge.innerHTML = `Selling to: <strong>${currentSelectedCustomer.name}</strong>${owesText} <button class="menu-btn" style="display:inline-block; width:auto; padding:2px 8px; font-size:10px; margin-left:8px; margin-bottom:0;" onclick="clearPosCustomer()">Clear</button>`;
     } else {
         badge.textContent = 'Selling to: Walk-In Customer';
