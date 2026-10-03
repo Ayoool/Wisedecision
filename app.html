@@ -11,35 +11,14 @@
 
 <link rel="canonical" href="https://ayoool.github.io/Wisedecision/">
 <meta name="google-site-verification" content="syMFaIuJH07HLmCa--QTlXXuppA7PiFmyQP1l1ldWJ8" />
-    <!-- Preconnect hints: tells the browser to start the DNS lookup + connection
-         handshake with these servers immediately, in parallel with everything
-         else, instead of waiting until the actual script/data request needs
-         them. Pure timing hint — doesn't change what loads or when it runs,
-         just shaves a bit of latency off the connection itself. -->
+
     <link rel="preconnect" href="https://www.gstatic.com">
     <link rel="preconnect" href="https://wisedecision-24c4e-default-rtdb.firebaseio.com">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
-    
-    <!-- Firebase SDKs (Compat Version) -->
-    <!-- defer: lets the browser render the page without waiting for these to
-         download/execute first (they used to block first paint). Order is still
-         preserved — deferred scripts always run in the order they appear, right
-         before the page finishes loading — so script.js (also deferred, at the
-         bottom of the page) still runs after both of these, same as before. -->
+
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
-    <!-- html2pdf.bundle.min.js is no longer loaded here — it's a large library only
-         needed when someone actually clicks "Download PDF", so it's now fetched on
-         demand at that moment instead of slowing down every single page load.
-         See loadHtml2PdfLibrary() in script.js. -->
 
-    <!-- Link your external CSS file -->
-    <!-- Cache-busting version tag on style.css / script.js — GitHub Pages' CDN and
-         mobile Safari both cache these aggressively, so without a query string,
-         deploying a new version doesn't always reach phones even after a reload.
-         Bump the ?v= number (e.g. v=3, v=4...) every time you push a change to
-         either file, so browsers are forced to fetch the new copy instead of an
-         old cached one. -->
     <link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
@@ -53,7 +32,7 @@
     <span class="big-w">W</span>ISE DECISION
 </div>
                     <div class="subtitle" style="text-align: center;">Cloud Enterprise & POS Portal</div>
-                    
+
                     <div class="form-group">
                         <label>Store ID</label>
                         <input type="text" id="store-id-input" placeholder="e.g. medstar">
@@ -62,7 +41,7 @@
                         <label>Staff or Admin PIN</label>
                         <input type="password" id="staff-pin" placeholder="Enter your PIN">
                     </div>
-                    
+
                     <button class="menu-btn btn-action-primary" onclick="handleStoreLogin()">Login to Store</button>
                     <button class="menu-btn btn-secondary" style="justify-content: center;" onclick="switchView('register-view')">Register New Business</button>
                 </div>
@@ -75,7 +54,7 @@
                 <div class="auth-card" style="max-height: 90vh; overflow-y: auto;">
                     <div class="brand-title" style="text-align: center;">REGISTER BUSINESS</div>
                     <div class="subtitle" style="text-align: center;">Create a New Store on Cloud</div>
-                    
+
                     <div class="form-group">
                         <label>Store ID (No spaces, lowercase)</label>
                         <input type="text" id="reg-store-id" placeholder="e.g. medstar">
@@ -96,7 +75,7 @@
                         <label>Admin Master PIN</label>
                         <input type="password" id="reg-admin-pin" placeholder="Create secret login PIN">
                     </div>
-                    
+
                     <button class="menu-btn btn-action-primary" onclick="registerBusinessAccount()">Complete Registration</button>
                     <button class="menu-btn btn-logout" onclick="switchView('login-view')">Cancel & Return</button>
                 </div>
@@ -125,7 +104,7 @@
                     <button class="menu-btn btn-transfer" onclick="switchView('transfers-view')">🔄 Stock Transfers</button>
                     <button class="menu-btn btn-branch" onclick="switchView('branches-view')">🏢 Branches</button>
                     <button class="menu-btn btn-sec" onclick="switchView('settings-view')">⚙ Business Settings</button>
-                    
+
                     <button class="menu-btn btn-logout" onclick="logout()">🚪 Logout</button>
                 </div>
                 <div class="main-content-area" id="workspace-content"></div>
@@ -145,13 +124,13 @@
                         <button class="menu-btn btn-logout" style="width: auto; margin: 0;" onclick="switchView('login-view')">Logout / Exit</button>
                     </div>
                 </div>
-                
+
                 <div style="background: #ffffff; color: #0f172a; padding: 20px; border-radius: 12px; box-shadow: 0 20px 45px rgba(0,0,0,0.18);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="margin: 0; font-size: 16px; color: #1e293b;">Registered Stores Directory</h3>
                         <button class="menu-btn btn-action-primary" style="width: auto; margin: 0;" onclick="loadSuperAdminDashboard()">🔄 Refresh List</button>
                     </div>
-                    
+
                     <div style="overflow-x: auto;">
                         <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
                             <thead>
@@ -221,7 +200,7 @@
 
     <div id="pos-view-template" style="display: none;">
         <h2>Point of Sale (POS) Register</h2>
-        
+
         <!-- Customer Type Selection Toggle Bar -->
         <div style="display: flex; gap: 10px; margin: 15px 0; align-items: center; flex-wrap: wrap;">
             <span style="font-size: 13px; font-weight: bold; color: var(--text);">Customer Tier:</span>
@@ -249,7 +228,7 @@
 
         <div class="pos-grid" style="margin-top: 15px;">
             <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #eef2f7; box-shadow: 0 6px 18px rgba(15,23,42,0.06);">
-                
+
                 <div class="form-group">
                     <label>Search Product / Drug</label>
                     <input type="text" id="pos-search-input" oninput="filterPosInventory()" placeholder="Type product name to search...">
@@ -308,7 +287,7 @@
     <div id="expenses-view-template" style="display: none;">
         <h2>Store Expenses Management</h2>
         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">Record and track daily operational costs, utility bills, rent, and miscellaneous expenditures for <strong id="expenses-branch-label">Main</strong>.</p>
-        
+
         <div style="background: #ffffff; padding: 20px; border-radius: var(--radius); border: 1px solid #eef2f7; margin-bottom: 20px; box-shadow: 0 6px 18px rgba(15,23,42,0.06);">
             <h3 style="margin-top:0; font-size: 15px; color: var(--text);">Record New Expense</h3>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -523,7 +502,7 @@
         <h2>Business Settings</h2>
         <div class="card" style="max-width: 600px; margin: 20px 0; padding: 25px; background: #ffffff; border-radius: var(--radius); border: 1px solid #eef2f7; box-shadow: 0 6px 18px rgba(15,23,42,0.06);">
             <h3 style="margin-top: 0; margin-bottom: 20px; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; font-size: 16px;">Business Profile Settings</h3>
-            
+
             <div class="form-group" style="margin-bottom: 15px;">
                 <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #475569;">Business Name</label>
                 <input type="text" id="settings-store-name" placeholder="Enter business name" style="width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px;" />
@@ -542,10 +521,6 @@
             <button class="menu-btn btn-action-primary" onclick="updateBusinessProfile()" style="width: 100%; justify-content: center;">Save Profile Changes</button>
         </div>
 
-        <!-- Admin-only: lets the store Admin change their own login PIN without
-             needing Super Admin to reset it. Hidden for Accountant/Cashier, who
-             also land on this Business Settings view but don't own this PIN.
-             See loadBusinessSettings() / changeAdminOwnPin() in script.js. -->
         <div id="settings-pin-change-section" class="card" style="display:none; max-width: 600px; margin: 20px 0; padding: 25px; background: #ffffff; border-radius: var(--radius); border: 1px solid #eef2f7; box-shadow: 0 6px 18px rgba(15,23,42,0.06);">
             <h3 style="margin-top: 0; margin-bottom: 20px; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; font-size: 16px;">🔑 Change My PIN</h3>
 
@@ -880,7 +855,7 @@
             <button class="menu-btn btn-logout" style="width: auto;" onclick="switchView('reports-view')">🔙 Back to Reports</button>
         </div>
         <div id="printable-receipt-box" style="background: #fff; color: #000; padding: 20px; border-radius: 8px; max-width: 320px; font-family: monospace; margin: 0 auto; border: 1px solid #ccc; position: relative;">
-            
+
             <!-- Reprinted Watermark Badge -->
             <div id="reprintWatermark" style="display: none; text-align: center; color: red; font-weight: bold; font-size: 16px; border: 2px dashed red; margin-bottom: 10px; padding: 4px;">
                 ** REPRINTED **
@@ -1095,14 +1070,21 @@
                 <datalist id="inv-category-datalist"></datalist>
             </div>
 
-            <!-- Sold-by-weight toggle: for goods like rice, sugar, flour, etc. sold
-                 loose off a scale, by Kg or by gram, rather than as whole packs/pieces.
-                 When checked, Cost/Retail/Wholesale Price mean "per Kg/g", stock is a
-                 decimal amount in that unit, and the separate "SELL IN PIECES" block
-                 (which doesn't apply here) is hidden. Weight per Bag/Sack is optional —
-                 purely for showing a computed Price per Bag here and in Inventory, and
-                 for pre-filling the Restock modal (which still lets you override it,
-                 since actual bag weight can vary delivery to delivery). -->
+            <!-- [v26] Custom unit names — optional. Blank = default "Piece" / "Pack". -->
+            <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
+                <div style="font-size: 12px; font-weight: bold; color: #334155; margin-bottom: 6px;">Unit Names <span style="font-weight: normal; color: #64748b;">(optional — leave blank for "Piece" / "Pack")</span></div>
+
+                <label for="inv-base-unit-name" style="display:block; font-size: 11px; font-weight: bold; color: #475569; margin-bottom: 4px;">Smallest unit you sell</label>
+                <input type="text" id="inv-base-unit-name" list="inv-base-unit-datalist" placeholder="e.g. Capsule, Tablet, Sachet" oninput="onUnitNameInput()" style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;">
+                <datalist id="inv-base-unit-datalist"></datalist>
+
+                <label for="inv-bulk-unit-name" style="display:block; font-size: 11px; font-weight: bold; color: #475569; margin-bottom: 4px;">Bulk unit you sell</label>
+                <input type="text" id="inv-bulk-unit-name" list="inv-bulk-unit-datalist" placeholder="e.g. Carton, Pack, Box, Crate" oninput="onUnitNameInput()" style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 8px; box-sizing: border-box;">
+                <datalist id="inv-bulk-unit-datalist"></datalist>
+
+                <div id="inv-unit-preview" style="font-size: 11px; color: #475569; font-style: italic;">Preview: 1 Pack = [pieces] Pieces</div>
+            </div>
+
             <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px; margin-bottom:12px;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" id="inv-sold-by-weight" onchange="toggleSoldByWeightMode()" style="width:16px; height:16px; margin:0;">
@@ -1143,7 +1125,7 @@
                 <div style="font-size:11px; font-weight:bold; color:#6d28d9; margin-bottom:8px;">🔹 SELL IN PIECES (optional)</div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group" style="margin-bottom:0;">
-                        <label>Pieces per Pack</label>
+                        <label id="inv-units-per-pack-label">Pieces per Pack</label>
                         <input type="number" id="inv-units-per-pack" placeholder="e.g. 10" min="1" oninput="toggleStockInputMode()">
                     </div>
                     <div class="form-group" style="margin-bottom:0;">
@@ -1154,13 +1136,11 @@
                 <div style="font-size:10px; color:var(--text-muted); margin-top:6px;">Leave "Pieces per Pack" as 1 (or blank) if this product is only ever sold whole.</div>
             </div>
 
-            <!-- Simple stock entry — used when Pieces per Pack is 1/blank (product sold whole only), and repurposed for Kg stock when "sold by weight" is checked -->
             <div id="stock-simple-group" class="form-group">
                 <label id="inv-stock-label">Stock Qty (Packs)</label>
                 <input type="number" id="inv-stock" placeholder="e.g. 50 packs" step="1" oninput="recalcSplitStockTotal()">
             </div>
 
-            <!-- Split stock entry — used when Pieces per Pack > 1 (sell-in-pieces enabled) -->
             <div id="stock-split-group" style="display:none;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group">
@@ -1254,7 +1234,6 @@
     </div>
 
     <!-- ================= RECORD NEW SUPPLY MODAL ================= -->
-    <!-- Recording a supply here pushes the received items straight into inventory automatically. -->
     <div id="record-supply-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <h3 style="margin-top:0; color: var(--text);">Record New Supply</h3>
@@ -1288,9 +1267,6 @@
     </div>
 
     <!-- ================= QUICK RESTOCK MODAL ================= -->
-    <!-- Same underlying flow as "Record New Supply" (creates a real supply record and
-         updates inventory + supplier totals), just reachable with one click straight
-         from a product's row in Inventory instead of going through Suppliers first. -->
     <div id="quick-restock-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 400px; max-height: 92vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <h3 style="margin-top:0; color: var(--text);">🔄 Restock — <span id="restock-product-name">--</span></h3>
@@ -1313,11 +1289,6 @@
                 <input type="number" id="restock-qty-loose" min="0" placeholder="e.g. 4" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:12px;" oninput="recalcQuickRestockPreview()">
             </div>
 
-            <!-- Weight-based products: bags/sacks vary in weight delivery to delivery
-                 (e.g. sometimes 25kg bags, sometimes 30kg), so rather than a fixed
-                 "bag size" on the product, this asks for it fresh each restock and
-                 multiplies it out — still adds to the same continuous Kg/g stock pool
-                 that POS sells loose quantities from. -->
             <div id="restock-weight-bag-group" style="display:none;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group">
@@ -1352,9 +1323,6 @@
     </div>
 
     <!-- ================= PRODUCT RESTOCK HISTORY MODAL ================= -->
-    <!-- Opened from the "📜 History" button on a product's row in Inventory. Shows
-         every past restock for that exact product (from both Record New Supply and
-         the Quick Restock modal), newest first, with stock-before/after and date. -->
     <div id="restock-history-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 10px;">
@@ -1382,8 +1350,6 @@
     </div>
 
     <!-- ================= SUPPLY DETAILS VIEW MODAL ================= -->
-    <!-- Shows stock-before vs stock-after per item so an admin can see exactly what
-         changed when a supplier brings new goods, instead of a long inline item list. -->
     <div id="supply-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 10px;">
@@ -1533,10 +1499,6 @@
     </div>
 
     <!-- ================= REFUND MODAL ================= -->
-    <!-- Opened from Reports (Sales & Financial Reports) and Accountant Dashboard →
-         Completed Sales. Lets Admin/Accountant refund a whole order or just some
-         items/quantities. Restocks inventory automatically and prints a refund
-         receipt. See processRefund() in script.js for the full flow. -->
     <div id="refund-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1100; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 8px;">
@@ -1579,8 +1541,6 @@
     </div>
 
     <!-- ================= PENDING ORDER DETAILS MODAL ================= -->
-    <!-- Lets the Accountant/Cashier inspect the full item breakdown of a pending order
-         before committing to Process Payment, instead of only seeing the grand total. -->
     <div id="pending-order-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <h3 style="margin-top:0; color: var(--text);">Order Details — <span id="pending-details-tx-id">--</span></h3>
@@ -1619,10 +1579,6 @@
     </div>
 
     <!-- ================= HELD / PARKED CARTS MODAL ================= -->
-    <!-- Lets staff set aside an in-progress POS cart and resume it later without
-         losing items, the attached customer, or the Retail/Wholesale + Pack/Piece
-         selections. Held carts are scoped to whichever branch the staff was
-         selling from at the time. -->
     <div id="held-carts-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 12px;">
@@ -1649,10 +1605,6 @@
     </div>
 
     <!-- ================= SESSION IDLE TIMEOUT WARNING MODAL ================= -->
-    <!-- Shown after a period of no mouse/keyboard/touch activity while logged in,
-         to protect an unattended terminal (PINs, customer balances, etc). Counts
-         down and auto-logs-out if nobody responds — see resetIdleTimer() /
-         showIdleWarningModal() / extendSession() in script.js. -->
     <div id="idle-warning-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); justify-content: center; align-items: center; z-index: 2000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 24px; border-radius: 14px; width: 100%; max-width: 360px; text-align: center; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.35);">
             <div style="font-size: 32px; margin-bottom: 10px;">⏱</div>
@@ -1667,13 +1619,6 @@
 
 
     <!-- Link your external JavaScript file -->
-    <!-- defer here too, and critically — this MUST stay deferred as long as the
-         two Firebase <script> tags in <head> are deferred (see comment there).
-         Deferred scripts execute in document order, so this still runs after
-         both Firebase SDKs finish loading. If this tag ever loses its `defer`
-         while those keep theirs, this file would run BEFORE Firebase exists and
-         every firebase.database() call in it would throw immediately, breaking
-         login and everything else. -->
         <script src="script.js?v=26" defer></script>
         <script src="perf-patch.js?v=24" defer></script>
         <script src="bugfix-patch.js?v=23" defer></script>
@@ -1702,7 +1647,7 @@ window.addEventListener('load', function () {
 
   window.saveProduct = function () {
     var editId = document.getElementById('edit-product-id').value;
-    if (editId) return origSave.apply(this, arguments);      // editing is never blocked
+    if (editId) return origSave.apply(this, arguments);
 
     var name = norm(document.getElementById('inv-name').value);
     var branch = currentInventoryBranchFilter;
@@ -1732,7 +1677,7 @@ window.addEventListener('load', function () {
   window.addToCart = function () {
     var before = currentCart.length;
     var result = origAdd.apply(this, arguments);
-    if (currentCart.length > before) {           // only when the item really went into the cart
+    if (currentCart.length > before) {
       var search = document.getElementById('pos-search-input');
       if (search && search.value) { search.value = ''; if (typeof filterPosInventory === 'function') filterPosInventory(); }
       var sel = document.getElementById('pos-product-select'); if (sel) sel.value = '';
