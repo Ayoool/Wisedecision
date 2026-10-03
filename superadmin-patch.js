@@ -1,18 +1,11 @@
-// ==================== WISE DECISION SUPER ADMIN PATCH (v26) ====================
+// ==================== WISE DECISION SUPER ADMIN PATCH (v31) ====================
 // Load LAST (after script.js and the other patches), with `defer`.
 //
-// Replaces the Super Admin store list with a subscription dashboard:
-//   * Summary: stores, active, overdue, due soon, monthly income, collected this month
-//   * One card per store with due date, days left/overdue, fee, last paid, last active
-//   * Record payment (extends the due date, keeps a payment history, offers to unlock)
-//   * WhatsApp reminders with your bank details filled in
-//   * "Lock overdue stores" in one tap (after a grace period you choose)
-//   * Loads only store names/status instead of downloading every store's whole database
-//
-// Billing data is stored under `billing/<storeId>` (NOT inside the store), so store
-// staff have no reason to see it, and `billingSettings` holds your bank details.
+// v31 adds: revenue analytics + chart, bin UI with restore/purge, per-store
+// activity log, WhatsApp payment receipts, CSV export, trial-ending chip,
+// bulk selection with batch lock/remind, and MRR/collection/churn/dormant cards.
 
-console.log("Wise Decision superadmin-patch.js — v30 loaded");
+console.log("Wise Decision superadmin-patch.js — v31 loaded");
 
 function wdsDefaults() {
     return {
@@ -27,11 +20,12 @@ function wdsDefaults() {
 
 // ---------- State ----------
 var wdsStores = [];
-var wdsBinned = [];     // stores moved to the Bin (kept for 30 days)
+var wdsBinned = [];
 var wdsSettings = wdsDefaults();
 var wdsFilter = 'all';
 var wdsSearch = '';
 var wdsModalStoreId = null;
+var wdsBulkSelected = new Set();
 
 // ---------- Helpers ----------
 function wdsNum(n) { return Number(n) || 0; }
@@ -71,16 +65,15 @@ function wdsWaNumber(phone) {
 }
 function wdsValidDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim()); }
 
-// ---------- Billing logic (pure, tested) ----------
+// ---------- Billing logic ----------
 function wdsBillingState(billing, todayStr, settings) {
     if (!billing || !billing.dueDate) return { state: 'none' };
-    const days = wdsDaysBetween(todayStr, billing.dueDate);      // positive = still in the future
+    const days = wdsDaysBetween(todayStr, billing.dueDate);
     if (days < 0) return { state: 'overdue', days, overdueBy: -days, pastGrace: -days > wdsNum(settings.graceDays) };
     if (days <= wdsNum(settings.dueSoonDays)) return { state: 'due-soon', days };
     return { state: 'ok', days };
 }
 
-// Paying early keeps the days already paid for; paying late starts counting from today.
 function wdsNextDueDate(currentDue, todayStr, months) {
     const base = (currentDue && wdsDaysBetween(todayStr, currentDue) >= 0) ? currentDue : todayStr;
     return wdsAddMonths(base, months);
@@ -89,6 +82,12 @@ function wdsNextDueDate(currentDue, todayStr, months) {
 function wdsPaymentsOf(billing) {
     const p = (billing && billing.payments) || {};
     return Object.keys(p).map(k => Object.assign({ key: k }, p[k])).sort((a, b) => String(b.at || b.paidDate).localeCompare(String(a.at || a.paidDate)));
+}
+
+function wdsLogOf(billing) {
+    const l = (billing && billing.log) || {};
+    return Object.keys(l).map(k => Object.assign({ key: k }, l[k]))
+        .sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
 function wdsSummarize(stores, todayStr, settings) {
@@ -102,7 +101,7 @@ function wdsSummarize(stores, todayStr, settings) {
         if (b.state === 'overdue') { s.overdue++; s.overdueAmount += wdsNum(st.billing.monthlyFee); }
         if (b.state === 'due-soon') s.dueSoon++;
         if (st.billing && st.billing.trial) s.trials++;
-        if (!suspended && st.billing && !st.billing.trial) s.monthlyIncome += wdsNum(st.billing.monthlyFee);   // trials don't pay yet
+        if (!suspended && st.billing && !st.billing.trial) s.monthlyIncome += wdsNum(st.billing.monthlyFee);
         wdsPaymentsOf(st.billing).forEach(p => { if (String(p.paidDate || '').slice(0, 7) === monthPrefix) s.collected += wdsNum(p.amount); });
     });
     return s;
@@ -141,7 +140,81 @@ function wdsReminderMessage(store, st, settings) {
     return `Hello ${name}, this is Wise Decision support.\n\n${intro}\n\n${bank}\n\nStore ID: ${store.id}\nPlease send proof of payment after paying. Thank you!`;
 }
 
-// ---------- Store list: names/status only (not every store's whole database) ----------
+// ---------- Analytics ----------
+function wdsMonthlySeries(stores, monthsBack) {
+    const out = [];
+    const today = new Date();
+    for (let i = monthsBack - 1; i >= 0; i--) {
+        const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
+        out.push({
+            month: `${d.getUTCFullYear()}-${wdsPad(d.getUTCMonth() + 1)}`,
+            expected: 0, collected: 0, paidCount: 0, storeCount: 0, newStores: 0
+        });
+    }
+    const idx = {};
+    out.forEach((m, i) => { idx[m.month] = i; });
+
+    stores.forEach(st => {
+        const b = st.billing || {};
+        const created = (st.createdAt || '').slice(0, 7);
+        if (idx[created] !== undefined) out[idx[created]].newStores++;
+
+        if (b.monthlyFee && !b.trial) {
+            out.forEach(m => {
+                if (created && created <= m.month) {
+                    m.expected += wdsNum(b.monthlyFee);
+                    m.storeCount++;
+                }
+            });
+        }
+
+        wdsPaymentsOf(b).forEach(p => {
+            const key = String(p.paidDate || '').slice(0, 7);
+            if (idx[key] !== undefined) {
+                out[idx[key]].collected += wdsNum(p.amount);
+                out[idx[key]].paidCount++;
+            }
+        });
+    });
+    return out;
+}
+
+function wdsComputeMetrics(stores, today, settings) {
+    const s = wdsSummarize(stores, today, settings);
+    const mrr = s.monthlyIncome;
+    const collectionRate = mrr > 0 ? Math.min(1, s.collected / mrr) : 0;
+
+    const churnRisk = stores.filter(st => {
+        const b = wdsBillingState(st.billing, today, settings);
+        return st.status === 'suspended' || b.state === 'overdue';
+    }).length;
+
+    const now = Date.now();
+    const dormant = stores.filter(st => {
+        if (!st.lastActiveAt) return false;
+        return (now - new Date(st.lastActiveAt).getTime()) > 30 * 86400000;
+    }).length;
+
+    const ghosts = stores.filter(st => {
+        if (st.lastActiveAt) return false;
+        if (!st.createdAt) return false;
+        return (now - new Date(st.createdAt).getTime()) > 7 * 86400000;
+    }).length;
+
+    return { mrr, collectionRate, churnRisk, dormant, ghosts };
+}
+
+// ---------- Activity log ----------
+async function wdsLog(storeId, entry) {
+    try {
+        const key = firebase.database().ref(`billing/${storeId}/log`).push().key;
+        await firebase.database().ref(`billing/${storeId}/log/${key}`).set(
+            Object.assign({ at: new Date().toISOString(), by: 'Super Admin' }, entry)
+        );
+    } catch (e) { console.warn('Log failed', e); }
+}
+
+// ---------- Store list ----------
 async function wdsListStoreIds() {
     try {
         let url = `${firebase.app().options.databaseURL}/stores.json?shallow=true`;
@@ -162,7 +235,7 @@ async function wdsListStoreIds() {
     }
 }
 
-// ---------- Screen ----------
+// ---------- Modal ----------
 function wdsModal(title, html) {
     let m = document.getElementById('wds-modal');
     if (!m) {
@@ -180,12 +253,13 @@ function wdsModal(title, html) {
 }
 function wdsCloseModal() { const m = document.getElementById('wds-modal'); if (m) m.style.display = 'none'; }
 
+// ---------- Layout ----------
 function wdsEnsureLayout() {
     if (document.getElementById('wds-root')) return;
     const tbody = document.getElementById('super-admin-stores-body');
     const table = tbody && tbody.closest('table');
     if (!table) return;
-    const scroller = table.parentElement;          // the scrolling box around the old table
+    const scroller = table.parentElement;
     scroller.style.display = 'none';
     const root = document.createElement('div');
     root.id = 'wds-root';
@@ -194,6 +268,7 @@ function wdsEnsureLayout() {
         <div id="wds-summary"></div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:12px 0;">
             <input id="wds-search" type="text" placeholder="🔍 Search stores..." oninput="wdsSetSearch(this.value)" style="flex:1; min-width:140px; padding:9px; border:1px solid #cbd5e1; border-radius:8px;">
+            <button class="menu-btn" style="width:auto; margin:0; padding:8px 12px; font-size:12px; background:#f0fdf4; border:1px solid #bbf7d0; color:#166534;" onclick="wdsExportCSV()">⬇ Export CSV</button>
             <button class="menu-btn" style="width:auto; margin:0; padding:8px 12px; font-size:12px; background:#fef2f2; border:1px solid #fecaca; color:#991b1b;" onclick="wdsLockOverdue()">🔒 Lock overdue</button>
             <button class="menu-btn" style="width:auto; margin:0; padding:8px 12px; font-size:12px; background:#fffbeb; border:1px solid #fde68a; color:#92400e;" onclick="wdsOpenReminders()">📢 Reminders</button>
             <button class="menu-btn" style="width:auto; margin:0; padding:8px 12px; font-size:12px; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdsOpenSettings()">⚙ Billing settings</button>
@@ -236,7 +311,7 @@ async function wdsReload() {
 }
 
 function wdsSetSearch(v) { wdsSearch = String(v || '').toLowerCase().trim(); wdsRenderList(); }
-function wdsSetFilter(f) { wdsFilter = f; wdsRender(); }
+function wdsSetFilter(f) { wdsFilter = f; wdsBulkClear(); wdsRender(); }
 
 function wdsMatchesFilter(st, b) {
     if (typeof wdsExtraFilter === 'function') { const r = wdsExtraFilter(wdsFilter, st); if (r !== undefined) return r; }
@@ -246,6 +321,11 @@ function wdsMatchesFilter(st, b) {
     if (wdsFilter === 'due-soon') return b.state === 'due-soon';
     if (wdsFilter === 'none') return b.state === 'none';
     if (wdsFilter === 'trial') return !!(st.billing && st.billing.trial);
+    if (wdsFilter === 'trialSoon') {
+        if (!st.billing || !st.billing.trial) return false;
+        const bb = wdsBillingState(st.billing, wdsTodayStr(), wdsSettings);
+        return bb.state === 'due-soon' && bb.days <= 3;
+    }
     return true;
 }
 
@@ -253,24 +333,74 @@ function wdsRender() {
     if (!wdsSettings) wdsSettings = wdsDefaults();
     const today = wdsTodayStr();
     const sum = wdsSummarize(wdsStores, today, wdsSettings);
+    const metrics = wdsComputeMetrics(wdsStores, today, wdsSettings);
 
     const card = (label, value, color, sub) => `<div style="background:#f8fafc; border:1px solid #e2e8f0; border-left:4px solid ${color}; border-radius:8px; padding:10px;">
         <div style="font-size:10px; font-weight:bold; text-transform:uppercase; color:#64748b;">${label}</div>
         <div style="font-size:19px; font-weight:800; color:#0f172a;">${value}</div>${sub ? `<div style="font-size:11px; color:#64748b;">${sub}</div>` : ''}</div>`;
+
+    const series = wdsMonthlySeries(wdsStores, 6);
+    const maxVal = Math.max(1, ...series.map(m => Math.max(m.expected, m.collected)));
+    const chart = `<div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin:10px 0;">
+        <div style="font-size:11px; font-weight:bold; text-transform:uppercase; color:#64748b; margin-bottom:8px;">Last 6 months — expected vs collected</div>
+        <div style="display:flex; align-items:flex-end; gap:6px; height:80px;">
+            ${series.map(m => {
+                const eh = Math.round((m.expected / maxVal) * 70);
+                const ch = Math.round((m.collected / maxVal) * 70);
+                const label = m.month.slice(5);
+                return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+                    <div style="width:100%; display:flex; align-items:flex-end; justify-content:center; gap:2px; height:70px;">
+                        <div title="Expected ${wdsMoney(m.expected)}" style="width:40%; background:#cbd5e1; height:${eh}px; border-radius:2px 2px 0 0;"></div>
+                        <div title="Collected ${wdsMoney(m.collected)}" style="width:40%; background:#16a34a; height:${ch}px; border-radius:2px 2px 0 0;"></div>
+                    </div>
+                    <div style="font-size:10px; color:#64748b;">${label}</div>
+                </div>`;
+            }).join('')}
+        </div>
+        <div style="font-size:10px; color:#94a3b8; margin-top:6px; display:flex; gap:12px;">
+            <span><span style="display:inline-block; width:8px; height:8px; background:#cbd5e1; border-radius:1px;"></span> Expected</span>
+            <span><span style="display:inline-block; width:8px; height:8px; background:#16a34a; border-radius:1px;"></span> Collected</span>
+        </div>
+    </div>`;
+
     const el = document.getElementById('wds-summary');
     if (el) el.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px;">
         ${card('Stores', sum.total, '#0284c7', `${sum.active} active · ${sum.suspended} locked · ${sum.trials} on trial`)}
+        ${card('MRR', wdsMoney(metrics.mrr), '#0ea5e9', 'recurring per month')}
+        ${card('Collected this month', wdsMoney(sum.collected), '#7c3aed', `collection ${Math.round(metrics.collectionRate * 100)}%`)}
         ${card('Overdue', sum.overdue, '#dc2626', sum.overdue ? `${wdsMoney(sum.overdueAmount)} owed` : 'All good')}
         ${card('Due in ' + wdsSettings.dueSoonDays + ' days', sum.dueSoon, '#d97706', '')}
-        ${card('Monthly income', wdsMoney(sum.monthlyIncome), '#16a34a', 'from active stores')}
-        ${card('Collected this month', wdsMoney(sum.collected), '#7c3aed', '')}
-    </div>`;
+        ${card('Churn risk', metrics.churnRisk, '#dc2626', 'overdue or locked')}
+        ${card('Dormant 30d+', metrics.dormant, '#64748b', metrics.ghosts + ' never used')}
+    </div>${chart}`;
+
+    const trialsEndingSoonList = wdsStores.filter(st => {
+        if (!st.billing || !st.billing.trial) return false;
+        const b = wdsBillingState(st.billing, today, wdsSettings);
+        return b.state === 'due-soon' && b.days <= 3;
+    });
 
     const counts = { all: wdsStores.length, overdue: sum.overdue, 'due-soon': sum.dueSoon, trial: sum.trials, suspended: sum.suspended, none: sum.none };
     const labels = { all: 'All', overdue: 'Overdue', 'due-soon': 'Due soon', trial: 'On trial', suspended: 'Locked', none: 'No billing set' };
+    if (trialsEndingSoonList.length > 0) {
+        labels.trialSoon = `Trial ending (${trialsEndingSoonList.length})`;
+        counts.trialSoon = trialsEndingSoonList.length;
+    }
+    if (wdsBinned.length > 0) {
+        labels.bin = `Bin (${wdsBinned.length})`;
+        counts.bin = wdsBinned.length;
+    }
     if (typeof wdsExtraChips === 'function') { wdsExtraChips().forEach(c => { labels[c.key] = c.label; counts[c.key] = c.count; }); }
     const chips = document.getElementById('wds-chips');
-    if (chips) chips.innerHTML = Object.keys(labels).map(k => `<button onclick="wdsSetFilter('${k}')" style="padding:6px 12px; border-radius:16px; font-size:12px; font-weight:bold; cursor:pointer; border:1px solid ${wdsFilter === k ? '#0284c7' : '#cbd5e1'}; background:${wdsFilter === k ? '#0284c7' : '#fff'}; color:${wdsFilter === k ? '#fff' : '#334155'};">${labels[k]} (${counts[k]})</button>`).join('');
+    if (chips) chips.innerHTML = Object.keys(labels).map(k => {
+        const isBin = k === 'bin';
+        const isTrialSoon = k === 'trialSoon';
+        const active = wdsFilter === k;
+        let bg = active ? '#0284c7' : '#fff', col = active ? '#fff' : '#334155', bd = active ? '#0284c7' : '#cbd5e1';
+        if (isBin && !active) { bg = '#fef2f2'; col = '#991b1b'; bd = '#fecaca'; }
+        if (isTrialSoon && !active) { bg = '#ede9fe'; col = '#6d28d9'; bd = '#ddd6fe'; }
+        return `<button onclick="wdsSetFilter('${k}')" style="padding:6px 12px; border-radius:16px; font-size:12px; font-weight:bold; cursor:pointer; border:1px solid ${bd}; background:${bg}; color:${col};">${labels[k]} (${counts[k]})</button>`;
+    }).join('');
 
     wdsRenderList();
     if (typeof wdsAfterRender === 'function') { try { wdsAfterRender(); } catch (e) { console.warn(e); } }
@@ -281,6 +411,8 @@ function wdsRenderList() {
     const list = document.getElementById('wds-list');
     if (!list) return;
     const today = wdsTodayStr();
+
+    if (wdsFilter === 'bin') { wdsRenderBin(); return; }
 
     const rows = wdsSortStores(wdsStores, today, wdsSettings).filter(st => {
         const b = wdsBillingState(st.billing, today, wdsSettings);
@@ -310,8 +442,10 @@ function wdsRenderList() {
         const badge = (locked ? '<span style="background:#e2e8f0; color:#334155; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">LOCKED</span> ' : '') + (onTrial ? '<span style="background:#ede9fe; color:#6d28d9; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">FREE TRIAL</span>' : '');
         const id = wdsEsc(st.id);
         const btn = (act, label, style) => `<button data-id="${id}" onclick="wdsAct('${act}', this)" style="padding:6px 10px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc; color:#334155; ${style || ''}">${label}</button>`;
+        const checked = wdsBulkSelected.has(st.id) ? 'checked' : '';
 
-        return `<div style="border:1px solid #e2e8f0; border-left:5px solid ${color}; border-radius:8px; padding:12px; margin-bottom:10px; background:#fff;">
+        return `<div style="position:relative; border:1px solid #e2e8f0; border-left:5px solid ${color}; border-radius:8px; padding:12px 12px 12px 34px; margin-bottom:10px; background:#fff;">
+            <input type="checkbox" data-bulk="${id}" onchange="wdsToggleBulk(this)" ${checked} style="position:absolute; top:14px; left:10px; cursor:pointer;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
                 <div><strong style="font-size:15px;">${wdsEsc(st.name || 'Unnamed')}</strong> ${badge}<br><small style="color:#64748b;">${id}${st.phone ? ' · ' + wdsEsc(st.phone) : ''}</small></div>
                 <div style="text-align:right; font-size:12px; color:#334155;">${fee}</div>
@@ -329,6 +463,113 @@ function wdsRenderList() {
     }).join('');
 }
 
+function wdsRenderBin() {
+    const list = document.getElementById('wds-list');
+    const rows = wdsBinned.filter(st => {
+        if (!wdsSearch) return true;
+        return (st.name + ' ' + st.id + ' ' + st.phone).toLowerCase().indexOf(wdsSearch) !== -1;
+    });
+    if (rows.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#64748b; padding:24px;">Bin is empty.</div>';
+        return;
+    }
+    list.innerHTML = rows.map(st => {
+        const binnedAt = st.binnedAt ? new Date(st.binnedAt) : null;
+        const daysLeft = binnedAt ? Math.max(0, 30 - Math.floor((Date.now() - binnedAt.getTime()) / 86400000)) : '?';
+        const id = wdsEsc(st.id);
+        return `<div style="border:1px solid #fecaca; border-left:5px solid #dc2626; border-radius:8px; padding:12px; margin-bottom:10px; background:#fef2f2;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+                <div><strong style="font-size:15px;">${wdsEsc(st.name || 'Unnamed')}</strong><br>
+                <small style="color:#64748b;">${id}${st.phone ? ' · ' + wdsEsc(st.phone) : ''}</small></div>
+                <div style="font-size:11px; color:#991b1b; text-align:right;">Purges in ${daysLeft} day${daysLeft === 1 ? '' : 's'}<br>
+                <span style="color:#64748b;">deleted by ${wdsEsc(st.binnedBy || 'unknown')}</span></div>
+            </div>
+            <div style="font-size:12px; color:#64748b; margin:6px 0;">Bin time: ${binnedAt ? binnedAt.toLocaleString() : '—'}${st.statusBeforeBin ? ' · was ' + wdsEsc(st.statusBeforeBin) : ''}</div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button data-id="${id}" onclick="wdsRestoreBin(this)" style="padding:6px 10px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; background:#dcfce7; border:1px solid #86efac; color:#166534;">↩ Restore</button>
+                <button data-id="${id}" onclick="wdsPurgeBin(this)" style="padding:6px 10px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; background:#fee2e2; border:1px solid #fecaca; color:#991b1b;">🔥 Purge now</button>
+            </div></div>`;
+    }).join('');
+}
+
+async function wdsRestoreBin(el) {
+    const id = el.dataset.id;
+    const st = wdsBinned.find(s => s.id === id);
+    if (!st) return;
+    if (!confirm(`Restore ${st.name || id}?`)) return;
+    try {
+        const updates = {
+            [`stores/${id}/binnedAt`]: null,
+            [`stores/${id}/binnedBy`]: null,
+            [`stores/${id}/statusBeforeBin`]: null
+        };
+        if (st.statusBeforeBin) updates[`stores/${id}/status`] = st.statusBeforeBin;
+        await firebase.database().ref().update(updates);
+        await wdsLog(id, { type: 'restore', text: 'Restored from Bin' });
+        wdsFilter = 'all';
+        await wdsReload();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function wdsPurgeBin(el) {
+    const id = el.dataset.id;
+    const st = wdsBinned.find(s => s.id === id);
+    if (!st) return;
+    if (!confirm(`Permanently delete ${st.name || id}?\n\nThis cannot be undone. All store data will be removed.`)) return;
+    try {
+        await firebase.database().ref(`stores/${id}`).remove();
+        await firebase.database().ref(`billing/${id}`).remove();
+        await wdsReload();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+// ---------- Bulk selection ----------
+function wdsToggleBulk(el) {
+    if (el.checked) wdsBulkSelected.add(el.dataset.bulk);
+    else wdsBulkSelected.delete(el.dataset.bulk);
+    wdsRenderBulkBar();
+}
+function wdsRenderBulkBar() {
+    let bar = document.getElementById('wds-bulk-bar');
+    if (wdsBulkSelected.size === 0) { if (bar) bar.remove(); return; }
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'wds-bulk-bar';
+        bar.style.cssText = 'position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:10px; display:flex; gap:10px; align-items:center; z-index:1200; box-shadow:0 10px 30px rgba(0,0,0,0.3); font-size:13px;';
+        document.body.appendChild(bar);
+    }
+    bar.innerHTML = `
+        <strong>${wdsBulkSelected.size}</strong> selected
+        <button onclick="wdsBulkRemind()" style="padding:6px 10px; border-radius:6px; background:#d97706; color:#fff; border:none; cursor:pointer; font-weight:bold;">📲 Remind</button>
+        <button onclick="wdsBulkLock()" style="padding:6px 10px; border-radius:6px; background:#dc2626; color:#fff; border:none; cursor:pointer; font-weight:bold;">🔒 Lock</button>
+        <button onclick="wdsBulkClear()" style="padding:6px 10px; border-radius:6px; background:#475569; color:#fff; border:none; cursor:pointer; font-weight:bold;">✕</button>`;
+}
+function wdsBulkClear() {
+    wdsBulkSelected.clear();
+    document.querySelectorAll('[data-bulk]').forEach(c => c.checked = false);
+    wdsRenderBulkBar();
+}
+async function wdsBulkLock() {
+    if (wdsBulkSelected.size === 0) return;
+    if (!confirm(`Lock ${wdsBulkSelected.size} store${wdsBulkSelected.size === 1 ? '' : 's'}?`)) return;
+    const ids = [...wdsBulkSelected];
+    const updates = {};
+    ids.forEach(id => { updates[`stores/${id}/status`] = 'suspended'; });
+    try {
+        await firebase.database().ref().update(updates);
+        for (const id of ids) await wdsLog(id, { type: 'lock', text: 'Locked (bulk action)' });
+        wdsBulkClear();
+        await wdsReload();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+function wdsBulkRemind() {
+    const targets = [...wdsBulkSelected].map(id => wdsFind(id)).filter(Boolean);
+    if (targets.length === 0) return;
+    if (!confirm(`Open WhatsApp reminders for ${targets.length} store${targets.length === 1 ? '' : 's'}? You'll need to press send on each.`)) return;
+    targets.forEach((st, i) => setTimeout(() => wdsSendReminder(st.id), i * 400));
+    wdsBulkClear();
+}
+
 // ---------- Actions ----------
 function wdsFind(id) { return wdsStores.find(s => s.id === id); }
 
@@ -342,15 +583,16 @@ function wdsAct(action, el) {
     else if (action === 'history') wdsOpenHistory(st);
     else if (action === 'remind') wdsSendReminder(id);
     else if (action === 'lock') wdsToggleLock(st);
-    else if (action === 'pin') wdsRunAndRefresh(() => promptChangeStorePassword(id));
+    else if (action === 'pin') {
+        if (typeof promptChangeStorePassword !== 'function') return alert('PIN reset unavailable.');
+        wdsRunAndRefresh(() => promptChangeStorePassword(id));
+    }
     else if (action === 'delete') {
         if (typeof wdsSafeDelete === 'function') wdsSafeDelete(id);
         else wdsRunAndRefresh(() => deleteBusinessAccount(id), id);
     }
 }
 
-// The older buttons (PIN reset, delete) live in script.js / the auth patch and finish on their own;
-// reload the list afterwards, and tidy up billing data if the store is gone.
 function wdsRunAndRefresh(fn, deletedId) {
     Promise.resolve().then(fn).catch(e => console.warn(e)).then(() => {
         setTimeout(wdsReload, 1200);
@@ -371,11 +613,12 @@ async function wdsToggleLock(st) {
     if (!confirm(`${locking ? 'Lock' : 'Unlock'} ${st.name || st.id}?${locking ? '\n\nTheir staff will not be able to log in until you unlock it.' : ''}`)) return;
     try {
         await firebase.database().ref(`stores/${st.id}`).update({ status: locking ? 'suspended' : 'active' });
+        await wdsLog(st.id, { type: 'lock', text: locking ? 'Store locked' : 'Store unlocked' });
         await wdsReload();
     } catch (e) { alert("Failed: " + e.message); }
 }
 
-// ----- Plan -----
+// ---------- Plan ----------
 function wdsOpenPlan(st) {
     const b = st.billing || {};
     const suggestedDue = b.dueDate || wdsAddMonths(wdsTodayStr(), 1);
@@ -400,12 +643,13 @@ async function wdsSavePlan() {
     try {
         const trial = document.getElementById('wds-plan-trial').checked;
         await firebase.database().ref(`billing/${id}`).update({ monthlyFee: fee, dueDate: due, notes, trial: trial ? true : null });
+        await wdsLog(id, { type: 'plan', text: `Plan set: ${wdsMoney(fee)}/mo, due ${due}${trial ? ' (trial)' : ''}` });
         wdsCloseModal();
         await wdsReload();
     } catch (e) { alert("Failed to save: " + e.message); }
 }
 
-// ----- Payment -----
+// ---------- Payment ----------
 function wdsOpenPayment(st) {
     const b = st.billing || {};
     wdsModal(`Record payment — ${st.name || st.id}`, `
@@ -454,36 +698,64 @@ async function wdsSavePayment() {
         [`billing/${id}/dueDate`]: dueAfter,
         [`billing/${id}/lastPaidDate`]: today,
         [`billing/${id}/lastPaidAmount`]: amount,
-        [`billing/${id}/trial`]: null,          // first payment ends any free trial
+        [`billing/${id}/trial`]: null,
         [`billing/${id}/payments/${key}`]: { amount, months, method, note, paidDate: today, at: new Date().toISOString(), dueBefore, dueAfter, recordedBy: 'Super Admin' }
     };
     if (!(st.billing && st.billing.monthlyFee)) updates[`billing/${id}/monthlyFee`] = Math.round((amount / months) * 100) / 100;
 
     try {
         await firebase.database().ref().update(updates);
+        await wdsLog(id, { type: 'payment', text: `Payment ${wdsMoney(amount)} (${method}) — ${months}mo → due ${dueAfter}`, amount });
         wdsCloseModal();
+
+        let unlocked = false;
         if (st.status === 'suspended' && confirm(`Payment saved. ${st.name || st.id} is locked — unlock it now?`)) {
             await firebase.database().ref(`stores/${id}`).update({ status: 'active' });
+            await wdsLog(id, { type: 'lock', text: 'Unlocked after payment' });
+            unlocked = true;
         }
+
+        const receipt = `Hello ${st.name || st.id}, we received your payment of ${wdsMoney(amount)} (${months} month${months === 1 ? '' : 's'}).\n\nYour next due date is ${wdsPrettyDate(dueAfter)}.\n\nThank you for being with Wise Decision!`;
+        if (confirm(`Payment saved.${unlocked ? ' Store unlocked.' : ''}\n\nNext due date: ${wdsPrettyDate(dueAfter)}.\n\nSend a WhatsApp receipt now?`)) {
+            if (wdsWaNumber(st.phone)) {
+                window.open(`https://wa.me/${wdsWaNumber(st.phone)}?text=${encodeURIComponent(receipt)}`, '_blank');
+                await wdsLog(id, { type: 'receipt', text: 'WhatsApp receipt sent' });
+            } else {
+                prompt('No phone number saved. Copy this receipt:', receipt);
+            }
+        }
+
         await wdsReload();
-        alert(`Payment saved. Next due date: ${wdsPrettyDate(dueAfter)}.`);
     } catch (e) { alert("Failed to save payment: " + e.message); }
 }
 
-// ----- History -----
+// ---------- History ----------
 function wdsOpenHistory(st) {
     const pays = wdsPaymentsOf(st.billing);
+    const logs = wdsLogOf(st.billing);
     const total = pays.reduce((s, p) => s + wdsNum(p.amount), 0);
-    const rows = pays.length === 0
+
+    const paymentRows = pays.length === 0
         ? '<div style="text-align:center; color:#64748b; padding:16px;">No payments recorded yet.</div>'
         : `<table style="width:100%; font-size:12px; border-collapse:collapse;">
             <thead><tr style="text-align:left; color:#64748b;"><th style="padding:4px;">Date</th><th>Amount</th><th>Covers</th><th>By</th></tr></thead>
             <tbody>${pays.map(p => `<tr style="border-top:1px solid #e2e8f0;"><td style="padding:6px 4px;">${wdsPrettyDate(p.paidDate)}</td><td>${wdsMoney(p.amount)}</td><td>${wdsNum(p.months)} mo → ${wdsPrettyDate(p.dueAfter)}</td><td>${wdsEsc(p.method || '')}${p.note ? '<br><small style="color:#64748b;">' + wdsEsc(p.note) + '</small>' : ''}</td></tr>`).join('')}</tbody></table>
             <div style="margin-top:10px; font-weight:bold;">Total paid: ${wdsMoney(total)}</div>`;
-    wdsModal(`Payments — ${st.name || st.id}`, rows);
+
+    const logRows = logs.length === 0
+        ? '<div style="text-align:center; color:#64748b; padding:12px; font-size:12px;">No activity recorded yet.</div>'
+        : logs.map(l => `<div style="padding:6px 0; border-bottom:1px solid #f1f5f9; font-size:12px;">
+            <div style="color:#64748b; font-size:10px;">${new Date(l.at).toLocaleString()}${l.by ? ' · ' + wdsEsc(l.by) : ''}</div>
+            <div>${wdsEsc(l.text || l.type || '')}</div></div>`).join('');
+
+    wdsModal(`History — ${st.name || st.id}`, `
+        <div style="font-size:11px; font-weight:bold; text-transform:uppercase; color:#64748b; margin-bottom:6px;">Payments</div>
+        ${paymentRows}
+        <div style="font-size:11px; font-weight:bold; text-transform:uppercase; color:#64748b; margin:16px 0 6px;">Activity log</div>
+        ${logRows}`);
 }
 
-// ----- Reminders -----
+// ---------- Reminders ----------
 async function wdsSendReminder(id) {
     const st = wdsFind(id);
     if (!st) return;
@@ -494,7 +766,12 @@ async function wdsSendReminder(id) {
     } else {
         window.open(`https://wa.me/${wdsWaNumber(st.phone)}?text=${encodeURIComponent(msg)}`, '_blank');
     }
-    try { await firebase.database().ref(`billing/${id}/lastReminderAt`).set(new Date().toISOString()); st.billing = Object.assign({}, st.billing, { lastReminderAt: new Date().toISOString() }); } catch (e) {}
+    try {
+        const at = new Date().toISOString();
+        await firebase.database().ref(`billing/${id}/lastReminderAt`).set(at);
+        st.billing = Object.assign({}, st.billing, { lastReminderAt: at });
+        await wdsLog(id, { type: 'reminder', text: 'WhatsApp reminder sent' });
+    } catch (e) {}
 }
 
 function wdsOpenReminders() {
@@ -516,7 +793,7 @@ function wdsOpenReminders() {
         }).join('')}`);
 }
 
-// ----- Lock overdue -----
+// ---------- Lock overdue ----------
 async function wdsLockOverdue() {
     const today = wdsTodayStr();
     const targets = wdsStores.filter(st => {
@@ -530,12 +807,13 @@ async function wdsLockOverdue() {
         const updates = {};
         targets.forEach(t => { updates[`stores/${t.id}/status`] = 'suspended'; });
         await firebase.database().ref().update(updates);
+        for (const t of targets) await wdsLog(t.id, { type: 'lock', text: 'Auto-locked (bulk overdue)' });
         await wdsReload();
         alert(`${targets.length} store${targets.length === 1 ? '' : 's'} locked.`);
     } catch (e) { alert("Failed: " + e.message); }
 }
 
-// ----- Settings -----
+// ---------- Settings ----------
 function wdsOpenSettings() {
     const s = wdsSettings;
     const field = (id, label, value, type) => `<label style="font-size:12px; font-weight:bold;">${label}</label>
@@ -586,14 +864,48 @@ async function wdsBulkSetup() {
             updates[`billing/${t.id}/dueDate`] = due;
         });
         await firebase.database().ref().update(updates);
+        for (const t of targets) await wdsLog(t.id, { type: 'plan', text: `Bulk setup: ${wdsMoney(wdsSettings.defaultFee)}/mo, due ${due}` });
         wdsCloseModal();
         await wdsReload();
     } catch (e) { alert("Failed: " + e.message); }
 }
 
-// ---------- Track when a store was last used (shown as "Last active") ----------
+// ---------- CSV export ----------
+function wdsExportCSV() {
+    const today = wdsTodayStr();
+    const rows = [['Store ID','Name','Phone','Status','Monthly Fee','Due Date','State','Days','Last Paid','Last Paid Amount','Last Active','Trial']];
+    wdsSortStores(wdsStores, today, wdsSettings).forEach(st => {
+        const b = wdsBillingState(st.billing, today, wdsSettings);
+        rows.push([
+            st.id,
+            st.name || '',
+            st.phone || '',
+            st.status,
+            wdsNum(st.billing && st.billing.monthlyFee),
+            (st.billing && st.billing.dueDate) || '',
+            b.state,
+            b.days !== undefined ? b.days : '',
+            (st.billing && st.billing.lastPaidDate) || '',
+            wdsNum(st.billing && st.billing.lastPaidAmount),
+            st.lastActiveAt || '',
+            st.billing && st.billing.trial ? 'yes' : ''
+        ]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `wise-decision-stores-${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+}
+
+// ---------- Track last active ----------
 (function trackLastActive() {
     const prev = window.switchView;
+    if (typeof prev !== 'function') return;
     let marked = false;
     window.switchView = function (viewId) {
         const r = prev.apply(this, arguments);
