@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v26 (custom unit names: Capsule/Carton, Bottle/Crate, etc.)");
+console.log("Wise Decision script.js — build v27 (piece retail + wholesale prices)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -26,22 +26,9 @@ try {
 }
 
 // ==================== [v26] UNIT NAME HELPERS ====================
-// Custom unit names per product. Both fields are optional; blank falls back to
-// the classic "Piece" / "Pack" so every existing product keeps working unchanged.
-//
-// Data stored per product:
-//   baseUnitName: "Capsule"   (smallest unit sold)
-//   bulkUnitName: "Carton"    (bulk unit sold)
-//
-// Everywhere the app currently renders "Piece" or "Pack" as a label, we now
-// call getUnitLabels(item) and use the returned names instead.
-
-// Seed lists — suggestions only, users can type anything. Anything already used
-// on any product in the current store is added on top at load time.
 const SEED_BASE_UNITS = ['Capsule','Tablet','Sachet','Vial','Ampoule','Bottle','Piece','Roll','Strip','Tube','Pen','Pack','Kg','g','Cup','Dozen'];
 const SEED_BULK_UNITS = ['Carton','Pack','Box','Crate','Bag','Dozen','Bundle','Roll-pack','Sack','Tray','Drum','Yard','Basket'];
 
-// Returns { baseName, bulkName } for a product. Blank fields = default names.
 function getUnitLabels(item) {
     if (!item) return { baseName: 'Piece', bulkName: 'Pack' };
     const baseName = (item.baseUnitName && String(item.baseUnitName).trim()) || 'Piece';
@@ -49,8 +36,6 @@ function getUnitLabels(item) {
     return { baseName, bulkName };
 }
 
-// Pluralize a unit name for display ("Carton" → "Cartons" when qty != 1).
-// Keeps existing pluralization quirks (Kg, g) working.
 function pluralizeUnit(name, qty) {
     const n = Number(qty) || 0;
     if (n === 1) return name;
@@ -59,8 +44,6 @@ function pluralizeUnit(name, qty) {
     return name + 's';
 }
 
-// Populates the two datalists from (a) seed list, (b) every unit already used
-// on any product in this store, so autocomplete gets smarter over time.
 function refreshUnitNameDatalists() {
     const baseDl = document.getElementById('inv-base-unit-datalist');
     const bulkDl = document.getElementById('inv-bulk-unit-datalist');
@@ -81,7 +64,6 @@ function refreshUnitNameDatalists() {
     bulkDl.innerHTML = Array.from(usedBulk).sort(sortAlpha).map(u => `<option value="${u}">`).join('');
 }
 
-// Live preview under the unit name fields — updates as the user types.
 function onUnitNameInput() {
     const preview = document.getElementById('inv-unit-preview');
     if (!preview) return;
@@ -93,7 +75,6 @@ function onUnitNameInput() {
     } else {
         preview.textContent = `Preview: sold whole as ${bulkName} only`;
     }
-    // Also re-label the pieces-per-pack field so it reads naturally.
     const uppLabel = document.getElementById('inv-units-per-pack-label');
     if (uppLabel) uppLabel.textContent = `How many ${pluralizeUnit(baseName, 2)} in one ${bulkName}?`;
 }
@@ -929,7 +910,6 @@ function renderDashboardAlerts() {
         const categoryTag = a.category
             ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${a.category}</span>`
             : '<span style="color:var(--text-muted);">—</span>';
-        // [v26] Use custom unit names when present
         const labels = getUnitLabels(a);
         const stockDisplay = a.soldByWeight
             ? `${a.stock} ${a.weightUnit.toLowerCase()}`
@@ -947,7 +927,6 @@ function renderDashboardAlerts() {
     }).join('');
 }
 
-// [v26] Same as stockBreakdownLabel but takes custom unit names.
 function stockBreakdownLabelWithUnits(totalStock, unitsPerPack, labels) {
     const total = Number(totalStock) || 0;
     const perPack = Number(unitsPerPack) || 1;
@@ -978,7 +957,7 @@ function loadInventoryTable() {
         renderInventoryTable();
         populateInventoryCategoryFilter();
         updateCategoryDatalist();
-        refreshUnitNameDatalists();   // [v26]
+        refreshUnitNameDatalists();
     });
 }
 
@@ -1064,7 +1043,6 @@ function onInventoryCategoryFilterChange() {
     renderInventoryTable();
 }
 
-// [v26] Updated to use custom unit names.
 function packPieceInfoLabel(item) {
     const labels = getUnitLabels(item);
     if (item.soldByWeight) {
@@ -1078,10 +1056,20 @@ function packPieceInfoLabel(item) {
     return `1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}<br>${labels.baseName}: ₦${Number(piecePrice).toLocaleString()}`;
 }
 
+// [v27] Piece price now switches on customer tier using pieceRetail / pieceWholesale.
 function getPiecePrice(item, customerType) {
     const unitsPerPack = Number(item.unitsPerPack) || 1;
-    const explicitPiece = Number(item.piecePrice) || 0;
-    if (explicitPiece > 0) return explicitPiece;
+
+    const pieceRetail = Number(item.piecePrice) || 0;
+    const pieceWholesale = Number(item.pieceWholesalePrice) || 0;
+
+    if (customerType === 'Wholesale') {
+        if (pieceWholesale > 0) return pieceWholesale;
+        if (pieceRetail > 0) return pieceRetail;
+    } else {
+        if (pieceRetail > 0) return pieceRetail;
+    }
+
     const packPrice = customerType === 'Wholesale'
         ? (Number(item.wholesalePrice) || Number(item.price) || Number(item.retailPrice) || 0)
         : (Number(item.price) || Number(item.retailPrice) || 0);
@@ -1099,7 +1087,6 @@ function stockBreakdownLabel(totalStock, unitsPerPack) {
     return `${packs} Pks + ${loose} Pcs`;
 }
 
-// [v26] Uses custom unit names when available.
 function formatStockLabel(item) {
     const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     if (item.soldByWeight) {
@@ -1131,7 +1118,7 @@ function renderInventoryTable() {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', weightPerBag: item.weightPerBag || 0, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {}, baseUnitName: item.baseUnitName || '', bulkUnitName: item.bulkUnitName || '' };
+                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', weightPerBag: item.weightPerBag || 0, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, pieceWholesalePrice: item.pieceWholesalePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {}, baseUnitName: item.baseUnitName || '', bulkUnitName: item.bulkUnitName || '' };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -1291,7 +1278,7 @@ function openAddProductModal() {
         return;
     }
     resetInventoryForm();
-    refreshUnitNameDatalists();   // [v26]
+    refreshUnitNameDatalists();
     document.getElementById('product-form-modal').style.display = 'flex';
 }
 
@@ -1398,7 +1385,7 @@ function toggleStockInputMode() {
         splitGroup.style.display = 'none';
     }
     recalcSplitStockTotal();
-    onUnitNameInput();   // [v26] refresh preview
+    onUnitNameInput();
 }
 
 function recalcSplitStockTotal() {
@@ -1432,7 +1419,6 @@ function saveProduct() {
     const name = document.getElementById('inv-name').value.trim();
     const category = document.getElementById('inv-category')?.value.trim() || '';
 
-    // [v26] Custom unit names
     const baseUnitName = (document.getElementById('inv-base-unit-name')?.value || '').trim();
     const bulkUnitName = (document.getElementById('inv-bulk-unit-name')?.value || '').trim();
 
@@ -1446,6 +1432,8 @@ function saveProduct() {
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
     const unitsPerPack = soldByWeight ? 1 : (parseInt(document.getElementById('inv-units-per-pack').value) || 1);
     const piecePrice = soldByWeight ? 0 : (parseFloat(document.getElementById('inv-piece-price').value) || 0);
+    // [v27] Piece wholesale price — falls back to piece retail in POS when blank.
+    const pieceWholesalePrice = soldByWeight ? 0 : (parseFloat(document.getElementById('inv-piece-wholesale-price')?.value) || 0);
 
     let stock;
     if (soldByWeight) {
@@ -1470,8 +1458,8 @@ function saveProduct() {
         name,
         productName: name,
         category,
-        baseUnitName,   // [v26]
-        bulkUnitName,   // [v26]
+        baseUnitName,
+        bulkUnitName,
         soldByWeight,
         weightUnit,
         weightPerBag,
@@ -1482,6 +1470,7 @@ function saveProduct() {
         wholesalePrice, 
         unitsPerPack,
         piecePrice,
+        pieceWholesalePrice,   // [v27]
         stock, 
         stockQty: stock,
         expiry,
@@ -1524,7 +1513,6 @@ function editProduct(branchId, id) {
     const editCategoryField = document.getElementById('inv-category');
     if (editCategoryField) editCategoryField.value = item.category || '';
 
-    // [v26] Custom unit names
     const baseUnitField = document.getElementById('inv-base-unit-name');
     if (baseUnitField) baseUnitField.value = item.baseUnitName || '';
     const bulkUnitField = document.getElementById('inv-bulk-unit-name');
@@ -1543,6 +1531,9 @@ function editProduct(branchId, id) {
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
     document.getElementById('inv-units-per-pack').value = item.unitsPerPack || '';
     document.getElementById('inv-piece-price').value = item.piecePrice || '';
+    // [v27]
+    const pieceWholesaleField = document.getElementById('inv-piece-wholesale-price');
+    if (pieceWholesaleField) pieceWholesaleField.value = item.pieceWholesalePrice || '';
 
     const unitsPerPack = Number(item.unitsPerPack) || 1;
     const totalStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
@@ -1561,8 +1552,8 @@ function editProduct(branchId, id) {
         document.getElementById('inv-stock-loose').value = '';
     }
     toggleSoldByWeightMode();
-    refreshUnitNameDatalists();   // [v26]
-    onUnitNameInput();            // [v26]
+    refreshUnitNameDatalists();
+    onUnitNameInput();
 
     document.getElementById('inv-expiry').value = item.expiry || item.expiryDate || '';
     
@@ -1579,7 +1570,6 @@ function resetInventoryForm() {
     const resetCategoryField = document.getElementById('inv-category');
     if (resetCategoryField) resetCategoryField.value = '';
 
-    // [v26]
     const resetBaseUnit = document.getElementById('inv-base-unit-name');
     if (resetBaseUnit) resetBaseUnit.value = '';
     const resetBulkUnit = document.getElementById('inv-bulk-unit-name');
@@ -1598,12 +1588,15 @@ function resetInventoryForm() {
     document.getElementById('inv-wholesale-price').value = '';
     document.getElementById('inv-units-per-pack').value = '';
     document.getElementById('inv-piece-price').value = '';
+    // [v27]
+    const resetPieceWholesale = document.getElementById('inv-piece-wholesale-price');
+    if (resetPieceWholesale) resetPieceWholesale.value = '';
     document.getElementById('inv-stock').value = '';
     document.getElementById('inv-stock-packs').value = '';
     document.getElementById('inv-stock-loose').value = '';
     document.getElementById('inv-expiry').value = '';
     toggleSoldByWeightMode();
-    onUnitNameInput();   // [v26]
+    onUnitNameInput();
 
     document.getElementById('inv-form-title').textContent = "Add New Product";
     document.getElementById('save-product-btn').textContent = "Save Product to Cloud";
@@ -1678,20 +1671,18 @@ function applySaleUnitUI() {
     const qtyLabel = document.getElementById('pos-qty-label');
     const priceLabel = document.getElementById('pos-price-label');
 
-    // [v26] Look up the current product's custom unit names for labels
     const selectedId = document.getElementById('pos-product-select')?.value;
     const branchItems = inventoryCache[currentBranch] || {};
     const selectedItem = selectedId && branchItems[selectedId] ? branchItems[selectedId] : null;
     const labels = getUnitLabels(selectedItem);
 
     if (packBtn && pieceBtn) {
-        // Relabel the two toggle buttons if the product has custom unit names
         if (!selectedItem || !selectedItem.baseUnitName) {
-            packBtn.textContent = 'Pack';
-            pieceBtn.textContent = 'Piece';
+            packBtn.textContent = '📦 Pack';
+            pieceBtn.textContent = '🔹 Piece';
         } else {
-            packBtn.textContent = labels.bulkName;
-            pieceBtn.textContent = labels.baseName;
+            packBtn.textContent = '📦 ' + labels.bulkName;
+            pieceBtn.textContent = '🔹 ' + labels.baseName;
         }
         if (currentSaleUnit === 'Piece') {
             pieceBtn.style.background = '#7c3aed';
@@ -1782,6 +1773,7 @@ function onPosProductChange() {
             if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${wUnit})`;
             if (unitInfoEl) unitInfoEl.textContent = `⚖️ Sold by weight — enter the quantity in ${wUnit} (e.g. ${wUnit === 'g' ? '250' : '1.5'}).`;
         } else if (currentSaleUnit === 'Piece') {
+            // [v27] getPiecePrice now returns wholesale piece price when customer is Wholesale
             priceInput.value = getPiecePrice(item, currentCustomerType);
             if (qtyLabel) qtyLabel.textContent = `Quantity (${pluralizeUnit(labels.baseName, 2)})`;
             if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${labels.baseName})`;
@@ -1796,7 +1788,6 @@ function onPosProductChange() {
             if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${labels.bulkName})`;
             if (unitInfoEl) unitInfoEl.textContent = unitsPerPack > 1 ? `1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}.` : '';
         }
-        // [v26] Also update the pack/piece toggle button labels
         applySaleUnitUI();
     } else {
         priceInput.value = '';
@@ -1858,7 +1849,6 @@ function addToCart() {
         price,
         total: Math.round(qty * price * 100) / 100,
         customerType: currentCustomerType,
-        // [v26] Store custom labels on the cart line so receipts can render them
         baseUnitName: item.baseUnitName || '',
         bulkUnitName: item.bulkUnitName || ''
     });
@@ -1881,7 +1871,6 @@ function renderCart() {
 
     currentCart.forEach((cartItem, index) => {
         grandTotal += cartItem.total;
-        // [v26] Use custom unit names from the cart line
         const labels = getUnitLabels(cartItem);
         const unitLabel = cartItem.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
         tbody.innerHTML += `
@@ -2192,7 +2181,6 @@ function viewPendingOrderDetails(txId) {
         if (tbody) {
             tbody.innerHTML = '';
             (order.items || []).forEach(item => {
-                // [v26] Use custom labels from the cart line
                 const labels = getUnitLabels(item);
                 const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
                 const qty = item.qty || 0;
@@ -2521,7 +2509,6 @@ function renderReceiptView(orderData, isReprint = false) {
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
-                // [v26] Custom unit names on the receipt
                 const labels = getUnitLabels(item);
                 const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? labels.bulkName.toLowerCase() : ''));
                 const qtyDisplay = unitLabel ? `${item.qty || 0} ${unitLabel}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
@@ -2704,7 +2691,6 @@ function loadPastSalesHistory(selectedDateString = null) {
         let selectedDayTransfer = 0;
 
         const now = new Date();
-        const todayDateStr = now.toDateString();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
 
@@ -3569,6 +3555,7 @@ function confirmTransferReceipt(transferId) {
                                 wholesalePrice: src.wholesalePrice || 0,
                                 unitsPerPack: src.unitsPerPack || 1,
                                 piecePrice: src.piecePrice || 0,
+                                pieceWholesalePrice: src.pieceWholesalePrice || 0,
                                 baseUnitName: src.baseUnitName || '',
                                 bulkUnitName: src.bulkUnitName || '',
                                 stock: item.qty,
@@ -4027,6 +4014,7 @@ function saveSupply() {
                             wholesalePrice: item.wholesalePrice || 0,
                             unitsPerPack: 1,
                             piecePrice: 0,
+                            pieceWholesalePrice: 0,
                             baseUnitName: '',
                             bulkUnitName: '',
                             stock: item.stockAfter,
@@ -4227,7 +4215,6 @@ function openQuickRestockModal(branchId, productId) {
         if (costLabel) costLabel.textContent = 'Cost Price (₦ per Pack)';
         const packsLabel = document.querySelector('#restock-simple-group label');
         const packsInput = document.getElementById('restock-qty-packs');
-        // [v26] Relabel restock inputs to custom unit names
         if (packsLabel) packsLabel.textContent = `${pluralizeUnit(labels.bulkName, 2)} Received`;
         if (packsInput) { packsInput.placeholder = `e.g. 5 ${labels.bulkName.toLowerCase()}s`; packsInput.step = '1'; }
         const looseLabel = document.querySelector('#restock-loose-group label');
@@ -5361,8 +5348,7 @@ function updatePosCustomerBadge() {
     if (!badge) return;
 
     if (currentSelectedCustomer) {
-        const owesText = currentSelectedCustomer.balance > 0
-            ? ` <span style="color:#b91c1c;">(Owes ₦${currentSelectedCustomer.balance.toLocaleString()})</span>`
+        const owesText = currentSelectedCustomer.balance > 0            ? ` <span style="color:#b91c1c;">(Owes ₦${currentSelectedCustomer.balance.toLocaleString()})</span>`
             : '';
         badge.innerHTML = `Selling to: <strong>${currentSelectedCustomer.name}</strong>${owesText} <button class="menu-btn" style="display:inline-block; width:auto; padding:2px 8px; font-size:10px; margin-left:8px; margin-bottom:0;" onclick="clearPosCustomer()">Clear</button>`;
     } else {
