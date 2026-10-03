@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v25 (suppliers load on view open, login false-alarm fix, bandwidth fixes retained)");
+console.log("Wise Decision script.js — build v26 (custom unit names: Capsule/Carton, Bottle/Crate, etc.)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -23,6 +23,79 @@ try {
     }
 } catch (e) {
     console.error("Firebase init error:", e);
+}
+
+// ==================== [v26] UNIT NAME HELPERS ====================
+// Custom unit names per product. Both fields are optional; blank falls back to
+// the classic "Piece" / "Pack" so every existing product keeps working unchanged.
+//
+// Data stored per product:
+//   baseUnitName: "Capsule"   (smallest unit sold)
+//   bulkUnitName: "Carton"    (bulk unit sold)
+//
+// Everywhere the app currently renders "Piece" or "Pack" as a label, we now
+// call getUnitLabels(item) and use the returned names instead.
+
+// Seed lists — suggestions only, users can type anything. Anything already used
+// on any product in the current store is added on top at load time.
+const SEED_BASE_UNITS = ['Capsule','Tablet','Sachet','Vial','Ampoule','Bottle','Piece','Roll','Strip','Tube','Pen','Pack','Kg','g','Cup','Dozen'];
+const SEED_BULK_UNITS = ['Carton','Pack','Box','Crate','Bag','Dozen','Bundle','Roll-pack','Sack','Tray','Drum','Yard','Basket'];
+
+// Returns { baseName, bulkName } for a product. Blank fields = default names.
+function getUnitLabels(item) {
+    if (!item) return { baseName: 'Piece', bulkName: 'Pack' };
+    const baseName = (item.baseUnitName && String(item.baseUnitName).trim()) || 'Piece';
+    const bulkName = (item.bulkUnitName && String(item.bulkUnitName).trim()) || 'Pack';
+    return { baseName, bulkName };
+}
+
+// Pluralize a unit name for display ("Carton" → "Cartons" when qty != 1).
+// Keeps existing pluralization quirks (Kg, g) working.
+function pluralizeUnit(name, qty) {
+    const n = Number(qty) || 0;
+    if (n === 1) return name;
+    if (name === 'Kg' || name === 'kg') return 'kg';
+    if (name === 'g') return 'g';
+    return name + 's';
+}
+
+// Populates the two datalists from (a) seed list, (b) every unit already used
+// on any product in this store, so autocomplete gets smarter over time.
+function refreshUnitNameDatalists() {
+    const baseDl = document.getElementById('inv-base-unit-datalist');
+    const bulkDl = document.getElementById('inv-bulk-unit-datalist');
+    if (!baseDl || !bulkDl) return;
+
+    const usedBase = new Set(SEED_BASE_UNITS);
+    const usedBulk = new Set(SEED_BULK_UNITS);
+
+    Object.values(inventoryCache || {}).forEach(branchItems => {
+        Object.values(branchItems || {}).forEach(item => {
+            if (item && item.baseUnitName && String(item.baseUnitName).trim()) usedBase.add(String(item.baseUnitName).trim());
+            if (item && item.bulkUnitName && String(item.bulkUnitName).trim()) usedBulk.add(String(item.bulkUnitName).trim());
+        });
+    });
+
+    const sortAlpha = (a, b) => a.localeCompare(b);
+    baseDl.innerHTML = Array.from(usedBase).sort(sortAlpha).map(u => `<option value="${u}">`).join('');
+    bulkDl.innerHTML = Array.from(usedBulk).sort(sortAlpha).map(u => `<option value="${u}">`).join('');
+}
+
+// Live preview under the unit name fields — updates as the user types.
+function onUnitNameInput() {
+    const preview = document.getElementById('inv-unit-preview');
+    if (!preview) return;
+    const baseName = (document.getElementById('inv-base-unit-name')?.value || '').trim() || 'Piece';
+    const bulkName = (document.getElementById('inv-bulk-unit-name')?.value || '').trim() || 'Pack';
+    const upp = parseInt(document.getElementById('inv-units-per-pack')?.value) || 1;
+    if (upp > 1) {
+        preview.textContent = `Preview: 1 ${bulkName} = ${upp} ${pluralizeUnit(baseName, upp)}`;
+    } else {
+        preview.textContent = `Preview: sold whole as ${bulkName} only`;
+    }
+    // Also re-label the pieces-per-pack field so it reads naturally.
+    const uppLabel = document.getElementById('inv-units-per-pack-label');
+    if (uppLabel) uppLabel.textContent = `How many ${pluralizeUnit(baseName, 2)} in one ${bulkName}?`;
 }
 
 // ==================== LAZY-LOADED html2pdf LIBRARY ====================
@@ -295,10 +368,6 @@ function switchView(viewId) {
                 loadTransfersView();
             }
             if (viewId === 'suppliers-view') {
-                // [v25] Paint whatever we already have, then fetch fresh from the
-                // server. Without this, opening the view showed an empty table if
-                // the login-time load hadn't finished, or a supplier had been
-                // added from another tab since login.
                 renderSuppliersTable(suppliersCache);
                 loadSuppliersCache();
                 loadSuppliesHistory();
@@ -489,9 +558,6 @@ function handleStoreLogin() {
             adjustSidebarForRole("Admin");
             resetIdleTimer();
 
-            // [v25] Post-login setup wrapped in try/catch so a DOM/read failure
-            // here can't reject the outer login promise (which was causing a
-            // "Connection error" alert even though login succeeded).
             try {
                 loadBranchesCache(() => switchView('main-dashboard-view'));
                 syncOfflineQueueToFirebase();
@@ -526,7 +592,7 @@ function handleStoreLogin() {
                     } catch (e) {
                         console.warn("Post-login setup error (login itself succeeded):", e);
                     }
-                    return;   // stop scanning once a matching PIN is found
+                    return;
                 }
             });
         }
@@ -536,11 +602,6 @@ function handleStoreLogin() {
         }
     }).catch(error => {
         console.error("Login error:", error);
-        // [v25] Only show the alert if we're genuinely NOT logged in. If
-        // currentStoreId is set, login actually succeeded and this catch is
-        // firing on a post-login side-effect (e.g. a missing DOM element or a
-        // read on a permission-restricted path) — showing "Connection error"
-        // in that case is a false alarm.
         if (!currentStoreId) {
             alert("Connection error during login. Check network.");
         }
@@ -770,7 +831,7 @@ function loadDashboardMetrics() {
             const isExpiringSoon = expiryDate && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
 
             if (isLowStock || isExpiringSoon) {
-                alerts.push({ name: itemName, category, stock, soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', expiryVal, isLowStock, isExpiringSoon });
+                alerts.push({ name: itemName, category, stock, soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', expiryVal, isLowStock, isExpiringSoon, baseUnitName: item.baseUnitName, bulkUnitName: item.bulkUnitName, unitsPerPack: item.unitsPerPack });
             }
         });
 
@@ -868,12 +929,17 @@ function renderDashboardAlerts() {
         const categoryTag = a.category
             ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${a.category}</span>`
             : '<span style="color:var(--text-muted);">—</span>';
+        // [v26] Use custom unit names when present
+        const labels = getUnitLabels(a);
+        const stockDisplay = a.soldByWeight
+            ? `${a.stock} ${a.weightUnit.toLowerCase()}`
+            : stockBreakdownLabelWithUnits(a.stock, a.unitsPerPack, labels);
 
         return `
             <tr>
                 <td>${a.name}</td>
                 <td>${categoryTag}</td>
-                <td>${a.soldByWeight ? `${a.stock} ${a.weightUnit.toLowerCase()}` : a.stock}</td>
+                <td>${stockDisplay}</td>
                 <td>${a.expiryVal || 'N/A'}</td>
                 <td>${badge}</td>
             </tr>
@@ -881,7 +947,17 @@ function renderDashboardAlerts() {
     }).join('');
 }
 
-// ==================== BULLETPROOF INVENTORY LOADER (branch-aware) ====================
+// [v26] Same as stockBreakdownLabel but takes custom unit names.
+function stockBreakdownLabelWithUnits(totalStock, unitsPerPack, labels) {
+    const total = Number(totalStock) || 0;
+    const perPack = Number(unitsPerPack) || 1;
+    if (perPack <= 1) return String(total);
+    const packs = Math.floor(total / perPack);
+    const loose = total % perPack;
+    return `${packs} ${pluralizeUnit(labels.bulkName, packs)} + ${loose} ${pluralizeUnit(labels.baseName, loose)}`;
+}
+
+// ==================== BULLETPROOF INVENTORY LOADER ====================
 function loadInventoryTable() {
     if (!currentStoreId) return;
 
@@ -902,6 +978,7 @@ function loadInventoryTable() {
         renderInventoryTable();
         populateInventoryCategoryFilter();
         updateCategoryDatalist();
+        refreshUnitNameDatalists();   // [v26]
     });
 }
 
@@ -987,16 +1064,18 @@ function onInventoryCategoryFilterChange() {
     renderInventoryTable();
 }
 
+// [v26] Updated to use custom unit names.
 function packPieceInfoLabel(item) {
+    const labels = getUnitLabels(item);
     if (item.soldByWeight) {
         const wUnit = item.weightUnit || 'Kg';
         const bagNote = item.weightPerBag ? ` · ${item.weightPerBag}${wUnit}/bag` : '';
         return `<span style="color:#1e40af; font-weight:bold;">⚖️ Sold by weight (${wUnit})${bagNote}</span>`;
     }
     const unitsPerPack = Number(item.unitsPerPack) || 1;
-    if (unitsPerPack <= 1) return '<span style="color:var(--text-muted);">Sold whole only</span>';
+    if (unitsPerPack <= 1) return `<span style="color:var(--text-muted);">Sold whole as ${labels.bulkName} only</span>`;
     const piecePrice = getPiecePrice(item, 'Retail');
-    return `1 pack = ${unitsPerPack} pcs<br>Piece: ₦${Number(piecePrice).toLocaleString()}`;
+    return `1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}<br>${labels.baseName}: ₦${Number(piecePrice).toLocaleString()}`;
 }
 
 function getPiecePrice(item, customerType) {
@@ -1020,6 +1099,7 @@ function stockBreakdownLabel(totalStock, unitsPerPack) {
     return `${packs} Pks + ${loose} Pcs`;
 }
 
+// [v26] Uses custom unit names when available.
 function formatStockLabel(item) {
     const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     if (item.soldByWeight) {
@@ -1027,7 +1107,8 @@ function formatStockLabel(item) {
         const amount = Math.round((Number(stock) || 0) * 100) / 100;
         return `${amount.toLocaleString()} ${unit.toLowerCase()}`;
     }
-    return stockBreakdownLabel(stock, item.unitsPerPack);
+    const labels = getUnitLabels(item);
+    return stockBreakdownLabelWithUnits(stock, item.unitsPerPack, labels);
 }
 
 function renderInventoryTable() {
@@ -1050,7 +1131,7 @@ function renderInventoryTable() {
                 const name = item.name || item.productName || 'Unnamed Item';
                 const key = name.toLowerCase().trim();
                 if (!combined[key]) {
-                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', weightPerBag: item.weightPerBag || 0, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {} };
+                    combined[key] = { name, category: item.category || '', soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', weightPerBag: item.weightPerBag || 0, costPrice: item.costPrice || 0, price: item.price || item.retailPrice || 0, wholesalePrice: item.wholesalePrice || 0, unitsPerPack: item.unitsPerPack || 1, piecePrice: item.piecePrice || 0, stock: 0, expiry: item.expiry || item.expiryDate || 'N/A', branches: {}, baseUnitName: item.baseUnitName || '', bulkUnitName: item.bulkUnitName || '' };
                 }
                 const stock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 combined[key].stock += Number(stock) || 0;
@@ -1096,7 +1177,6 @@ function renderInventoryTable() {
         const cPrice = item.costPrice !== undefined ? item.costPrice : (item.cost || 0);
         const rPrice = item.price !== undefined ? item.price : (item.retailPrice || 0);
         const wPrice = item.wholesalePrice !== undefined ? item.wholesalePrice : 0;
-        const pStock = item.stock !== undefined ? item.stock : (item.stockQty !== undefined ? item.stockQty : 0);
         const pExpiry = item.expiry || item.expiryDate || 'N/A';
 
         rowsHtml.push(`
@@ -1149,7 +1229,6 @@ function filterInventoryTable() {
                 const cPrice = item.costPrice || 0;
                 const rPrice = item.price || item.retailPrice || 0;
                 const wPrice = item.wholesalePrice || 0;
-                const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
                 const pExpiry = item.expiry || item.expiryDate || 'N/A';
                 rowsHtml.push(`
                     <tr>
@@ -1178,7 +1257,6 @@ function filterInventoryTable() {
             const cPrice = item.costPrice || 0;
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
-            const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
             const pExpiry = item.expiry || item.expiryDate || 'N/A';
             rowsHtml.push(`
                 <tr id="inv-row-${branchId}-${id}">
@@ -1212,10 +1290,8 @@ function openAddProductModal() {
         alert("Please select a specific branch before adding a new product — stock is tracked per branch.");
         return;
     }
-    if (!document.getElementById('inv-category')) {
-        console.warn("openAddProductModal: #inv-category field not found — index.html appears to be an older cached version (missing the Category feature markup). Hard-refresh or redeploy the latest index.html.");
-    }
     resetInventoryForm();
+    refreshUnitNameDatalists();   // [v26]
     document.getElementById('product-form-modal').style.display = 'flex';
 }
 
@@ -1227,7 +1303,7 @@ function closeProductModal() {
 function toggleSoldByWeightMode() {
     const weightCheckbox = document.getElementById('inv-sold-by-weight');
     if (!weightCheckbox) {
-        console.warn("toggleSoldByWeightMode: #inv-sold-by-weight not found — index.html appears to be an older cached version. Hard-refresh or redeploy the latest index.html.");
+        console.warn("toggleSoldByWeightMode: #inv-sold-by-weight not found — index.html appears to be an older cached version.");
         return;
     }
     const isWeight = weightCheckbox.checked;
@@ -1253,7 +1329,7 @@ function toggleSoldByWeightMode() {
         if (wholesaleLabel) wholesaleLabel.textContent = `Wholesale Price (₦ / ${weightUnit})`;
         if (stockLabel) stockLabel.textContent = `Stock Qty (${weightUnit})`;
         if (weightPerBagLabel) weightPerBagLabel.textContent = `Total Weight per Bag/Sack (optional, e.g. ${weightUnit === 'g' ? '500' : '50'})`;
-        if (lowStockLabel) lowStockLabel.textContent = `Low Stock Alert Threshold (optional, e.g. ${weightUnit === 'g' ? '200' : '2'} ${weightUnit} — no default, since a sensible amount varies a lot by product)`;
+        if (lowStockLabel) lowStockLabel.textContent = `Low Stock Alert Threshold (optional, e.g. ${weightUnit === 'g' ? '200' : '2'} ${weightUnit})`;
         if (lowStockInput) lowStockInput.placeholder = weightUnit === 'g' ? 'e.g. 200' : 'e.g. 2';
         if (stockInput) {
             stockInput.placeholder = weightUnit === 'g' ? 'e.g. 500 g' : 'e.g. 25.5 kg';
@@ -1322,6 +1398,7 @@ function toggleStockInputMode() {
         splitGroup.style.display = 'none';
     }
     recalcSplitStockTotal();
+    onUnitNameInput();   // [v26] refresh preview
 }
 
 function recalcSplitStockTotal() {
@@ -1337,7 +1414,7 @@ function recalcSplitStockTotal() {
     }
 }
 
-// ==================== BULLETPROOF PRODUCT SAVER (branch-scoped) ====================
+// ==================== BULLETPROOF PRODUCT SAVER ====================
 function saveProduct() {
     if (!currentStoreId) {
         alert("Error: No active Store ID found. Please log out and log back in.");
@@ -1354,6 +1431,11 @@ function saveProduct() {
     const editBranch = document.getElementById('edit-product-branch').value || targetBranch;
     const name = document.getElementById('inv-name').value.trim();
     const category = document.getElementById('inv-category')?.value.trim() || '';
+
+    // [v26] Custom unit names
+    const baseUnitName = (document.getElementById('inv-base-unit-name')?.value || '').trim();
+    const bulkUnitName = (document.getElementById('inv-bulk-unit-name')?.value || '').trim();
+
     const soldByWeight = document.getElementById('inv-sold-by-weight')?.checked || false;
     const weightUnit = soldByWeight ? (document.getElementById('inv-weight-unit')?.value || 'Kg') : null;
     const weightPerBag = soldByWeight ? (parseFloat(document.getElementById('inv-weight-per-bag')?.value) || 0) : 0;
@@ -1388,6 +1470,8 @@ function saveProduct() {
         name,
         productName: name,
         category,
+        baseUnitName,   // [v26]
+        bulkUnitName,   // [v26]
         soldByWeight,
         weightUnit,
         weightPerBag,
@@ -1439,6 +1523,13 @@ function editProduct(branchId, id) {
     document.getElementById('inv-name').value = item.name || item.productName || '';
     const editCategoryField = document.getElementById('inv-category');
     if (editCategoryField) editCategoryField.value = item.category || '';
+
+    // [v26] Custom unit names
+    const baseUnitField = document.getElementById('inv-base-unit-name');
+    if (baseUnitField) baseUnitField.value = item.baseUnitName || '';
+    const bulkUnitField = document.getElementById('inv-bulk-unit-name');
+    if (bulkUnitField) bulkUnitField.value = item.bulkUnitName || '';
+
     const soldByWeightField = document.getElementById('inv-sold-by-weight');
     if (soldByWeightField) soldByWeightField.checked = !!item.soldByWeight;
     const weightUnitField = document.getElementById('inv-weight-unit');
@@ -1470,6 +1561,8 @@ function editProduct(branchId, id) {
         document.getElementById('inv-stock-loose').value = '';
     }
     toggleSoldByWeightMode();
+    refreshUnitNameDatalists();   // [v26]
+    onUnitNameInput();            // [v26]
 
     document.getElementById('inv-expiry').value = item.expiry || item.expiryDate || '';
     
@@ -1485,6 +1578,13 @@ function resetInventoryForm() {
     document.getElementById('inv-name').value = '';
     const resetCategoryField = document.getElementById('inv-category');
     if (resetCategoryField) resetCategoryField.value = '';
+
+    // [v26]
+    const resetBaseUnit = document.getElementById('inv-base-unit-name');
+    if (resetBaseUnit) resetBaseUnit.value = '';
+    const resetBulkUnit = document.getElementById('inv-bulk-unit-name');
+    if (resetBulkUnit) resetBulkUnit.value = '';
+
     const resetWeightField = document.getElementById('inv-sold-by-weight');
     if (resetWeightField) resetWeightField.checked = false;
     const resetWeightUnitField = document.getElementById('inv-weight-unit');
@@ -1503,7 +1603,8 @@ function resetInventoryForm() {
     document.getElementById('inv-stock-loose').value = '';
     document.getElementById('inv-expiry').value = '';
     toggleSoldByWeightMode();
-    
+    onUnitNameInput();   // [v26]
+
     document.getElementById('inv-form-title').textContent = "Add New Product";
     document.getElementById('save-product-btn').textContent = "Save Product to Cloud";
 }
@@ -1543,7 +1644,7 @@ function generateNextRefundId() {
     });
 }
 
-// ==================== POS & CART REGISTER (branch-scoped) ====================
+// ==================== POS & CART REGISTER ====================
 function setCustomerType(type) {
     currentCustomerType = type;
     const retailBtn = document.getElementById('btn-type-retail');
@@ -1577,7 +1678,21 @@ function applySaleUnitUI() {
     const qtyLabel = document.getElementById('pos-qty-label');
     const priceLabel = document.getElementById('pos-price-label');
 
+    // [v26] Look up the current product's custom unit names for labels
+    const selectedId = document.getElementById('pos-product-select')?.value;
+    const branchItems = inventoryCache[currentBranch] || {};
+    const selectedItem = selectedId && branchItems[selectedId] ? branchItems[selectedId] : null;
+    const labels = getUnitLabels(selectedItem);
+
     if (packBtn && pieceBtn) {
+        // Relabel the two toggle buttons if the product has custom unit names
+        if (!selectedItem || !selectedItem.baseUnitName) {
+            packBtn.textContent = 'Pack';
+            pieceBtn.textContent = 'Piece';
+        } else {
+            packBtn.textContent = labels.bulkName;
+            pieceBtn.textContent = labels.baseName;
+        }
         if (currentSaleUnit === 'Piece') {
             pieceBtn.style.background = '#7c3aed';
             pieceBtn.style.color = '#fff';
@@ -1590,8 +1705,8 @@ function applySaleUnitUI() {
             pieceBtn.style.color = '#1e293b';
         }
     }
-    if (qtyLabel) qtyLabel.textContent = currentSaleUnit === 'Piece' ? 'Quantity (Pieces)' : 'Quantity (Packs)';
-    if (priceLabel) priceLabel.textContent = currentSaleUnit === 'Piece' ? 'Selling Price (₦ / Piece)' : 'Selling Price (₦ / Pack)';
+    if (qtyLabel) qtyLabel.textContent = currentSaleUnit === 'Piece' ? `Quantity (${pluralizeUnit(labels.baseName, 2)})` : `Quantity (${pluralizeUnit(labels.bulkName, 2)})`;
+    if (priceLabel) priceLabel.textContent = currentSaleUnit === 'Piece' ? `Selling Price (₦ / ${labels.baseName})` : `Selling Price (₦ / ${labels.bulkName})`;
 }
 
 function loadPosInventoryDropdown() {
@@ -1613,7 +1728,8 @@ function loadPosInventoryDropdown() {
             const rPrice = item.price || item.retailPrice || 0;
             const wPrice = item.wholesalePrice || 0;
             const unitsPerPack = Number(item.unitsPerPack) || 1;
-            const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '');
+            const labels = getUnitLabels(item);
+            const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}]` : '');
 
             select.innerHTML += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         });
@@ -1634,7 +1750,8 @@ function filterPosInventory() {
         const rPrice = item.price || item.retailPrice || 0;
         const wPrice = item.wholesalePrice || 0;
         const unitsPerPack = Number(item.unitsPerPack) || 1;
-        const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '');
+        const labels = getUnitLabels(item);
+        const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}]` : '');
 
         if (pName.toLowerCase().includes(query)) {
             select.innerHTML += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
@@ -1652,6 +1769,7 @@ function onPosProductChange() {
 
     if (id && branchItems[id]) {
         const item = branchItems[id];
+        const labels = getUnitLabels(item);
         const unitsPerPack = Number(item.unitsPerPack) || 1;
         const rPrice = item.price || item.retailPrice || 0;
         const wPrice = item.wholesalePrice || rPrice;
@@ -1665,19 +1783,21 @@ function onPosProductChange() {
             if (unitInfoEl) unitInfoEl.textContent = `⚖️ Sold by weight — enter the quantity in ${wUnit} (e.g. ${wUnit === 'g' ? '250' : '1.5'}).`;
         } else if (currentSaleUnit === 'Piece') {
             priceInput.value = getPiecePrice(item, currentCustomerType);
-            if (qtyLabel) qtyLabel.textContent = 'Quantity (Pieces)';
-            if (priceLabel) priceLabel.textContent = 'Selling Price (₦ / Piece)';
+            if (qtyLabel) qtyLabel.textContent = `Quantity (${pluralizeUnit(labels.baseName, 2)})`;
+            if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${labels.baseName})`;
             if (unitInfoEl) {
                 unitInfoEl.textContent = unitsPerPack > 1
-                    ? `1 pack = ${unitsPerPack} pcs. Selling by the piece.`
-                    : `⚠ This product isn't set up for piece sales (Pieces per Pack = 1) — selling whole units.`;
+                    ? `1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}. Selling by the ${labels.baseName.toLowerCase()}.`
+                    : `⚠ This product isn't set up for ${labels.baseName.toLowerCase()} sales — selling whole units.`;
             }
         } else {
             priceInput.value = packPrice;
-            if (qtyLabel) qtyLabel.textContent = 'Quantity (Packs)';
-            if (priceLabel) priceLabel.textContent = 'Selling Price (₦ / Pack)';
-            if (unitInfoEl) unitInfoEl.textContent = unitsPerPack > 1 ? `1 pack = ${unitsPerPack} pcs.` : '';
+            if (qtyLabel) qtyLabel.textContent = `Quantity (${pluralizeUnit(labels.bulkName, 2)})`;
+            if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${labels.bulkName})`;
+            if (unitInfoEl) unitInfoEl.textContent = unitsPerPack > 1 ? `1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}.` : '';
         }
+        // [v26] Also update the pack/piece toggle button labels
+        applySaleUnitUI();
     } else {
         priceInput.value = '';
         if (unitInfoEl) unitInfoEl.textContent = '';
@@ -1702,6 +1822,7 @@ function addToCart() {
     }
 
     const item = branchItems[id];
+    const labels = getUnitLabels(item);
     const pName = item.name || item.productName || 'Unnamed Item';
     const pStock = item.stock !== undefined ? item.stock : (item.stockQty || 0);
     const rPrice = item.price || item.retailPrice || 0;
@@ -1717,8 +1838,8 @@ function addToCart() {
 
     if (piecesAlreadyInCart + piecesNeeded > pStock) {
         const remaining = Math.max(0, pStock - piecesAlreadyInCart);
-        const unitWord = isWeightSale ? saleUnit.toLowerCase() : 'piece(s)';
-        alert(`Cannot add to cart: only ${remaining} ${unitWord} of "${pName}" left in stock (you requested ${piecesNeeded}). Please reduce the quantity.`);
+        const unitWord = isWeightSale ? saleUnit.toLowerCase() : (saleUnit === 'Piece' ? labels.baseName.toLowerCase() : labels.bulkName.toLowerCase());
+        alert(`Cannot add to cart: only ${remaining} ${unitWord}(s) of "${pName}" left in stock (you requested ${piecesNeeded}). Please reduce the quantity.`);
         return;
     }
 
@@ -1736,7 +1857,10 @@ function addToCart() {
         piecesNeeded,
         price,
         total: Math.round(qty * price * 100) / 100,
-        customerType: currentCustomerType
+        customerType: currentCustomerType,
+        // [v26] Store custom labels on the cart line so receipts can render them
+        baseUnitName: item.baseUnitName || '',
+        bulkUnitName: item.bulkUnitName || ''
     });
 
     renderCart();
@@ -1757,7 +1881,9 @@ function renderCart() {
 
     currentCart.forEach((cartItem, index) => {
         grandTotal += cartItem.total;
-        const unitLabel = cartItem.saleUnit === 'Piece' ? 'pcs' : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : 'pack(s)');
+        // [v26] Use custom unit names from the cart line
+        const labels = getUnitLabels(cartItem);
+        const unitLabel = cartItem.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
         tbody.innerHTML += `
             <tr>
                 <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType} · ${unitLabel}]</small></td>
@@ -1904,7 +2030,7 @@ function processDirectPosPayment() {
     });
 }
 
-// ==================== ACCOUNTANT & QUEUE VERIFICATION (branch-scoped) ====================
+// ==================== ACCOUNTANT & QUEUE VERIFICATION ====================
 function loadPendingOrdersQueue() {
     if (!currentStoreId) return;
 
@@ -1979,7 +2105,6 @@ function cancelPendingOrder(txId) {
     });
 }
 
-// ==================== ACCOUNTANT DASHBOARD: PENDING / COMPLETED TAB TOGGLE ====================
 let currentAccountantTab = 'pending';
 
 function switchAccountantTab(tab) {
@@ -2048,7 +2173,6 @@ function loadCompletedTransactionsForAccountant() {
     });
 }
 
-// ==================== ACCOUNTANT DASHBOARD: PENDING ORDER DETAILS MODAL ====================
 function viewPendingOrderDetails(txId) {
     firebase.database().ref(`stores/${currentStoreId}/pendingOrders/${txId}`).once('value').then(snapshot => {
         if (!snapshot.exists()) {
@@ -2068,7 +2192,9 @@ function viewPendingOrderDetails(txId) {
         if (tbody) {
             tbody.innerHTML = '';
             (order.items || []).forEach(item => {
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
+                // [v26] Use custom labels from the cart line
+                const labels = getUnitLabels(item);
+                const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
                 const qty = item.qty || 0;
                 tbody.innerHTML += `
                     <tr>
@@ -2201,7 +2327,6 @@ function calcSplit() {
     }
 }
 
-// ==================== UPDATED SPLIT CHECKOUT & INVENTORY DEDUCTION (branch-scoped) ====================
 function completeSplitCheckout() {
     if (!currentActiveOrder) return;
     
@@ -2296,7 +2421,7 @@ function completeSplitCheckout() {
     });
 }
 
-// ==================== FIXED RECEIPT & PRINTING ROUTINE ====================
+// ==================== RECEIPT & PRINTING ====================
 function renderReceiptView(orderData, isReprint = false) {
     const mainWrapper = document.getElementById('dashboard-main-wrapper');
     if (mainWrapper) {
@@ -2396,7 +2521,9 @@ function renderReceiptView(orderData, isReprint = false) {
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? 'pack' : ''));
+                // [v26] Custom unit names on the receipt
+                const labels = getUnitLabels(item);
+                const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? labels.bulkName.toLowerCase() : ''));
                 const qtyDisplay = unitLabel ? `${item.qty || 0} ${unitLabel}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
                 const refundedTag = Number(item.refundedQty) > 0 ? ` <small style="color:#991b1b;">(${item.refundedQty} refunded)</small>` : '';
                 receiptItemsContainer.innerHTML += `
@@ -2440,7 +2567,6 @@ function renderReceiptView(orderData, isReprint = false) {
     }, 150);
 }
 
-// ==================== DEDICATED THERMAL PRINTER IFRAME BRIDGE ====================
 function triggerThermalPrint(htmlContent, paperWidth = '80mm') {
     let existingIframe = document.getElementById('thermal-print-iframe');
     if (existingIframe) existingIframe.remove();
@@ -2520,7 +2646,7 @@ function viewPastReceipt(txId) {
     });
 }
 
-// ==================== PAST SALES HISTORY & REPORTS (branch filterable) ====================
+// ==================== PAST SALES HISTORY & REPORTS ====================
 function populateReportsBranchFilter() {
     const select = document.getElementById('sales-branch-filter');
     if (!select) return;
@@ -2565,11 +2691,8 @@ function loadPastSalesHistory(selectedDateString = null) {
         const tbody = document.getElementById('sales-history-body');
         if (!tbody) return;
 
-        let dayRevenue = 0;
         let weekRevenue = 0;
         let monthRevenue = 0;
-        let totalCash = 0;
-        let totalTransfer = 0;
 
         const targetDate = selectedDateString ? new Date(selectedDateString) : new Date();
         const targetYear = targetDate.getUTCFullYear();
@@ -2602,22 +2725,12 @@ function loadPastSalesHistory(selectedDateString = null) {
             const txDate = tx.date ? new Date(tx.date) : null;
 
             if (txDate) {
-                if (txDate.toDateString() === todayDateStr) {
-                    dayRevenue += txTotal;
-                }
-                if (txDate >= startOfWeek) {
-                    weekRevenue += txTotal;
-                }
-                if (txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth) {
-                    monthRevenue += txTotal;
-                }
+                if (txDate >= startOfWeek) weekRevenue += txTotal;
+                if (txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth) monthRevenue += txTotal;
             }
 
             const cashPaid = tx.paymentBreakdown ? Number(tx.paymentBreakdown.cash) || 0 : txTotal;
             const transferPaid = tx.paymentBreakdown ? Number(tx.paymentBreakdown.transfer) || 0 : 0;
-
-            totalCash += cashPaid;
-            totalTransfer += transferPaid;
 
             if (txDate) {
                 if (txDate.getFullYear() === targetYear && txDate.getMonth() === targetMonth && txDate.getDate() === targetDay) {
@@ -2778,7 +2891,7 @@ function downloadReceiptPDF() {
     }).catch(err => alert(err.message));
 }
 
-// ==================== STAFF MANAGEMENT (branch assignment) ====================
+// ==================== STAFF MANAGEMENT ====================
 function populateStaffBranchDropdown() {
     const select = document.getElementById('staff-branch-input');
     if (!select) return;
@@ -2876,7 +2989,7 @@ function changeStaffPin(id, name) {
     });
 }
 
-// ==================== BUSINESS SETTINGS & PROFILE ====================
+// ==================== BUSINESS SETTINGS ====================
 function loadBusinessSettings() {
     if (!currentStoreId) return;
 
@@ -2969,7 +3082,7 @@ function changeAdminOwnPin() {
     });
 }
 
-// ==================== EXPENSES MANAGEMENT MODULE (branch-scoped) ====================
+// ==================== EXPENSES ====================
 function loadExpensesTable() {
     if (!currentStoreId) return;
 
@@ -3054,7 +3167,7 @@ function deleteExpense(id) {
     }
 }
 
-// ==================== PROFIT & LOSS (P&L) ANALYTICS MODULE (branch filterable) ====================
+// ==================== PROFIT & LOSS ====================
 function loadProfitAndLossModule() {
     if (!currentStoreId) return;
 
@@ -3151,7 +3264,7 @@ function loadProfitAndLossModule() {
     });
 }
 
-// ==================== BRANCH MANAGEMENT MODULE ====================
+// ==================== BRANCH MANAGEMENT ====================
 function renderBranchesTable() {
     const tbody = document.getElementById('branches-body');
     if (!tbody) return;
@@ -3249,7 +3362,7 @@ function deleteBranch(id) {
     }
 }
 
-// ==================== INTER-BRANCH STOCK TRANSFERS MODULE ====================
+// ==================== STOCK TRANSFERS ====================
 function loadTransfersView() {
     if (!currentStoreId) return;
 
@@ -3456,6 +3569,8 @@ function confirmTransferReceipt(transferId) {
                                 wholesalePrice: src.wholesalePrice || 0,
                                 unitsPerPack: src.unitsPerPack || 1,
                                 piecePrice: src.piecePrice || 0,
+                                baseUnitName: src.baseUnitName || '',
+                                bulkUnitName: src.bulkUnitName || '',
                                 stock: item.qty,
                                 stockQty: item.qty,
                                 expiry: src.expiry || src.expiryDate || '',
@@ -3547,7 +3662,7 @@ function printWaybill(transferId) {
     });
 }
 
-// ==================== SUPPLIER MANAGEMENT MODULE ====================
+// ==================== SUPPLIER MANAGEMENT ====================
 function loadSuppliersCache() {
     if (!currentStoreId) return;
 
@@ -3561,8 +3676,6 @@ function loadSuppliersCache() {
     }).catch(error => console.error("loadSuppliersCache error:", error));
 }
 
-// [v25] Backwards-compat alias — some patches may still call the old name
-// subscribeSuppliersCache(). Safe to remove once you've confirmed nothing does.
 window.subscribeSuppliersCache = loadSuppliersCache;
 
 function renderSuppliersTable(dataset) {
@@ -3685,6 +3798,7 @@ function deleteSupplier(id) {
     }
 }
 
+// ==================== SUPPLIES / RESTOCK ====================
 function populateSupplySupplierDropdown() {
     const select = document.getElementById('supply-supplier-select');
     if (!select) return;
@@ -3770,7 +3884,7 @@ function addSupplyItemRow() {
             <input type="number" min="0" placeholder="Packs Received" class="supply-item-qty" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
             <input type="number" min="0" placeholder="Loose Pieces Received" class="supply-item-loose" style="padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
-        <div style="font-size:10px; color:var(--text-muted); margin:4px 0 6px 0;">For products not sold in pieces, leave "Loose Pieces Received" blank and just enter the count in "Packs Received". For products sold by weight (Kg), enter the Kg amount received in "Packs Received" (decimals allowed, e.g. 12.5) and leave "Loose Pieces Received" blank.</div>
+        <div style="font-size:10px; color:var(--text-muted); margin:4px 0 6px 0;">For products not sold in pieces, leave "Loose Pieces Received" blank and just enter the count in "Packs Received". For products sold by weight (Kg), enter the Kg amount received in "Packs Received".</div>
         <div class="form-group" style="margin-bottom:6px;">
             <input type="number" min="0" placeholder="Cost Price (₦ per Pack)" class="supply-item-cost" style="width:100%; padding:6px; border:1px solid #cbd5e1; border-radius:6px;">
         </div>
@@ -3913,6 +4027,8 @@ function saveSupply() {
                             wholesalePrice: item.wholesalePrice || 0,
                             unitsPerPack: 1,
                             piecePrice: 0,
+                            baseUnitName: '',
+                            bulkUnitName: '',
                             stock: item.stockAfter,
                             stockQty: item.stockAfter,
                             expiry: '',
@@ -4045,11 +4161,10 @@ function closeSupplyDetailsModal() {
     document.getElementById('supply-details-modal').style.display = 'none';
 }
 
-// ==================== QUICK RESTOCK (per-product, from Inventory) ====================
+// ==================== QUICK RESTOCK ====================
 function openQuickRestockModal(branchId, productId) {
     if (!document.getElementById('quick-restock-modal')) {
-        alert("Restock modal is missing from the page (index.html may be out of date or cached). Please make sure you've deployed the latest index.html and hard-refresh the page (Ctrl/Cmd+Shift+R).");
-        console.error("openQuickRestockModal: #quick-restock-modal not found in the DOM.");
+        alert("Restock modal is missing from the page. Please hard-refresh.");
         return;
     }
 
@@ -4064,12 +4179,12 @@ function openQuickRestockModal(branchId, productId) {
         return;
     }
 
+    const labels = getUnitLabels(item);
+
     document.getElementById('restock-branch-id').value = branchId;
     document.getElementById('restock-product-id').value = productId;
     document.getElementById('restock-product-name').textContent = item.name || item.productName || 'Unnamed Item';
 
-    const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
-    const unitsPerPack = Number(item.unitsPerPack) || 1;
     document.getElementById('restock-current-stock-note').textContent = `Current stock: ${formatStockLabel(item)}`;
 
     const supplierSelect = document.getElementById('restock-supplier-select');
@@ -4091,6 +4206,7 @@ function openQuickRestockModal(branchId, productId) {
     const weightBagGroup = document.getElementById('restock-weight-bag-group');
     const costLabel = document.getElementById('restock-cost-price-label');
     const perBagLabel = document.getElementById('restock-weight-per-bag-label');
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
 
     if (item.soldByWeight) {
         const wUnit = item.weightUnit || 'Kg';
@@ -4111,8 +4227,11 @@ function openQuickRestockModal(branchId, productId) {
         if (costLabel) costLabel.textContent = 'Cost Price (₦ per Pack)';
         const packsLabel = document.querySelector('#restock-simple-group label');
         const packsInput = document.getElementById('restock-qty-packs');
-        if (packsLabel) packsLabel.textContent = 'Packs Received';
-        if (packsInput) { packsInput.placeholder = 'e.g. 5'; packsInput.step = '1'; }
+        // [v26] Relabel restock inputs to custom unit names
+        if (packsLabel) packsLabel.textContent = `${pluralizeUnit(labels.bulkName, 2)} Received`;
+        if (packsInput) { packsInput.placeholder = `e.g. 5 ${labels.bulkName.toLowerCase()}s`; packsInput.step = '1'; }
+        const looseLabel = document.querySelector('#restock-loose-group label');
+        if (looseLabel) looseLabel.textContent = `Loose ${pluralizeUnit(labels.baseName, 2)} Received`;
         looseGroup.style.display = unitsPerPack > 1 ? 'block' : 'none';
     }
 
@@ -4131,6 +4250,7 @@ function recalcQuickRestockPreview() {
     const previewEl = document.getElementById('restock-preview');
     if (!item || !previewEl) return;
 
+    const labels = getUnitLabels(item);
     const unitsPerPack = Number(item.unitsPerPack) || 1;
     const currentStock = item.stock !== undefined ? Number(item.stock) : (Number(item.stockQty) || 0);
 
@@ -4140,8 +4260,7 @@ function recalcQuickRestockPreview() {
         const perBag = parseFloat(document.getElementById('restock-weight-per-bag').value) || 0;
         const received = Math.round((bags * perBag) * 100) / 100;
         const newStock = Math.round((currentStock + received) * 100) / 100;
-        const bagsNote = bags > 0 && perBag > 0 ? ` (${bags} bag${bags === 1 ? '' : 's'} × ${perBag}${wUnit})` : '';
-        previewEl.textContent = `Stock before: ${currentStock.toLocaleString()} ${wUnit} → Stock after: ${newStock.toLocaleString()} ${wUnit} (+${received} ${wUnit}${bagsNote})`;
+        previewEl.textContent = `Stock before: ${currentStock.toLocaleString()} ${wUnit} → Stock after: ${newStock.toLocaleString()} ${wUnit} (+${received} ${wUnit})`;
         return;
     }
 
@@ -4150,7 +4269,7 @@ function recalcQuickRestockPreview() {
     const piecesReceived = (packs * unitsPerPack) + loose;
     const newStock = currentStock + piecesReceived;
 
-    previewEl.textContent = `Stock before: ${stockBreakdownLabel(currentStock, unitsPerPack)} → Stock after: ${stockBreakdownLabel(newStock, unitsPerPack)} (+${piecesReceived} pcs)`;
+    previewEl.textContent = `Stock before: ${stockBreakdownLabelWithUnits(currentStock, unitsPerPack, labels)} → Stock after: ${stockBreakdownLabelWithUnits(newStock, unitsPerPack, labels)}`;
 }
 
 function saveQuickRestock() {
@@ -4186,7 +4305,7 @@ function saveQuickRestock() {
         lineCost = Math.round((costPrice * piecesReceived) * 100) / 100;
 
         if (piecesReceived <= 0) {
-            alert("Enter both the number of bags and the weight per bag (or the total weight received).");
+            alert("Enter both the number of bags and the weight per bag.");
             return;
         }
     } else {
@@ -4252,7 +4371,7 @@ function saveQuickRestock() {
             lastSupplyDate: nowIso
         });
     }).then(() => {
-        alert(`Restocked "${productName}" — stock is now ${item.soldByWeight ? newStock.toLocaleString() + ' ' + (item.weightUnit || 'Kg').toLowerCase() : stockBreakdownLabel(newStock, unitsPerPack)}.`);
+        alert(`Restocked "${productName}" — stock is now ${formatStockLabel(Object.assign({}, item, { stock: newStock }))}.`);
         closeQuickRestockModal();
         loadSuppliesHistory();
         loadSuppliersCache();
@@ -4268,8 +4387,7 @@ function saveQuickRestock() {
 function openProductRestockHistory(branchId, productId) {
     const modal = document.getElementById('restock-history-modal');
     if (!modal) {
-        alert("Restock history modal is missing from the page (index.html may be out of date or cached). Please make sure you've deployed the latest index.html and hard-refresh the page (Ctrl/Cmd+Shift+R).");
-        console.error("openProductRestockHistory: #restock-history-modal not found in the DOM.");
+        alert("Restock history modal is missing from the page. Please hard-refresh.");
         return;
     }
 
@@ -4319,20 +4437,19 @@ function openProductRestockHistory(branchId, productId) {
 
         const isWeight = !!(item && item.soldByWeight);
         const wUnit = ((item && item.weightUnit) || 'Kg').toLowerCase();
+        const labels = getUnitLabels(item);
 
         tbody.innerHTML = entries.map(e => {
             const hasHistory = e.stockBefore !== undefined && e.stockAfter !== undefined;
             const upp = Number(e.unitsPerPackAtSupply) || 1;
             let addedLabel;
             if (isWeight) {
-                addedLabel = e.bagsReceived && e.weightPerBag
-                    ? `+${e.piecesReceived} ${wUnit} (${e.bagsReceived} bag${e.bagsReceived === 1 ? '' : 's'} × ${e.weightPerBag}${wUnit})`
-                    : `+${e.piecesReceived} ${wUnit}`;
+                addedLabel = `+${e.piecesReceived} ${wUnit}`;
             } else {
-                addedLabel = upp > 1 ? `+${e.qty} Pks + ${e.loosePieces} Pcs` : `+${e.piecesReceived}`;
+                addedLabel = upp > 1 ? `+${e.qty} ${pluralizeUnit(labels.bulkName, e.qty)} + ${e.loosePieces} ${pluralizeUnit(labels.baseName, e.loosePieces)}` : `+${e.piecesReceived}`;
             }
-            const beforeLabel = hasHistory ? (isWeight ? `${e.stockBefore} ${wUnit}` : stockBreakdownLabel(e.stockBefore, upp)) : '—';
-            const afterLabel = hasHistory ? (isWeight ? `${e.stockAfter} ${wUnit}` : stockBreakdownLabel(e.stockAfter, upp)) : '—';
+            const beforeLabel = hasHistory ? (isWeight ? `${e.stockBefore} ${wUnit}` : stockBreakdownLabelWithUnits(e.stockBefore, upp, labels)) : '—';
+            const afterLabel = hasHistory ? (isWeight ? `${e.stockAfter} ${wUnit}` : stockBreakdownLabelWithUnits(e.stockAfter, upp, labels)) : '—';
             return `
                 <tr>
                     <td>${e.date ? new Date(e.date).toLocaleString() : 'N/A'}</td>
@@ -4358,7 +4475,7 @@ function closeProductRestockHistoryModal() {
     delete modal.dataset.productId;
 }
 
-// ==================== CUSTOMER MANAGEMENT MODULE ====================
+// ==================== CUSTOMER MANAGEMENT ====================
 function subscribeCustomersCache() {
     if (!currentStoreId) return;
 
@@ -4811,7 +4928,7 @@ function downloadDebtReceiptPDF() {
     }).catch(err => alert(err.message));
 }
 
-// ==================== REFUNDS MODULE ====================
+// ==================== REFUNDS ====================
 function openRefundModal(txId) {
     if (currentUserRole !== 'Admin' && currentUserRole !== 'Accountant') {
         alert("Access Restricted: Only an Admin or Accountant can process refunds.");
@@ -4882,7 +4999,8 @@ function renderRefundModalItems(tx) {
     const rowsHtml = items.map((item, idx) => {
         const alreadyRefunded = Number(item.refundedQty) || 0;
         const remaining = Math.max(0, (Number(item.qty) || 0) - alreadyRefunded);
-        const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
+        const labels = getUnitLabels(item);
+        const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
         const refundedNote = alreadyRefunded > 0 ? `<br><small style="color:#991b1b;">${alreadyRefunded} already refunded</small>` : '';
 
         return `
@@ -5132,7 +5250,8 @@ function renderRefundReceiptView(refundData) {
         if (itemsBody) {
             itemsBody.innerHTML = '';
             (refundData.items || []).forEach(item => {
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
+                const labels = getUnitLabels(item);
+                const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
                 itemsBody.innerHTML += `
                     <tr>
                         <td>${item.name || ''}</td>
@@ -5177,7 +5296,7 @@ function downloadRefundReceiptPDF() {
     }).catch(err => alert(err.message));
 }
 
-// ---------- POS Customer Selection & Autocomplete (defaults to Walk-In) ----------
+// ==================== POS CUSTOMER SELECTION ====================
 function filterPosCustomerSearch() {
     const query = (document.getElementById('pos-customer-search')?.value || '').toLowerCase().trim();
     const resultsBox = document.getElementById('pos-customer-results');
@@ -5251,7 +5370,7 @@ function updatePosCustomerBadge() {
     }
 }
 
-// ==================== HELD / PARKED CARTS (POS) ====================
+// ==================== HELD CARTS ====================
 function holdCurrentCart() {
     if (currentCart.length === 0) {
         alert("Cart is empty — nothing to hold.");
