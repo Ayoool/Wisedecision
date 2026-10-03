@@ -236,74 +236,55 @@ body {
 
 .menu-btn:active { transform: translateY(0); }
 
-/* ===================== SIDEBAR BUTTONS — CLEAN PURPLE ===================== */
-/* Neutral by default; active view gets a solid purple treatment.
+/* ===================== SIDEBAR BUTTONS — ALL PURPLE ===================== */
+/* Every sidebar button (including Logout, Shift Log and Pre-Orders) is solid
+   purple. The active view gets a deeper purple with a light ring.
    The .active class is added by updateSidebarActiveState() in script.js
    whenever switchView() runs. */
 
-.sidebar .menu-btn {
-    background: #f8fafc;
-    color: #475569;
-    border-color: #e2e8f0;
-    border-left-color: #e2e8f0;
-    box-shadow: none;
-    font-weight: 600;
-}
-
-.sidebar .menu-btn:hover {
-    background: #ede9fe;
-    color: #5b21b6;
-    border-left-color: #c4b5fd;
-}
-
-/* Active view — solid purple, feels like a proper "current page" indicator */
-.sidebar .menu-btn.active {
-    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+.sidebar .menu-btn,
+.sidebar .menu-btn.btn-logout,
+.sidebar button[onclick*="switchView"],
+.sidebar button[onclick*="logout"] {
+    background: #7c3aed;
+    background-image: none;
     color: #ffffff;
     border-color: transparent;
     border-left-color: transparent;
-    box-shadow: 0 8px 20px rgba(124, 58, 237, 0.30);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.20);
+    font-weight: 600;
+}
+
+.sidebar .menu-btn:hover,
+.sidebar .menu-btn.btn-logout:hover,
+.sidebar button[onclick*="switchView"]:hover,
+.sidebar button[onclick*="logout"]:hover {
+    background: #6d28d9;
+    color: #ffffff;
+    border-left-color: #c4b5fd;
+    box-shadow: 0 8px 18px rgba(124, 58, 237, 0.32);
+}
+
+/* Active view — deeper purple + light ring so it stands out */
+.sidebar .menu-btn.active,
+.sidebar button[onclick*="switchView"].active {
+    background: #4c1d95;
+    color: #ffffff;
+    border-color: transparent;
+    border-left-color: #c4b5fd;
+    box-shadow: 0 0 0 2px #c4b5fd, 0 8px 20px rgba(76, 29, 149, 0.35);
     transform: none;
 }
 
 .sidebar .menu-btn.active:hover {
-    background: linear-gradient(135deg, #6d28d9 0%, #9333ea 100%);
+    background: #3b0f7a;
     color: #ffffff;
-    box-shadow: 0 12px 26px rgba(124, 58, 237, 0.40);
     transform: translateY(-1px);
 }
 
-/* Logout button — stays red-tinted, softer to match the calm sidebar */
+/* Logout keeps a little extra space above it */
 .sidebar .btn-logout {
-    background: #fef2f2;
-    color: #dc2626;
-    border-color: #fee2e2;
-    border-left-color: #fee2e2;
     margin-top: 16px;
-}
-.sidebar .btn-logout:hover {
-    background: #fee2e2;
-    color: #b91c1c;
-    border-left-color: #fca5a5;
-}
-
-/* Pre-Orders (injected by manager-preorder-patch.js) — same treatment */
-.sidebar .menu-btn[onclick*="preorder"],
-.sidebar .menu-btn[onclick*="Preorder"],
-.sidebar .menu-btn[onclick*="PreOrder"],
-.sidebar .menu-btn[onclick*="pre-order"] {
-    background: #f8fafc;
-    color: #475569;
-    border-color: #e2e8f0;
-    border-left-color: #e2e8f0;
-}
-.sidebar .menu-btn[onclick*="preorder"]:hover,
-.sidebar .menu-btn[onclick*="Preorder"]:hover,
-.sidebar .menu-btn[onclick*="PreOrder"]:hover,
-.sidebar .menu-btn[onclick*="pre-order"]:hover {
-    background: #ede9fe;
-    color: #5b21b6;
-    border-left-color: #c4b5fd;
 }
 
 /* Slightly taller sidebar buttons on desktop */
