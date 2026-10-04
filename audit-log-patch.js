@@ -1,14 +1,25 @@
 /* ============================================================
-   audit-log-patch.js  v3 — hardened with deep runtime discovery
+   audit-log-patch.js  v4 — Firebase-first
+   Multi-tenant aware. Reads store id / user from runtime,
+   caches the last known values, writes to audit/{storeId}.
    ============================================================ */
 (function () {
     'use strict';
 
     var cache = null;
     var renderAttempts = 0;
+    var __lastKnownUser = null;
+    var __lastKnownStore = null;
+    var __lastKnownBranch = null;
+
+    /* Set to true if you want per-branch audit isolation:
+       audit/{storeId}/{branchId}/{entryId}
+       Leave false for a single audit trail per tenant. */
+    var BRANCH_SCOPED = false;
 
     /* ---------- runtime discovery: user ---------- */
     function currentUser() {
+        // 1) globals
         var candidates = [
             window.currentUserName,
             window.loggedInUserName,
@@ -17,109 +28,78 @@
             window.activeUser,
             window.userName,
             window.staffName,
-            window.adminName
+            window.adminName,
+            window.adminUser,
+            window.loggedInStaff,
+            window.currentCashier
         ];
         for (var i = 0; i < candidates.length; i++) {
-            if (candidates[i]) return String(candidates[i]);
+            if (candidates[i]) {
+                __lastKnownUser = String(candidates[i]);
+                return __lastKnownUser;
+            }
         }
-        // sidebar "Logged in as X"
+        // 2) sidebar label "Logged in as X"
         var el = document.getElementById('user-role-label');
         if (el) {
             var m = (el.textContent || '').match(/logged in as\s+(.+)/i);
-            if (m && m[1]) return m[1].trim();
+            if (m && m[1]) {
+                __lastKnownUser = m[1].trim();
+                return __lastKnownUser;
+            }
         }
-        // localStorage fallbacks
-        try {
-            var s = localStorage.getItem('currentUserName')
-                 || localStorage.getItem('loggedInUser')
-                 || localStorage.getItem('userName')
-                 || localStorage.getItem('staffName')
-                 || sessionStorage.getItem('currentUserName')
-                 || sessionStorage.getItem('loggedInUser');
-            if (s) return s;
-        } catch (e) {}
+        // 3) last-known cache
+        if (__lastKnownUser) return __lastKnownUser;
         return 'Unknown';
+    }
+
+    /* ---------- runtime discovery: store id ---------- */
+    function currentStore() {
+        // 1) globals — common names in a multi-tenant app
+        var cands = [
+            window.currentStoreId, window.storeId, window.storeID,
+            window.activeStoreId, window.currentStore, window.loggedInStore,
+            window.activeStore, window.businessId, window.currentBusinessId,
+            window.currentBizId, window.tenantId, window.currentTenant,
+            window.storeCode, window.store_id, window.currentStoreCode
+        ];
+        for (var i = 0; i < cands.length; i++) {
+            if (cands[i]) {
+                __lastKnownStore = String(cands[i]).trim();
+                return __lastKnownStore;
+            }
+        }
+        // 2) the login form field (before the handler clears it)
+        var inp = document.getElementById('store-id-input');
+        if (inp && inp.value && inp.value.trim()) {
+            __lastKnownStore = inp.value.trim();
+            return __lastKnownStore;
+        }
+        // 3) the sidebar brand title (skip the default placeholder text)
+        var brand = document.getElementById('dashboard-store-title');
+        if (brand) {
+            var txt = (brand.textContent || '').trim();
+            if (txt && !/wise decision/i.test(txt)) {
+                __lastKnownStore = txt;
+                return __lastKnownStore;
+            }
+        }
+        // 4) last-known cache
+        if (__lastKnownStore) return __lastKnownStore;
+        return '';
     }
 
     /* ---------- runtime discovery: branch ---------- */
     function currentBranch() {
         var cands = [
-            window.currentBranchId,
-            window.currentInventoryBranchFilter,
-            window.activeBranchId,
-            window.branchId,
-            window.selectedBranchId
-        ];
-        for (var i = 0; i < cands.length; i++) if (cands[i]) return String(cands[i]);
-        try {
-            var s = localStorage.getItem('currentBranchId')
-                 || localStorage.getItem('branchId')
-                 || sessionStorage.getItem('currentBranchId')
-                 || sessionStorage.getItem('branchId');
-            if (s) return s;
-        } catch (e) {}
-        return 'all';
-    }
-
-    /* ---------- runtime discovery: store id ---------- */
-    function currentStore() {
-        // 1) globals — many possible names
-        var cands = [
-            window.currentStoreId,
-            window.storeId,
-            window.storeID,
-            window.activeStoreId,
-            window.currentStore,
-            window.loggedInStore,
-            window.activeStore,
-            window.businessId,
-            window.currentBusinessId,
-            window.currentBizId
+            window.currentBranchId, window.currentInventoryBranchFilter,
+            window.activeBranchId, window.branchId, window.selectedBranchId
         ];
         for (var i = 0; i < cands.length; i++) {
-            if (cands[i]) return String(cands[i]).trim();
+            if (cands[i]) { __lastKnownBranch = String(cands[i]); return __lastKnownBranch; }
         }
-
-        // 2) localStorage / sessionStorage — many possible keys
-        try {
-            var keys = [
-                'currentStoreId','storeId','storeID','activeStore','activeStoreId',
-                'businessId','currentBusinessId','loggedInStore','store',
-                'currentStore','current_store_id'
-            ];
-            for (var k = 0; k < keys.length; k++) {
-                var v = localStorage.getItem(keys[k]) || sessionStorage.getItem(keys[k]);
-                if (v) return String(v).trim();
-            }
-        } catch (e) {}
-
-        // 3) the login form field (works immediately after login)
-        var inp = document.getElementById('store-id-input');
-        if (inp && inp.value && inp.value.trim()) return inp.value.trim();
-
-        // 4) the sidebar brand title
-        var brand = document.getElementById('dashboard-store-title');
-        if (brand) {
-            var txt = (brand.textContent || '').trim();
-            // The default text is "WISE DECISION" — don't use that as a store id
-            if (txt && !/wise decision/i.test(txt)) return txt;
-        }
-
-        // 5) scan all localStorage keys for anything that looks like a store id
-        try {
-            for (var j = 0; j < localStorage.length; j++) {
-                var key = localStorage.key(j);
-                if (!key) continue;
-                if (/store|shop|business|biz/i.test(key)) {
-                    var val = localStorage.getItem(key);
-                    if (val && val.length < 64 && /^[a-z0-9_\-]+$/i.test(val)) {
-                        return String(val).trim();
-                    }
-                }
-            }
-        } catch (e) {}
-
-        return '';
+        if (__lastKnownBranch) return __lastKnownBranch;
+        return 'all';
     }
 
     function esc(s) {
@@ -134,16 +114,22 @@
         return dt.toLocaleString('en-NG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
+    function auditBasePath() {
+        var store = currentStore();
+        if (!store) return null;
+        if (BRANCH_SCOPED) {
+            var branch = currentBranch();
+            return 'audit/' + store + '/' + branch;
+        }
+        return 'audit/' + store;
+    }
+
     /* ---------- public: log ---------- */
     window.auditLog = function (action, target, details, extra) {
-        if (typeof firebase === 'undefined' || !firebase.database) {
-            console.warn('[audit] firebase not ready');
-            return;
-        }
-        var store = currentStore();
-        if (!store) {
-            console.warn('[audit] no store id — cannot log');
-            alert('Audit: store id not found. Cannot write.');
+        if (typeof firebase === 'undefined' || !firebase.database) return;
+        var base = auditBasePath();
+        if (!base) {
+            console.warn('[audit] store id unknown — skipping');
             return;
         }
         var entry = {
@@ -159,12 +145,9 @@
             Object.keys(extra).forEach(function (k) { entry[k] = extra[k]; });
         }
         var id = 'AL-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-        firebase.database().ref('audit/' + store + '/' + id).set(entry)
-            .then(function () { console.log('[audit] wrote', id); cache = null; })
-            .catch(function (e) {
-                console.error('[audit] write failed', e);
-                alert('Audit write failed: ' + (e.message || e));
-            });
+        firebase.database().ref(base + '/' + id).set(entry)
+            .then(function () { cache = null; })
+            .catch(function (e) { console.warn('[audit] write failed', e); });
     };
 
     /* ---------- safe wrapper ---------- */
@@ -181,12 +164,29 @@
     wrap('handleStoreLogin', function () {
         // snapshot the store id from the input BEFORE the handler clears it
         var inp = document.getElementById('store-id-input');
-        if (inp && inp.value) {
-            try { localStorage.setItem('currentStoreId', inp.value.trim()); } catch (e) {}
+        if (inp && inp.value && inp.value.trim()) {
+            __lastKnownStore = inp.value.trim();
         }
-        setTimeout(function () { window.auditLog('login', 'session', 'Login attempt'); }, 800);
+        // after login succeeds, try to capture the resolved store + user
+        setTimeout(function () {
+            // if the app updated the sidebar title to the real store name,
+            // __lastKnownStore already holds the *id* from the input, so keep it.
+            var el = document.getElementById('user-role-label');
+            if (el) {
+                var m = (el.textContent || '').match(/logged in as\s+(.+)/i);
+                if (m && m[1]) __lastKnownUser = m[1].trim();
+            }
+            window.auditLog('login', 'session', 'User logged in');
+        }, 1500);
     });
-    wrap('logout', function () { window.auditLog('logout', 'session', 'User logged out'); });
+
+    wrap('logout', function () {
+        window.auditLog('logout', 'session', 'User logged out');
+        __lastKnownStore = null;
+        __lastKnownUser = null;
+        __lastKnownBranch = null;
+    });
+
     wrap('saveProduct', function () {
         var editId = document.getElementById('edit-product-id') ? document.getElementById('edit-product-id').value : '';
         var name = document.getElementById('inv-name') ? document.getElementById('inv-name').value : '';
@@ -216,14 +216,14 @@
     /* ---------- load ---------- */
     function loadAudit(callback, force) {
         if (cache && !force) { callback(cache); return; }
-        var store = currentStore();
-        if (!store) { callback(null, 'No store id found. Log out and log back in, then retry.'); return; }
+        var base = auditBasePath();
+        if (!base) { callback(null, 'No store id found. Please log in.'); return; }
         if (typeof firebase === 'undefined' || !firebase.database) {
             if (renderAttempts++ < 20) setTimeout(function () { loadAudit(callback, force); }, 400);
             else callback(null, 'Firebase not loaded');
             return;
         }
-        firebase.database().ref('audit/' + store).limitToLast(500).once('value').then(function (snap) {
+        firebase.database().ref(base).limitToLast(500).once('value').then(function (snap) {
             var val = snap.val() || {};
             var list = Object.keys(val).map(function (k) { var e = val[k]; e.__id = k; return e; });
             list.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
@@ -238,7 +238,7 @@
     /* ---------- render ---------- */
     window.renderAuditLog = function () {
         var body = document.getElementById('audit-log-body');
-        if (!body) { console.warn('[audit] audit-log-body not in DOM'); return; }
+        if (!body) return;
         body.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">Loading…</td></tr>';
 
         loadAudit(function (list, err) {
@@ -279,7 +279,7 @@
             if (!list.length) {
                 body.innerHTML =
                     '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">' +
-                    'No audit entries yet. Actions you take from now on will show up here.<br><br>' +
+                    ` 'No audit entries yet. Actions you take from nowlocal on will show up here.<br><br>' +
                     '<button class="menu-btn btn-action-primary" style="width:auto; margin:6px auto 0; padding:8px 16px;" ' +
                     'onclick="window.auditLog(\'login\',\'session\',\'Manual test entry\'); setTimeout(renderAuditLog, 800);">✎ Log Test Entry</button>' +
                     '</td></tr>';
