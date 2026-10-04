@@ -293,6 +293,7 @@
                     <option value="product_delete">Product deleted</option>
                     <option value="sale_void">Sale voided</option>
                     <option value="refund">Refund issued</option>
+                    <option value="price_override">Price overridden</option>
                     <option value="writeoff">Write-off</option>
                     <option value="stock_adjust">Stock adjusted</option>
                     <option value="debt_payment">Debt payment</option>
@@ -315,6 +316,7 @@
         <div style="display:flex; gap:10px; margin-bottom: 15px; flex-wrap: wrap;">
             <button class="menu-btn btn-dash" style="width:auto; margin:0;" onclick="exportAuditLogCSV()">📥 Export CSV</button>
             <button class="menu-btn" style="width:auto; margin:0; background:#e2e8f0; border:1px solid #cbd5e1;" onclick="clearAuditFilters()">Clear Filters</button>
+            <button class="menu-btn" style="width:auto; margin:0; background:#fef2f2; border:1px solid #fecaca; color:#991b1b;" onclick="showPriceOverridesOnly()">💸 Price Overrides Only</button>
             <span id="audit-count-label" style="margin-left:auto; font-size:12px; color:#64748b; align-self:center;"></span>
         </div>
 
@@ -1819,12 +1821,55 @@ window.addEventListener('load', function () {
   var origAdd = window.addToCart;
   window.addToCart = function () {
     var before = currentCart.length;
+
+    // capture the inputs BEFORE the app consumes them
+    var customPriceInput = document.getElementById('pos-custom-price');
+    var sel = document.getElementById('pos-product-select');
+    var qtyInput = document.getElementById('pos-qty');
+    var customPrice = customPriceInput && customPriceInput.value ? Number(customPriceInput.value) : null;
+    var productName = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent.trim() : '';
+    var qty = qtyInput ? Number(qtyInput.value || 0) : 0;
+
     var result = origAdd.apply(this, arguments);
+
     if (currentCart.length > before) {
+      // the item was added — check whether the price was overridden
+      var justAdded = currentCart[currentCart.length - 1];
+      var basePrice = justAdded && (justAdded.originalPrice || justAdded.basePrice || justAdded.defaultPrice);
+      var usedPrice = justAdded && (justAdded.price || justAdded.unitPrice);
+      var effectiveBase = basePrice != null ? Number(basePrice) : (usedPrice != null ? Number(usedPrice) : null);
+      var effectiveUsed = usedPrice != null ? Number(usedPrice) : null;
+
+      // fallback: read base price from the inventory cache if the cart item didn't carry it
+      if (effectiveBase == null && justAdded && typeof inventoryCache !== 'undefined') {
+        var branch = (typeof currentInventoryBranchFilter !== 'undefined') ? currentInventoryBranchFilter : 'all';
+        var pid = justAdded.productId || justAdded.id || justAdded.productCode;
+        if (branch !== 'all' && pid && inventoryCache[branch] && inventoryCache[branch][pid]) {
+          var prod = inventoryCache[branch][pid];
+          var isWholesale = (typeof currentCustomerType !== 'undefined') && currentCustomerType === 'Wholesale';
+          var base = isWholesale ? (prod.wholesalePrice || prod.wholesale_price) : (prod.price || prod.retailPrice || prod.retail_price);
+          if (base != null) effectiveBase = Number(base);
+        }
+      }
+
+      // log the override if a custom price was typed and it differs from base
+      if (customPrice != null && effectiveBase != null && Math.abs(customPrice - effectiveBase) > 0.001) {
+        if (typeof window.auditLog === 'function') {
+          window.auditLog(
+            'price_override',
+            productName || 'unknown',
+            'POS override: ' + productName + ' sold at ₦' + customPrice + ' (normal: ₦' + effectiveBase + ') x' + qty,
+            { oldPrice: effectiveBase, newPrice: customPrice, qty: qty, source: 'add_to_cart' }
+          );
+        }
+      }
+
+      // clear search box (existing behaviour)
       var search = document.getElementById('pos-search-input');
       if (search && search.value) { search.value = ''; if (typeof filterPosInventory === 'function') filterPosInventory(); }
-      var sel = document.getElementById('pos-product-select'); if (sel) sel.value = '';
-      var qty = document.getElementById('pos-qty'); if (qty) qty.value = 1;
+      if (sel) sel.value = '';
+      if (qtyInput) qtyInput.value = 1;
+      if (customPriceInput) customPriceInput.value = '';
       if (typeof onPosProductChange === 'function') onPosProductChange();
     }
     return result;
