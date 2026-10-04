@@ -19,7 +19,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
 
-    <link rel="stylesheet" href="style.css?v=37">
+    <link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
 
@@ -104,6 +104,7 @@
                     <button class="menu-btn btn-transfer" onclick="switchView('transfers-view')">🔄 Stock Transfers</button>
                     <button class="menu-btn btn-branch" onclick="switchView('branches-view')">🏢 Branches</button>
                     <button class="menu-btn btn-sec" onclick="switchView('settings-view')">⚙ Business Settings</button>
+                    <button class="menu-btn btn-sec" onclick="switchView('audit-log-view')">📜 Audit Log</button>
 
                     <button class="menu-btn btn-logout" onclick="logout()">🚪 Logout</button>
                 </div>
@@ -270,6 +271,71 @@
             color:#fff; border: 1px solid rgba(0,0,0,0.04);
         }
     </style>
+
+    <!-- ================= AUDIT LOG VIEW ================= -->
+    <div id="audit-log-view-template" style="display: none;">
+        <h2>Audit Log</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">
+            Every sensitive action in the store — who did it, when, and why.
+        </p>
+
+        <div style="background: #fff; padding: 15px; border-radius: var(--radius); border: 1px solid #eef2f7; margin-bottom: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; box-shadow: 0 6px 18px rgba(15,23,42,0.06);">
+            <div class="form-group" style="margin:0;">
+                <label>Filter by user</label>
+                <select id="audit-filter-user" onchange="renderAuditLog()"><option value="">All users</option></select>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label>Filter by action</label>
+                <select id="audit-filter-action" onchange="renderAuditLog()">
+                    <option value="">All actions</option>
+                    <option value="product_create">Product created</option>
+                    <option value="product_edit">Product edited</option>
+                    <option value="product_delete">Product deleted</option>
+                    <option value="sale_void">Sale voided</option>
+                    <option value="refund">Refund issued</option>
+                    <option value="writeoff">Write-off</option>
+                    <option value="stock_adjust">Stock adjusted</option>
+                    <option value="debt_payment">Debt payment</option>
+                    <option value="pin_change">PIN changed</option>
+                    <option value="login">Login</option>
+                    <option value="logout">Logout</option>
+                    <option value="settings_change">Settings changed</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label>From date</label>
+                <input type="date" id="audit-filter-from" onchange="renderAuditLog()">
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label>To date</label>
+                <input type="date" id="audit-filter-to" onchange="renderAuditLog()">
+            </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <button class="menu-btn btn-dash" style="width:auto; margin:0;" onclick="exportAuditLogCSV()">📥 Export CSV</button>
+            <button class="menu-btn" style="width:auto; margin:0; background:#e2e8f0; border:1px solid #cbd5e1;" onclick="clearAuditFilters()">Clear Filters</button>
+            <span id="audit-count-label" style="margin-left:auto; font-size:12px; color:#64748b; align-self:center;"></span>
+        </div>
+
+        <div style="background: #fff; border-radius: var(--radius); border: 1px solid #eef2f7; overflow-x: auto; box-shadow: 0 6px 18px rgba(15,23,42,0.06);">
+            <table>
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Target</th>
+                        <th>Details</th>
+                        <th>Branch</th>
+                    </tr>
+                </thead>
+                <tbody id="audit-log-body">
+                    <tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <div id="pos-view-template" style="display: none;">
         <h2>Point of Sale (POS) Register</h2>
@@ -1616,7 +1682,7 @@
     </div>
 
     <!-- ================= PENDING ORDER DETAILS MODAL ================= -->
-    <div id="pending-order-details-modal" style="display: none; position: fixed; top: 0 width; left: 0; width: :100%; height: 100%; background:  rgba(0,0,0,0.10065); backdrop-filter: blur(2px%;); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20 heightpx; box-sizing: border-box;">
+    <div id="pending-order-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <h3 style="margin-top:0; color: var(--text);">Order Details — <span id="pending-details-tx-id">--</span></h3>
 
@@ -1654,7 +1720,7 @@
     </div>
 
     <!-- ================= HELD / PARKED CARTS MODAL ================= -->
-    <div id="held-carts-modal" style="display: none; position: fixed; top: 0; left: 0;: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+    <div id="held-carts-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 12px;">
                 <h3 style="margin:0; color: var(--text);">Held Carts</h3>
@@ -1694,21 +1760,22 @@
 
 
     <!-- Link your external JavaScript file -->
-        <script src="script.js?v=37" defer></script>
-        <script src="perf-patch.js?v=37" defer></script>
-        <script src="bugfix-patch.js?v=37" defer></script>
-        <script src="offline-patch.js?v=37" defer></script>
-        <script src="features-patch.js?v=37" defer></script>
-        <script src="superadmin-patch.js?v=37" defer></script>
-        <script src="activation-patch.js?v=37" defer></script>
-        <script src="superadmin-tools-patch.js?v=37" defer></script>
-        <script src="pos-mode-patch.js?v=37" defer></script>
-        <script src="storeplans-patch.js?v=37" defer></script>
-        <script src="staff-sidebar-patch.js?v=37" defer></script>
-        <script src="manager-preorder-patch.js?v=37" defer></script>
-        <script src="extras-patch.js?v=37" defer></script>
-        <script src="dashboard-categories-patch.js?v=37" defer></script>
+        <script src="script.js?v=38" defer></script>
+        <script src="perf-patch.js?v=38" defer></script>
+        <script src="bugfix-patch.js?v=38" defer></script>
+        <script src="offline-patch.js?v=38" defer></script>
+        <script src="features-patch.js?v=38" defer></script>
+        <script src="superadmin-patch.js?v=38" defer></script>
+        <script src="activation-patch.js?v=38" defer></script>
+        <script src="superadmin-tools-patch.js?v=38" defer></script>
+        <script src="pos-mode-patch.js?v=38" defer></script>
+        <script src="storeplans-patch.js?v=38" defer></script>
+        <script src="staff-sidebar-patch.js?v=38" defer></script>
+        <script src="manager-preorder-patch.js?v=38" defer></script>
+        <script src="extras-patch.js?v=38" defer></script>
+        <script src="dashboard-categories-patch.js?v=38" defer></script>
         <script src="dashboard-analytics-patch.js?v=38" defer></script>
+        <script src="audit-log-patch.js?v=38" defer></script>
         <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
