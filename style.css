@@ -202,7 +202,6 @@ body {
 
 .auth-card .menu-btn { margin-bottom: 12px; }
 
-/* Fixed: stray `color` keyword after the hex value was breaking this whole rule. */
 .btn-dash {
     background: #eff6ff;
     color: #1d4ed8;
@@ -210,8 +209,6 @@ body {
     border-left: 4px solid #3b82f6;
 }
 
-/* Fixed: this rule was completely broken in the original file
-   (invalid hex `#:f0fdf4`, orphan `# color:`, misspelled `bordera`). */
 .btn-pos {
     background: #f0fdf4;
     color: #15803d;
@@ -226,7 +223,6 @@ body {
     border-left: 4px solid #f59e0b;
 }
 
-/* Fixed: `color` declaration was mangled into orphaned text "caf;". */
 .btn-acc {
     background: #fdf4ff;
     color: #a21caf;
@@ -319,16 +315,16 @@ body {
 
 /* Secondary / ghost button used on the auth screens. */
 .btn-secondary {
-    background: #f1f5   f9;
-    color: #028 font4c7;
-    border: -size1px solid #cbd5e1;
+    background: #f1f5f9;
+    color: #0284c7;
+    border: 1px solid #cbd5e1;
     justify-content: center;
     font-weight: 600;
 }
 
 .btn-secondary:hover {
-:    background: #e2e8f0;
-    color:  #0369a1;
+    background: #e2e8f0;
+    color: #0369a1;
     filter: none;
 }
 
@@ -368,8 +364,6 @@ body {
     box-sizing: border-box;
 }
 
-/* Fixed: sidebar used height:100vh which created a nested scroll trap;
-   main-content also used height:100vh causing double scrollbars. */
 @media (min-width: 768px) {
     .dashboard-layout {
         flex-direction: row;
@@ -468,7 +462,7 @@ th {
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: bold;
-10px;
+    font-size: 10px;
     display: inline-block;
 }
 
