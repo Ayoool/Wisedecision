@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v29 (security escapes, logout listener cleanup, split rounding)");
+console.log("Wise Decision script.js — build v29 + PERF PATCH v1");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -5546,3 +5546,337 @@ function discardHeldCart(holdId) {
         alert("Failed to discard held cart: " + err.message);
     });
 }
+
+
+// ============================================================
+//  PERF PATCH v1 — speeds up Dashboard / Reports / Expenses
+//  Safe to delete this whole block if anything misbehaves.
+// ============================================================
+(function () {
+    if (typeof firebase === 'undefined' || !firebase.database) {
+        console.warn('PERF PATCH: firebase not available, skipping.');
+        return;
+    }
+    if (typeof currentStoreId === 'undefined') {
+        console.warn('PERF PATCH: app globals not loaded, skipping.');
+        return;
+    }
+
+    function startOfTodayIso() {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d.toISOString();
+    }
+    function startOfMonthIso() {
+        const d = new Date();
+        return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+    }
+
+    // ---------- loadProfitAndLossModule ----------
+    if (typeof window.loadProfitAndLossModule === 'function') {
+        window.loadProfitAndLossModule = function () {
+            if (!currentStoreId) return;
+
+            const plBranchFilter = document.getElementById('sales-branch-filter')
+                ? currentReportBranchFilter : currentBranch;
+            const plLabel = document.getElementById('pl-branch-label');
+            if (plLabel) plLabel.textContent = plBranchFilter === 'all'
+                ? '(All Branches)' : '(' + branchNameOf(plBranchFilter) + ')';
+
+            const monthStart = startOfMonthIso();
+
+            Promise.all([
+                firebase.database().ref('stores/' + currentStoreId + '/transactions')
+                    .orderByChild('date').startAt(monthStart).once('value'),
+                firebase.database().ref('stores/' + currentStoreId + '/inventory').once('value'),
+                firebase.database().ref('stores/' + currentStoreId + '/expenses')
+                    .orderByChild('date').startAt(monthStart).once('value'),
+                firebase.database().ref('stores/' + currentStoreId + '/refunds')
+                    .orderByChild('date').startAt(monthStart).once('value')
+            ]).then(function (snaps) {
+                const txSnapshot = snaps[0];
+                const invSnapshot = snaps[1];
+                const expSnapshot = snaps[2];
+                const refundSnapshot = snaps[3];
+
+                const costPriceMap = {};
+                invSnapshot.forEach(function (branchChild) {
+                    const branchId = branchChild.key;
+                    branchChild.forEach(function (prodChild) {
+                        const item = prodChild.val();
+                        const unitsPerPack = Number(item.unitsPerPack) || 1;
+                        const cPricePerPiece = (Number(item.costPrice) || 0) / unitsPerPack;
+                        const itemName = item.name || item.productName || '';
+                        costPriceMap[branchId + '_' + prodChild.key] = cPricePerPiece;
+                        if (itemName) costPriceMap[itemName.toLowerCase().trim()] = cPricePerPiece;
+                    });
+                });
+
+                let monthRevenue = 0, monthCost = 0, monthExpenses = 0,
+                    monthRefunds = 0, monthRefundCost = 0;
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                const currentMonth = now.getMonth();
+
+                txSnapshot.forEach(function (child) {
+                    const tx = child.val();
+                    const txBranch = tx.branchId || 'main';
+                    if (plBranchFilter !== 'all' && txBranch !== plBranchFilter) return;
+
+                    const txDate = tx.date ? new Date(tx.date) : null;
+                    const txTotal = Number(tx.totalAmount) || 0;
+
+                    let txCogs = 0;
+                    if (Array.isArray(tx.items)) {
+                        tx.items.forEach(function (cartItem) {
+                            const unitCostPerPiece =
+                                costPriceMap[txBranch + '_' + cartItem.id] ||
+                                costPriceMap[(cartItem.name || '').toLowerCase().trim()] || 0;
+                            const piecesSold = Number(
+                                cartItem.piecesNeeded !== undefined
+                                    ? cartItem.piecesNeeded : cartItem.qty) || 0;
+                            txCogs += unitCostPerPiece * piecesSold;
+                        });
+                    }
+                    if (txDate && txDate.getFullYear() === currentYear
+                        && txDate.getMonth() === currentMonth) {
+                        monthRevenue += txTotal;
+                        monthCost += txCogs;
+                    }
+                });
+
+                expSnapshot.forEach(function (child) {
+                    const exp = child.val();
+                    const expBranch = exp.branchId || 'main';
+                    if (plBranchFilter !== 'all' && expBranch !== plBranchFilter) return;
+                    const expDate = exp.date ? new Date(exp.date) : null;
+                    const amount = Number(exp.amount) || 0;
+                    if (expDate && expDate.getFullYear() === currentYear
+                        && expDate.getMonth() === currentMonth) {
+                        monthExpenses += amount;
+                    }
+                });
+
+                refundSnapshot.forEach(function (child) {
+                    const r = child.val();
+                    const rBranch = r.branchId || 'main';
+                    if (plBranchFilter !== 'all' && rBranch !== plBranchFilter) return;
+                    const rDate = r.date ? new Date(r.date) : null;
+                    if (rDate && rDate.getFullYear() === currentYear
+                        && rDate.getMonth() === currentMonth) {
+                        monthRefunds += Number(r.totalRefund) || 0;
+                        if (Array.isArray(r.items)) {
+                            r.items.forEach(function (ri) {
+                                monthRefundCost += Number(ri.totalCost) || 0;
+                            });
+                        }
+                    }
+                });
+
+                const monthGross = (monthRevenue - monthRefunds) - (monthCost - monthRefundCost);
+                const monthNet = monthGross - monthExpenses;
+
+                const netProfitDisplay = document.getElementById('net-profit-display');
+                if (netProfitDisplay) {
+                    netProfitDisplay.textContent = '₦' + monthNet.toLocaleString();
+                    netProfitDisplay.style.color = monthNet >= 0 ? '#065f46' : '#dc2626';
+                }
+            }).catch(function (err) {
+                console.warn('PERF PATCH loadProfitAndLossModule error:', err);
+            });
+        };
+        console.log('PERF PATCH: loadProfitAndLossModule upgraded.');
+    }
+
+    // ---------- loadDashboardMetrics ----------
+    if (typeof window.loadDashboardMetrics === 'function') {
+        window.loadDashboardMetrics = function () {
+            if (!currentStoreId) return;
+
+            const branchLabelEl = document.getElementById('dash-branch-label');
+            if (branchLabelEl) branchLabelEl.textContent = branchNameOf(currentBranch);
+
+            firebase.database().ref('stores/' + currentStoreId + '/transactions')
+                .orderByChild('date').startAt(startOfTodayIso())
+                .once('value').then(function (snapshot) {
+                    let todaySales = 0;
+                    snapshot.forEach(function (child) {
+                        const tx = child.val();
+                        if ((tx.branchId || 'main') === currentBranch) {
+                            todaySales += Number(tx.totalAmount) || 0;
+                        }
+                    });
+                    const salesEl = document.getElementById('dash-today-sales');
+                    if (salesEl) salesEl.textContent = '₦' + todaySales.toLocaleString();
+                }).catch(function (err) {
+                    console.warn('PERF PATCH today sales error:', err);
+                });
+
+            firebase.database().ref('stores/' + currentStoreId + '/inventory/' + currentBranch)
+                .once('value').then(function (snapshot) {
+                    const now = new Date();
+                    const alerts = [];
+                    snapshot.forEach(function (child) {
+                        const item = child.val();
+                        const stock = Number(item.stock !== undefined
+                            ? item.stock : (item.stockQty !== undefined ? item.stockQty : 0)) || 0;
+                        const expiryVal = item.expiry || item.expiryDate;
+                        const expiryDate = expiryVal ? new Date(expiryVal) : null;
+                        const itemName = item.name || item.productName || 'Unnamed Item';
+                        const category = item.category || '';
+                        const threshold = (item.lowStockThreshold !== null
+                            && item.lowStockThreshold !== undefined)
+                            ? Number(item.lowStockThreshold) : 5;
+                        const isLowStock = stock <= threshold;
+                        const isExpiringSoon = expiryDate
+                            && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
+
+                        if (isLowStock || isExpiringSoon) {
+                            alerts.push({
+                                name: itemName, category: category, stock: stock,
+                                soldByWeight: !!item.soldByWeight,
+                                weightUnit: item.weightUnit || 'Kg',
+                                expiryVal: expiryVal,
+                                isLowStock: isLowStock, isExpiringSoon: isExpiringSoon,
+                                baseUnitName: item.baseUnitName,
+                                bulkUnitName: item.bulkUnitName,
+                                unitsPerPack: item.unitsPerPack
+                            });
+                        }
+                    });
+                    dashboardAlertsCache = alerts;
+                    renderDashboardAlerts();
+                });
+        };
+        console.log('PERF PATCH: loadDashboardMetrics upgraded.');
+    }
+
+    // ---------- loadPastSalesHistory ----------
+    if (typeof window.loadPastSalesHistory === 'function') {
+        window.loadPastSalesHistory = function (selectedDateString) {
+            if (!currentStoreId) return;
+
+            const d = new Date();
+            d.setDate(d.getDate() - 30);
+            d.setHours(0, 0, 0, 0);
+            const thirtyDaysAgoIso = d.toISOString();
+
+            const txRef = firebase.database().ref('stores/' + currentStoreId + '/transactions')
+                .orderByChild('date').startAt(thirtyDaysAgoIso)
+                .limitToLast(300);
+            txRef.off();
+            txRef.on('value', function (snapshot) {
+                const tbody = document.getElementById('sales-history-body');
+                if (!tbody) return;
+
+                let weekRevenue = 0, monthRevenue = 0;
+                const targetDate = selectedDateString ? new Date(selectedDateString) : new Date();
+                const targetYear = targetDate.getFullYear();
+                const targetMonth = targetDate.getMonth();
+                const targetDay = targetDate.getDate();
+
+                child let selectedDayRevenue = 0,.val selectedDayCash = 0, selectedDay();
+Transfer = 0;
+                const now = new Date();
+                const currentYear = now                   .getFullYear();
+                const const currentMonth = now.getMonth();
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - now.getDay());
+                startOfWeek.setHours(0, 0, 0, 0);
+
+                const branchFilter = currentReportBranchFilter || 'all';
+                const canRefund = (currentUserRole === 'Admin' || currentUserRole === 'Accountant');
+                const rowsHtml = [];
+
+                snapshot.forEach(function (child) {
+                    const tx = txBranch = tx.branchId || 'main';
+                    if (branchFilter !== 'all' && txBranch !== branchFilter) return;
+
+                    const txTotal = Number(tx.totalAmount) || 0;
+                    const txDate = tx.date ? new Date(tx.date) : null;
+
+                    if (txDate) {
+                        if (txDate >= startOfWeek) weekRevenue += txTotal;
+                        if (txDate.getFullYear() === currentYear
+                            && txDate.getMonth() === currentMonth) monthRevenue += txTotal;
+                    }
+                    const cashPaid = tx.paymentBreakdown
+                        ? Number(tx.paymentBreakdown.cash) || 0 : txTotal;
+                    const transferPaid = tx.paymentBreakdown
+                        ? Number(tx.paymentBreakdown.transfer) || 0 : 0;
+
+                    if (txDate && txDate.getFullYear() === targetYear
+                        && txDate.getMonth() === targetMonth
+                        && txDate.getDate() === targetDay) {
+                        selectedDayRevenue += txTotal;
+                        selectedDayCash += cashPaid;
+                        selectedDayTransfer += transferPaid;
+                    }
+
+                    const dateStr = txDate ? txDate.toLocaleString() : 'N/A';
+                    const transactionId = tx.txId || child.key;
+                    const safeTxId = escapeJsAttr(transactionId);
+                    const sellerName = tx.staff || tx.soldBy || 'Staff';
+                    const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer'
+                        ? '<br><small style="color:var(--text-muted);">👤 '
+                            + escapeHtml(tx.customerName) + '</small>' : '';
+                    const statusLabel = tx.refundStatus && tx.refundStatus !== 'Completed'
+                        ? (tx.refundStatus === 'Refunded' ? 'Refunded' : 'Partially Refunded')
+                        : (tx.status || 'Completed');
+                    const statusColor = tx.refundStatus === 'Refunded'
+                        ? '#991b1b'
+                        : (tx.refundStatus === 'Partially Refunded' ? '#b45309' : 'green');
+                    const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
+                        ? '<button class="menu-btn btn-logout" style="padding: 5px 10px; font-size: 11px; width: auto; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal(\''
+                            + safeTxId + '\')">↩ Refund</button>'
+                        : '';
+
+                    rowsHtml.push(
+                        '<tr>' +
+                        '<td><strong>' + escapeHtml(transactionId) + '</strong>' + customerTag + '</td>' +
+                        '<td>' + escapeHtml(branchNameOf(txBranch)) + '</td>' +
+                        '<td>' + dateStr + '</td>' +
+                        '<td>' + escapeHtml(sellerName) + '</td>' +
+                        '<td>₦' + txTotal.toLocaleString() + refundStatusBadge(tx) + '</td>' +
+                        '<td>Cash: ₦' + cashPaid.toLocaleString()
+                            + '<br>Transfer: ₦' + transferPaid.toLocaleString() + '</td>' +
+                        '<td><span style="color: ' + statusColor + '; font-weight: bold;">'
+                            + escapeHtml(statusLabel) + '</span></td>' +
+                        '<td>' +
+                        '<button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt(\''
+                            + safeTxId + '\')">View / Reprint</button> ' + refundBtn +
+                        '</td>' +
+                        '</tr>'
+                    );
+                });
+
+                tbody.innerHTML = rowsHtml.length === 0
+                    ? '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No past sales transactions found for this filter.</td></tr>'
+                    : rowsHtml.join('');
+
+                const dayEl = document.getElementById('todays-revenue-card')
+                    || document.getElementById('total-revenue-day-label');
+                if (dayEl) dayEl.textContent = '₦' + selectedDayRevenue.toLocaleString();
+
+                const cashEl = document.getElementById('total-cash-card')
+                    || document.getElementById('total-cash-label');
+                if (cashEl) cashEl.textContent = '₦' + selectedDayCash.toLocaleString();
+
+                const transferEl = document.getElementById('total-pos-card')
+                    || document.getElementById('total-transfer-label');
+                if (transferEl) transferEl.textContent = '₦' + selectedDayTransfer.toLocaleString();
+
+                const weekEl = document.getElementById('total-revenue-week-label');
+                if (weekEl) weekEl.textContent = '₦' + weekRevenue.toLocaleString();
+
+                const monthEl = document.getElementById('total-revenue-month-label');
+                if (monthEl) monthEl.textContent = '₦' + monthRevenue.toLocaleString();
+            });
+
+            loadRefundsSummaryForDate(selectedDateString);
+        };
+        console.log('PERF PATCH: loadPastSalesHistory upgraded.');
+    }
+
+    console.log('PERF PATCH v1 applied successfully.');
+})();
