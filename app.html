@@ -317,6 +317,7 @@
             <button class="menu-btn btn-dash" style="width:auto; margin:0;" onclick="exportAuditLogCSV()">📥 Export CSV</button>
             <button class="menu-btn" style="width:auto; margin:0; background:#e2e8f0; border:1px solid #cbd5e1;" onclick="clearAuditFilters()">Clear Filters</button>
             <button class="menu-btn" style="width:auto; margin:0; background:#fef2f2; border:1px solid #fecaca; color:#991b1b;" onclick="showPriceOverridesOnly()">💸 Price Overrides Only</button>
+            <button class="menu-btn" style="width:auto; margin:0; background:#ecfeff; border:1px solid #a5f3fc; color:#0e7490;" onclick="changeMyAuditName()">✎ Set My Name</button>
             <span id="audit-count-label" style="margin-left:auto; font-size:12px; color:#64748b; align-self:center;"></span>
         </div>
 
@@ -1838,7 +1839,6 @@ window.addEventListener('load', function () {
       var basePrice = justAdded && (justAdded.originalPrice || justAdded.basePrice || justAdded.defaultPrice);
       var usedPrice = justAdded && (justAdded.price || justAdded.unitPrice);
       var effectiveBase = basePrice != null ? Number(basePrice) : (usedPrice != null ? Number(usedPrice) : null);
-      var effectiveUsed = usedPrice != null ? Number(usedPrice) : null;
 
       // fallback: read base price from the inventory cache if the cart item didn't carry it
       if (effectiveBase == null && justAdded && typeof inventoryCache !== 'undefined') {
