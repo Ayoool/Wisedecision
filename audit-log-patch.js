@@ -1,5 +1,5 @@
 /* ============================================================
-   audit-log-patch.js  v4 — Firebase-first
+   audit-log-patch.js  v5 — Firebase-first + price override report
    Multi-tenant aware. Reads store id / user from runtime,
    caches the last known values, writes to audit/{storeId}.
    ============================================================ */
@@ -19,43 +19,25 @@
 
     /* ---------- runtime discovery: user ---------- */
     function currentUser() {
-        // 1) globals
         var candidates = [
-            window.currentUserName,
-            window.loggedInUserName,
-            window.currentStaffName,
-            window.currentUser,
-            window.activeUser,
-            window.userName,
-            window.staffName,
-            window.adminName,
-            window.adminUser,
-            window.loggedInStaff,
-            window.currentCashier
+            window.currentUserName, window.loggedInUserName, window.currentStaffName,
+            window.currentUser, window.activeUser, window.userName, window.staffName,
+            window.adminName, window.adminUser, window.loggedInStaff, window.currentCashier
         ];
         for (var i = 0; i < candidates.length; i++) {
-            if (candidates[i]) {
-                __lastKnownUser = String(candidates[i]);
-                return __lastKnownUser;
-            }
+            if (candidates[i]) { __lastKnownUser = String(candidates[i]); return __lastKnownUser; }
         }
-        // 2) sidebar label "Logged in as X"
         var el = document.getElementById('user-role-label');
         if (el) {
             var m = (el.textContent || '').match(/logged in as\s+(.+)/i);
-            if (m && m[1]) {
-                __lastKnownUser = m[1].trim();
-                return __lastKnownUser;
-            }
+            if (m && m[1]) { __lastKnownUser = m[1].trim(); return __lastKnownUser; }
         }
-        // 3) last-known cache
         if (__lastKnownUser) return __lastKnownUser;
         return 'Unknown';
     }
 
     /* ---------- runtime discovery: store id ---------- */
     function currentStore() {
-        // 1) globals — common names in a multi-tenant app
         var cands = [
             window.currentStoreId, window.storeId, window.storeID,
             window.activeStoreId, window.currentStore, window.loggedInStore,
@@ -64,27 +46,18 @@
             window.storeCode, window.store_id, window.currentStoreCode
         ];
         for (var i = 0; i < cands.length; i++) {
-            if (cands[i]) {
-                __lastKnownStore = String(cands[i]).trim();
-                return __lastKnownStore;
-            }
+            if (cands[i]) { __lastKnownStore = String(cands[i]).trim(); return __lastKnownStore; }
         }
-        // 2) the login form field (before the handler clears it)
         var inp = document.getElementById('store-id-input');
         if (inp && inp.value && inp.value.trim()) {
             __lastKnownStore = inp.value.trim();
             return __lastKnownStore;
         }
-        // 3) the sidebar brand title (skip the default placeholder text)
         var brand = document.getElementById('dashboard-store-title');
         if (brand) {
             var txt = (brand.textContent || '').trim();
-            if (txt && !/wise decision/i.test(txt)) {
-                __lastKnownStore = txt;
-                return __lastKnownStore;
-            }
+            if (txt && !/wise decision/i.test(txt)) { __lastKnownStore = txt; return __lastKnownStore; }
         }
-        // 4) last-known cache
         if (__lastKnownStore) return __lastKnownStore;
         return '';
     }
@@ -162,15 +135,9 @@
     }
 
     wrap('handleStoreLogin', function () {
-        // snapshot the store id from the input BEFORE the handler clears it
         var inp = document.getElementById('store-id-input');
-        if (inp && inp.value && inp.value.trim()) {
-            __lastKnownStore = inp.value.trim();
-        }
-        // after login succeeds, try to capture the resolved store + user
+        if (inp && inp.value && inp.value.trim()) __lastKnownStore = inp.value.trim();
         setTimeout(function () {
-            // if the app updated the sidebar title to the real store name,
-            // __lastKnownStore already holds the *id* from the input, so keep it.
             var el = document.getElementById('user-role-label');
             if (el) {
                 var m = (el.textContent || '').match(/logged in as\s+(.+)/i);
@@ -212,6 +179,13 @@
         cart.forEach(function (it) { total += Number(it.qty || 0) * Number(it.price || 0); });
         window.auditLog('sale', 'cart', 'Completed sale, ' + cart.length + ' items, ₦' + total.toFixed(0));
     });
+
+    /* ---------- PRICE OVERRIDE LOGGING ----------
+       The actual override is captured in index.html, inside the addToCart
+       wrapper. That code calls window.auditLog('price_override', ...)
+       directly. Nothing to hook here — this note exists so future-you
+       knows where the logic lives.
+       -------------------------------------------- */
 
     /* ---------- load ---------- */
     function loadAudit(callback, force) {
@@ -279,7 +253,7 @@
             if (!list.length) {
                 body.innerHTML =
                     '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">' +
-                    ` 'No audit entries yet. Actions you take from nowlocal on will show up here.<br><br>' +
+                    'No audit entries yet. Actions you take from now on will show up here.<br><br>' +
                     '<button class="menu-btn btn-action-primary" style="width:auto; margin:6px auto 0; padding:8px 16px;" ' +
                     'onclick="window.auditLog(\'login\',\'session\',\'Manual test entry\'); setTimeout(renderAuditLog, 800);">✎ Log Test Entry</button>' +
                     '</td></tr>';
@@ -291,12 +265,23 @@
             }
 
             body.innerHTML = filtered.map(function (e) {
+                // price_override rows get a highlighted old → new price cell
+                var detailsHtml = esc(e.details);
+                if (e.action === 'price_override' && e.oldPrice != null && e.newPrice != null) {
+                    var drop = Number(e.oldPrice) - Number(e.newPrice);
+                    var dropColor = drop > 0 ? '#dc2626' : '#16a34a';
+                    detailsHtml = '₦' + Number(e.oldPrice).toLocaleString() +
+                                  ' → <strong style="color:' + dropColor + ';">₦' + Number(e.newPrice).toLocaleString() + '</strong>' +
+                                  (drop !== 0 ? ' (' + (drop > 0 ? '−' : '+') + '₦' + Math.abs(drop).toLocaleString() + ')' : '') +
+                                  ' × ' + (e.qty || 1);
+                }
+
                 return '<tr style="border-bottom:1px solid #f1f5f9;">' +
                     '<td style="padding:8px; white-space:nowrap;">' + fmtDate(e.date) + '</td>' +
                     '<td style="padding:8px;">' + esc(e.user) + '</td>' +
                     '<td style="padding:8px;"><span style="background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:bold;">' + esc(e.action) + '</span></td>' +
                     '<td style="padding:8px;">' + esc(e.target) + '</td>' +
-                    '<td style="padding:8px;">' + esc(e.details) + '</td>' +
+                    '<td style="padding:8px;">' + detailsHtml + '</td>' +
                     '<td style="padding:8px;">' + esc(e.branch) + '</td>' +
                 '</tr>';
             }).join('');
@@ -311,12 +296,27 @@
         renderAuditLog();
     };
 
+    /* ---------- price overrides quick report ---------- */
+    window.showPriceOverridesOnly = function () {
+        document.getElementById('audit-filter-user').value = '';
+        document.getElementById('audit-filter-action').value = 'price_override';
+        document.getElementById('audit-filter-from').value = '';
+        document.getElementById('audit-filter-to').value = '';
+        renderAuditLog();
+    };
+
     window.exportAuditLogCSV = function () {
         loadAudit(function (list, err) {
             if (err || !list) { alert('Cannot export: ' + (err || 'no data')); return; }
-            var rows = [['Date','User','Action','Target','Details','Branch']];
+            var rows = [['Date','User','Action','Target','Details','Branch','Old Price','New Price','Qty']];
             list.forEach(function (e) {
-                rows.push([e.date || '', e.user || '', e.action || '', e.target || '', e.details || '', e.branch || '']);
+                rows.push([
+                    e.date || '', e.user || '', e.action || '', e.target || '',
+                    e.details || '', e.branch || '',
+                    e.oldPrice != null ? e.oldPrice : '',
+                    e.newPrice != null ? e.newPrice : '',
+                    e.qty != null ? e.qty : ''
+                ]);
             });
             var csv = rows.map(function (r) {
                 return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
