@@ -48,7 +48,7 @@ body {
 @media (max-height: 900px) and (orientation: portrait) {
     .auth-wrapper {
         align-items: flex-start;
-        padding-top: 15vh;
+        padding-top: 12vh;
     }
 }
 
@@ -62,15 +62,15 @@ body {
 
 .auth-card {
     background: var(--card-bg);
-    padding: 32px 28px;
-    border-radius: var(--radius);
+    padding: 36px 28px 30px;
+    border-radius: 16px;
     border: 1px solid var(--border);
     width: 100%;
     max-width: 420px;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
     box-sizing: border-box;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.12);
 }
 
 @media (max-height: 700px) {
@@ -81,40 +81,55 @@ body {
     .auth-card { padding: 24px 18px; }
 }
 
+/* Brand */
 .brand-title {
     font-size: 20px;
     font-weight: 900;
-    color: var(--accentalert);
+    color: var(--accent);
     text-align: left;
-    letter-spacing-b: 0.5px;
+    letter-spacing: 0.5px;
 }
 
-/* Big highlighted "W" inadge WISE DECISION */
-.brand-title .big-w {
+/* Big highlighted "W" in WISE DECISION */
+.brand-title .big-w12 {
     display: inline-block;
-    font-size: 32px;
+    fontpx-size: 32px;
     font-weight: 900;
+;
     line-height: 1;
+}
+
     vertical-align: -3px;
-    margin-right: 1px;
-    background: linear-gradient(135deg, #14b8a6 0%, #0284c7 100%);
+.form    margin-right: 1px;
+    background:-group linear-gradient(135deg, #14b8a6 0%, #0284c7 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: #0d9488; /* fallback for older browsers */
 }
 
+/* Brand inside the login card is centered (matches screenshot) */
+.auth-card .brand-title {
+    margin: 0 0 8px 0;
+    line-height: 1.1;
+    font-size: 24px;
+    letter-spacing: 0.8px;
+    text-align: center;
+}
+.auth-card .brand-title .big-w {
+    font-size: 34px;
+    vertical-align: -4px;
+}
+
 @media (max-height: 700px) {
-    .auth-card .brand-title { font-size: 17px; }
-    .auth-card .brand-title .big-w { font-size: 26px; }
+    .auth-card .brand-title { font-size: 19px; }
+    .auth-card .brand-title .big-w { font-size: 28px; }
 }
 
 @media (max-width: 360px) {
-    .auth-card .brand-title { font-size: 18px; }
-    .auth-card .brand-title .big-w { font-size: 26px; vertical-align: -2px; }
+    .auth-card .brand-title { font-size: 20px; }
+    .auth-card .brand-title .big-w { font-size: 30px; vertical-align: -3px; }
 }
-
-.auth-card .brand-title { margin-bottom: 6px; line-height: 1.15; }
 
 .subtitle {
     font-size: 12px;
@@ -123,17 +138,21 @@ body {
     margin-bottom: 15px;
 }
 
-.auth-card .subtitle { margin-bottom: 26px; }
+.auth-card .subtitle {
+    text-align: center;
+    font-size: 13px;
+    margin: 0 0 28px 0;
+    color: #64748b;
+    font-weight: 500;
+}
 
 @media (max-height: 700px) {
-    .auth-card .subtitle { margin-bottom: 16px; }
+    .auth-card .subtitle { margin-bottom: 18px; }
 }
 
+/* Form fields inside the login card */
 .form-group {
-    margin-bottom: 12px;
-}
-
-.form-group label {
+    margin-bottom:  label {
     display: block;
     font-size: 12px;
     margin-bottom: 4px;
@@ -156,9 +175,23 @@ body {
 }
 
 /* Login-specific input polish */
+.auth-card .form-group {
+    margin-bottom: 14px;
+}
+
+.auth-card .form-group label {
+    font-weight: 700;
+    color: #334155;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
 .auth-card .form-group input {
-    padding: 12px 14px;
+    padding: 13px 14px;
     font-size: 14px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
     transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
@@ -200,7 +233,32 @@ body {
     filter: brightness(0.97);
 }
 
-.auth-card .menu-btn { margin-bottom: 12px; }
+/* The two buttons inside the login card */
+.auth-card .menu-btn {
+    margin-bottom: 12px;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 13px 14px;
+    border-radius: 10px;
+}
+
+.auth-card .btn-action-primary {
+    box-shadow: 0 8px 20px rgba(20, 184, 166, 0.28);
+    margin-top: 6px;
+}
+
+.auth-card .btn-secondary {
+    background: #eef2f7;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    box-shadow: none;
+}
+.auth-card .btn-secondary:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    filter: none;
+}
 
 .btn-dash {
     background: #eff6ff;
@@ -364,37 +422,21 @@ body {
     box-sizing: border-box;
 }
 
-@media (min-width: 768px) {
-    .dashboard-layout {
-        flex-direction: row;
-        align-items: flex-start;
-    }
-
-    .sidebar {
-        width: 260px;
-        flex-shrink: 0;
-        position: sticky;
-        top: 0;
-        max-height: 100vh;
-        overflow-y: auto;
-        overflow-x: hidden;
-    }
-
-    .main-content-area {
-        flex: 1;
-        min-width: 0;
-        min-height: 100vh;
-    }
-}
-
+/* ---------- MOBILE (default) ---------- */
 .sidebar {
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border-right: 2px solid #e2e8f0;
-    padding: 20px;
+    background: #ffffff;
+    border-right: none;
+    border-bottom: 2px solid #e2e8f0;
+    padding: 12px 14px;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;          /* horizontal nav on mobile */
+    flex-wrap: wrap;
+    gap: 8px;
     box-sizing: border-box;
-    box-shadow: 4px 0 15px rgba(0,0,0,0.03);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    position: sticky;
+    top: 0;
+    z-index: 50;
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;
 }
@@ -404,11 +446,85 @@ body {
 .sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 .sidebar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+/* Shrink sidebar buttons on mobile so they don't eat the screen */
+.sidebar .menu-btn {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 110px;
+    margin-bottom: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    justify-content: center;
+    border-left-width: 3px;
+}
+
+.sidebar .brand-title {
+    flex: 1 1 100%;
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
 .main-content-area {
-    padding: 25px;
+    padding: 16px 14px 32px;
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     box-sizing: border-box;
     width: 100%;
+}
+
+/* Page heading breathing room */
+.main-content-area > h2,
+.main-content-area > h1 {
+    margin: 8px 0 18px;
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+/* ---------- DESKTOP ---------- */
+@media (min-width: 768px) {
+    .dashboard-layout {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+
+    .sidebar {
+        width: 260px;
+        flex-shrink: 0;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        gap: 0;
+        border-right: 2px solid #e2e8f0;
+        border-bottom: none;
+        padding: 20px;
+        position: sticky;
+        top: 0;
+        max-height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .sidebar .menu-btn {
+        width: 100%;
+        flex: 0 0 auto;
+        margin-bottom: 8px;
+        font-size: 13px;
+        justify-content: flex-start;
+        padding: 12px 14px;
+        border-left-width: 4px;
+    }
+
+    .sidebar .brand-title {
+        flex: 0 0 auto;
+        font-size: 20px;
+        margin-bottom: 12px;
+    }
+
+    .main-content-area {
+        flex: 1;
+        min-width: 0;
+        min-height: 100vh;
+        padding: 25px;
+    }
 }
 
 /* ==================== TABLES ==================== */
@@ -466,7 +582,7 @@ th {
     display: inline-block;
 }
 
-.-orange {
+.alert-badge-orange {
     background: #ffedd5;
     color: #9a3412;
     padding: 2px 6px;
@@ -476,25 +592,42 @@ th {
     display: inline-block;
 }
 
+/* ==================== SETTINGS CARDS ==================== */
 .security-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 20px;
-    margin-top: 15px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    margin-top: 0;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
 }
 
 .security-card h3 {
-    font-size: 1.1rem;
-    color: #1e293b;
-    margin-bottom: 5px;
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
 }
 
 .security-card p {
     font-size: 0.85rem;
     color: #64748b;
     margin-bottom: 15px;
+}
+
+@media (max-width: 767px) {
+    .security-card {
+        padding: 16px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+        font-size: 16px; /* prevents iOS auto-zoom on focus */
+        padding: 11px 12px;
+    }
 }
 
 .btn-primary {
