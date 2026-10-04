@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v28 (default POS sale unit is Piece)");
+console.log("Wise Decision script.js — build v29 (security escapes, logout listener cleanup, split rounding)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -23,6 +23,31 @@ try {
     }
 } catch (e) {
     console.error("Firebase init error:", e);
+}
+
+// ==================== [FIXED #1] HTML / JS-ATTR ESCAPE HELPERS ====================
+// Wrap every value that came from user input before interpolating into innerHTML.
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Escape a value being placed inside a single-quoted JS string that lives inside
+// an HTML attribute, e.g. onclick="fn('${escapeJsAttr(x)}')".
+function escapeJsAttr(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/&/g, '&amp;');
 }
 
 // ==================== [v26] UNIT NAME HELPERS ====================
@@ -60,8 +85,8 @@ function refreshUnitNameDatalists() {
     });
 
     const sortAlpha = (a, b) => a.localeCompare(b);
-    baseDl.innerHTML = Array.from(usedBase).sort(sortAlpha).map(u => `<option value="${u}">`).join('');
-    bulkDl.innerHTML = Array.from(usedBulk).sort(sortAlpha).map(u => `<option value="${u}">`).join('');
+    baseDl.innerHTML = Array.from(usedBase).sort(sortAlpha).map(u => `<option value="${escapeHtml(u)}">`).join('');
+    bulkDl.innerHTML = Array.from(usedBulk).sort(sortAlpha).map(u => `<option value="${escapeHtml(u)}">`).join('');
 }
 
 function onUnitNameInput() {
@@ -186,9 +211,10 @@ function extendSession() {
     window.addEventListener(evt, resetIdleTimer, { passive: true });
 });
 
-window.onload = function() {
+// [FIXED #10] Use addEventListener so we don't clobber any other load handler.
+window.addEventListener('load', function() {
     console.log("Wise Decision Enterprise Suite Initialized.");
-};
+});
 
 // ==================== OFFLINE MODE & SYNC HANDLER ====================
 window.addEventListener('online', () => {
@@ -443,7 +469,7 @@ function updateBranchBadge() {
 
     if (currentUserRole === 'Admin' && Object.keys(branchesCache).length > 1) {
         let options = Object.keys(branchesCache).map(id =>
-            `<option value="${id}" ${id === currentBranch ? 'selected' : ''}>${branchesCache[id].name}</option>`
+            `<option value="${escapeHtml(id)}" ${id === currentBranch ? 'selected' : ''}>${escapeHtml(branchesCache[id].name)}</option>`
         ).join('');
         container.innerHTML = `
             <label style="font-size:10px; font-weight:bold; color:#166534; display:block; margin-bottom:2px;">Operating Branch</label>
@@ -452,7 +478,7 @@ function updateBranchBadge() {
             </select>
         `;
     } else {
-        container.innerHTML = `<span id="branch-badge" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); color: #166534; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; display: inline-block; border: 1px solid #86efac;">Branch: ${branchNameOf(currentBranch)}</span>`;
+        container.innerHTML = `<span id="branch-badge" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); color: #166534; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; display: inline-block; border: 1px solid #86efac;">Branch: ${escapeHtml(branchNameOf(currentBranch))}</span>`;
     }
 }
 
@@ -638,9 +664,17 @@ function registerBusinessAccount() {
     });
 }
 
+// [FIXED #2] Detach every real-time listener on logout, not just branches.
 function logout() {
     if (currentStoreId) {
-        firebase.database().ref(`stores/${currentStoreId}/branches`).off();
+        ['branches', 'pendingOrders', 'transactions', 'heldCarts', 'customers', 'transfers', 'supplies', 'suppliers', 'expenses', 'refunds']
+            .forEach(path => {
+                try {
+                    firebase.database().ref(`stores/${currentStoreId}/${path}`).off();
+                } catch (e) {
+                    // ignore — path may not exist for this store
+                }
+            });
     }
     if (idleTimer) clearTimeout(idleTimer);
     hideIdleWarningModal();
@@ -655,6 +689,7 @@ function logout() {
     customersCache = {};
     branchesCache = {};
     suppliersCache = {};
+    inventoryCache = {};
     adjustSidebarForRole("Admin");
     switchView('login-view');
 }
@@ -699,20 +734,22 @@ function loadSuperAdminDashboard() {
             const data = child.val();
             const status = data.status || 'active';
             const statusColor = status === 'active' ? 'green' : 'red';
+            const safeStoreId = escapeJsAttr(storeId);
+            const safePhone = escapeJsAttr(data.phone || '');
 
             rowsHtml.push(`
                 <tr>
-                    <td><strong>${storeId}</strong></td>
-                    <td>${data.businessName || 'N/A'}</td>
-                    <td>${data.phone || 'N/A'}</td>
-                    <td><span style="color: ${statusColor}; font-weight: bold;">${status.toUpperCase()}</span></td>
+                    <td><strong>${escapeHtml(storeId)}</strong></td>
+                    <td>${escapeHtml(data.businessName) || 'N/A'}</td>
+                    <td>${escapeHtml(data.phone) || 'N/A'}</td>
+                    <td><span style="color: ${statusColor}; font-weight: bold;">${escapeHtml(status.toUpperCase())}</span></td>
                     <td>
-                        <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="toggleStoreLock('${storeId}', '${status}')">
+                        <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="toggleStoreLock('${safeStoreId}', '${status}')">
                             ${status === 'active' ? '🔒 Lock' : '🔓 Unlock'}
                         </button>
-                        <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto; background: #0284c7; color: #fff;" onclick="promptChangeStorePassword('${storeId}')">🔑 PIN</button>
-                        <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto; background: #d97706; color: #fff;" onclick="sendMaintenanceNotice('${storeId}', '${data.phone}')">📢 Notice</button>
-                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="deleteBusinessAccount('${storeId}')">🗑 Delete</button>
+                        <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto; background: #0284c7; color: #fff;" onclick="promptChangeStorePassword('${safeStoreId}')">🔑 PIN</button>
+                        <button class="menu-btn" style="padding: 4px 8px; font-size: 11px; width: auto; background: #d97706; color: #fff;" onclick="sendMaintenanceNotice('${safeStoreId}', '${safePhone}')">📢 Notice</button>
+                        <button class="menu-btn btn-logout" style="padding: 4px 8px; font-size: 11px; width: auto;" onclick="deleteBusinessAccount('${safeStoreId}')">🗑 Delete</button>
                     </td>
                 </tr>
             `);
@@ -878,7 +915,7 @@ function renderDashboardAlerts() {
         const previousValue = currentDashboardAlertsCategoryFilter;
         let options = '<option value="all">All Categories</option>';
         categories.forEach(cat => {
-            options += `<option value="${cat}" ${cat === previousValue ? 'selected' : ''}>${cat}</option>`;
+            options += `<option value="${escapeHtml(cat)}" ${cat === previousValue ? 'selected' : ''}>${escapeHtml(cat)}</option>`;
         });
         categorySelect.innerHTML = options;
         if (previousValue !== 'all' && !categories.includes(previousValue)) {
@@ -895,11 +932,11 @@ function renderDashboardAlerts() {
         if (dashboardAlertsCache.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No stock or expiry alerts. Inventory is healthy!</td></tr>`;
         } else if (categoryFilter !== 'all' && typeLabel) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No ${typeLabel} alerts in category "${categoryFilter}".</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No ${typeLabel} alerts in category "${escapeHtml(categoryFilter)}".</td></tr>`;
         } else if (typeLabel) {
             tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No ${typeLabel} alerts right now.</td></tr>`;
         } else {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No alerts in category "${categoryFilter}".</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No alerts in category "${escapeHtml(categoryFilter)}".</td></tr>`;
         }
         return;
     }
@@ -908,7 +945,7 @@ function renderDashboardAlerts() {
         let badge = a.isLowStock ? '<span style="color:red; font-weight:bold;">Low Stock</span> ' : '';
         if (a.isExpiringSoon) badge += '<span style="color:orange; font-weight:bold;">Expiring Soon</span>';
         const categoryTag = a.category
-            ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${a.category}</span>`
+            ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${escapeHtml(a.category)}</span>`
             : '<span style="color:var(--text-muted);">—</span>';
         const labels = getUnitLabels(a);
         const stockDisplay = a.soldByWeight
@@ -917,10 +954,10 @@ function renderDashboardAlerts() {
 
         return `
             <tr>
-                <td>${a.name}</td>
+                <td>${escapeHtml(a.name)}</td>
                 <td>${categoryTag}</td>
                 <td>${stockDisplay}</td>
-                <td>${a.expiryVal || 'N/A'}</td>
+                <td>${escapeHtml(a.expiryVal) || 'N/A'}</td>
                 <td>${badge}</td>
             </tr>
         `;
@@ -969,11 +1006,11 @@ function populateInventoryBranchFilter() {
     if (currentUserRole === 'Admin') {
         options += `<option value="all" ${currentInventoryBranchFilter === 'all' ? 'selected' : ''}>🌐 All Branches (combined, view-only)</option>`;
         Object.keys(branchesCache).forEach(id => {
-            options += `<option value="${id}" ${currentInventoryBranchFilter === id ? 'selected' : ''}>${branchesCache[id].name}</option>`;
+            options += `<option value="${escapeHtml(id)}" ${currentInventoryBranchFilter === id ? 'selected' : ''}>${escapeHtml(branchesCache[id].name)}</option>`;
         });
         select.disabled = false;
     } else {
-        options = `<option value="${currentBranch}" selected>${branchNameOf(currentBranch)}</option>`;
+        options = `<option value="${escapeHtml(currentBranch)}" selected>${escapeHtml(branchNameOf(currentBranch))}</option>`;
         select.disabled = true;
         currentInventoryBranchFilter = currentBranch;
     }
@@ -1012,7 +1049,7 @@ function populateInventoryCategoryFilter() {
     const previousValue = currentInventoryCategoryFilter;
     let options = '<option value="all">All Categories</option>';
     sorted.forEach(cat => {
-        options += `<option value="${cat}" ${cat === previousValue ? 'selected' : ''}>${cat}</option>`;
+        options += `<option value="${escapeHtml(cat)}" ${cat === previousValue ? 'selected' : ''}>${escapeHtml(cat)}</option>`;
     });
     select.innerHTML = options;
 
@@ -1033,7 +1070,7 @@ function updateCategoryDatalist() {
         });
     });
 
-    datalist.innerHTML = Array.from(categories).sort((a, b) => a.localeCompare(b)).map(cat => `<option value="${cat}">`).join('');
+    datalist.innerHTML = Array.from(categories).sort((a, b) => a.localeCompare(b)).map(cat => `<option value="${escapeHtml(cat)}">`).join('');
 }
 
 function onInventoryCategoryFilterChange() {
@@ -1056,7 +1093,6 @@ function packPieceInfoLabel(item) {
     return `1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}<br>${labels.baseName}: ₦${Number(piecePrice).toLocaleString()}`;
 }
 
-// [v27] Piece price now switches on customer tier using pieceRetail / pieceWholesale.
 function getPiecePrice(item, customerType) {
     const unitsPerPack = Number(item.unitsPerPack) || 1;
 
@@ -1130,24 +1166,24 @@ function renderInventoryTable() {
         const rowsHtml = [];
         keys.forEach(key => {
             const item = combined[key];
-            const branchBreakdown = Object.keys(item.branches).map(bn => `${bn}: ${item.branches[bn]}`).join(', ');
+            const branchBreakdown = Object.keys(item.branches).map(bn => `${escapeHtml(bn)}: ${item.branches[bn]}`).join(', ');
             rowsHtml.push(`
                 <tr>
-                    <td>${item.name}</td>
-                    <td>${item.category ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${item.category}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+                    <td>${escapeHtml(item.name)}</td>
+                    <td>${item.category ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${escapeHtml(item.category)}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                     <td>₦${Number(item.costPrice).toLocaleString()}</td>
                     <td>₦${Number(item.price).toLocaleString()}</td>
                     <td>₦${Number(item.wholesalePrice).toLocaleString()}</td>
                     <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                     <td>${formatStockLabel(item)} <br><small style="color:var(--text-muted);">${branchBreakdown}</small></td>
-                    <td>${item.expiry}</td>
+                    <td>${escapeHtml(item.expiry)}</td>
                     <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                 </tr>
             `);
         });
 
         tbody.innerHTML = keys.length === 0
-            ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found${categoryFilter !== 'all' ? ` in category "${categoryFilter}"` : ' in any branch yet'}.</td></tr>`
+            ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found${categoryFilter !== 'all' ? ` in category "${escapeHtml(categoryFilter)}"` : ' in any branch yet'}.</td></tr>`
             : rowsHtml.join('');
         return;
     }
@@ -1168,14 +1204,14 @@ function renderInventoryTable() {
 
         rowsHtml.push(`
             <tr id="inv-row-${branchId}-${id}">
-                <td>${pName}</td>
-                <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${pCategory}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+                <td>${escapeHtml(pName)}</td>
+                <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${escapeHtml(pCategory)}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                 <td>₦${Number(cPrice).toLocaleString()}</td>
                 <td>₦${Number(rPrice).toLocaleString()}</td>
                 <td>₦${Number(wPrice).toLocaleString()}</td>
                 <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                 <td>${formatStockLabel(item)}</td>
-                <td>${pExpiry}</td>
+                <td>${escapeHtml(pExpiry)}</td>
                 <td>
                     <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
                     <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block; background:#ecfdf5; color:#166534; border:1px solid #a7f3d0;" onclick="openQuickRestockModal('${branchId}','${id}')">🔄 Restock</button>
@@ -1187,7 +1223,7 @@ function renderInventoryTable() {
     });
 
     tbody.innerHTML = ids.length === 0
-        ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found${categoryFilter !== 'all' ? ` in category "${categoryFilter}"` : ` in ${branchNameOf(branchId)}. Add your first item above!`}.</td></tr>`
+        ? `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 20px;">No products found${categoryFilter !== 'all' ? ` in category "${escapeHtml(categoryFilter)}"` : ` in ${escapeHtml(branchNameOf(branchId))}. Add your first item above!`}.</td></tr>`
         : rowsHtml.join('');
 }
 
@@ -1219,14 +1255,14 @@ function filterInventoryTable() {
                 const pExpiry = item.expiry || item.expiryDate || 'N/A';
                 rowsHtml.push(`
                     <tr>
-                        <td>${pName} <br><small style="color:var(--text-muted);">${branchName}</small></td>
-                        <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${pCategory}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+                        <td>${escapeHtml(pName)} <br><small style="color:var(--text-muted);">${escapeHtml(branchName)}</small></td>
+                        <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${escapeHtml(pCategory)}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                         <td>₦${Number(cPrice).toLocaleString()}</td>
                         <td>₦${Number(rPrice).toLocaleString()}</td>
                         <td>₦${Number(wPrice).toLocaleString()}</td>
                         <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                         <td>${formatStockLabel(item)}</td>
-                        <td>${pExpiry}</td>
+                        <td>${escapeHtml(pExpiry)}</td>
                         <td><small style="color:var(--text-muted);">Select a branch to edit</small></td>
                     </tr>
                 `);
@@ -1247,14 +1283,14 @@ function filterInventoryTable() {
             const pExpiry = item.expiry || item.expiryDate || 'N/A';
             rowsHtml.push(`
                 <tr id="inv-row-${branchId}-${id}">
-                    <td>${pName}</td>
-                    <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${pCategory}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
+                    <td>${escapeHtml(pName)}</td>
+                    <td>${pCategory ? `<span style="background:#f1f5f9; color:#334155; font-size:11px; font-weight:bold; padding:2px 8px; border-radius:5px; display:inline-block;">${escapeHtml(pCategory)}</span>` : '<span style="color:var(--text-muted);">—</span>'}</td>
                     <td>₦${Number(cPrice).toLocaleString()}</td>
                     <td>₦${Number(rPrice).toLocaleString()}</td>
                     <td>₦${Number(wPrice).toLocaleString()}</td>
                     <td style="font-size:11px;">${packPieceInfoLabel(item)}</td>
                     <td>${formatStockLabel(item)}</td>
-                    <td>${pExpiry}</td>
+                    <td>${escapeHtml(pExpiry)}</td>
                     <td>
                         <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editProduct('${branchId}','${id}')">Edit</button>
                         <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block; background:#ecfdf5; color:#166534; border:1px solid #a7f3d0;" onclick="openQuickRestockModal('${branchId}','${id}')">🔄 Restock</button>
@@ -1432,7 +1468,6 @@ function saveProduct() {
     const wholesalePrice = parseFloat(document.getElementById('inv-wholesale-price').value) || 0;
     const unitsPerPack = soldByWeight ? 1 : (parseInt(document.getElementById('inv-units-per-pack').value) || 1);
     const piecePrice = soldByWeight ? 0 : (parseFloat(document.getElementById('inv-piece-price').value) || 0);
-    // [v27] Piece wholesale price — falls back to piece retail in POS when blank.
     const pieceWholesalePrice = soldByWeight ? 0 : (parseFloat(document.getElementById('inv-piece-wholesale-price')?.value) || 0);
 
     let stock;
@@ -1470,7 +1505,7 @@ function saveProduct() {
         wholesalePrice, 
         unitsPerPack,
         piecePrice,
-        pieceWholesalePrice,   // [v27]
+        pieceWholesalePrice,
         stock, 
         stockQty: stock,
         expiry,
@@ -1531,7 +1566,6 @@ function editProduct(branchId, id) {
     document.getElementById('inv-wholesale-price').value = item.wholesalePrice || '';
     document.getElementById('inv-units-per-pack').value = item.unitsPerPack || '';
     document.getElementById('inv-piece-price').value = item.piecePrice || '';
-    // [v27]
     const pieceWholesaleField = document.getElementById('inv-piece-wholesale-price');
     if (pieceWholesaleField) pieceWholesaleField.value = item.pieceWholesalePrice || '';
 
@@ -1588,7 +1622,6 @@ function resetInventoryForm() {
     document.getElementById('inv-wholesale-price').value = '';
     document.getElementById('inv-units-per-pack').value = '';
     document.getElementById('inv-piece-price').value = '';
-    // [v27]
     const resetPieceWholesale = document.getElementById('inv-piece-wholesale-price');
     if (resetPieceWholesale) resetPieceWholesale.value = '';
     document.getElementById('inv-stock').value = '';
@@ -1609,6 +1642,7 @@ function deleteProduct(branchId, id) {
 }
 
 // ==================== SEQUENTIAL TRANSACTION ID GENERATOR ====================
+// [FIXED #6] Wider padding so sort order stays stable past 999 transactions.
 function generateNextTransactionId() {
     if (!currentStoreId || !db) {
         return Promise.reject(new Error("No active store or database connection."));
@@ -1619,7 +1653,7 @@ function generateNextTransactionId() {
         if (!result.committed) {
             throw new Error("Could not reserve a transaction number, please try again.");
         }
-        return 'WD-' + String(result.snapshot.val()).padStart(3, '0');
+        return 'WD-' + String(result.snapshot.val()).padStart(6, '0');
     });
 }
 
@@ -1633,7 +1667,7 @@ function generateNextRefundId() {
         if (!result.committed) {
             throw new Error("Could not reserve a refund number, please try again.");
         }
-        return 'RF-' + String(result.snapshot.val()).padStart(3, '0');
+        return 'RF-' + String(result.snapshot.val()).padStart(6, '0');
     });
 }
 
@@ -1722,7 +1756,7 @@ function loadPosInventoryDropdown() {
             const labels = getUnitLabels(item);
             const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}]` : '');
 
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${escapeHtml(id)}">${escapeHtml(pName)} (Stock: ${escapeHtml(formatStockLabel(item))})${escapeHtml(pieceNote)} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         });
     });
 }
@@ -1745,7 +1779,7 @@ function filterPosInventory() {
         const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}]` : '');
 
         if (pName.toLowerCase().includes(query)) {
-            select.innerHTML += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            select.innerHTML += `<option value="${escapeHtml(id)}">${escapeHtml(pName)} (Stock: ${escapeHtml(formatStockLabel(item))})${escapeHtml(pieceNote)} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
         }
     });
 }
@@ -1773,7 +1807,6 @@ function onPosProductChange() {
             if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${wUnit})`;
             if (unitInfoEl) unitInfoEl.textContent = `⚖️ Sold by weight — enter the quantity in ${wUnit} (e.g. ${wUnit === 'g' ? '250' : '1.5'}).`;
         } else if (currentSaleUnit === 'Piece') {
-            // [v27] getPiecePrice now returns wholesale piece price when customer is Wholesale
             priceInput.value = getPiecePrice(item, currentCustomerType);
             if (qtyLabel) qtyLabel.textContent = `Quantity (${pluralizeUnit(labels.baseName, 2)})`;
             if (priceLabel) priceLabel.textContent = `Selling Price (₦ / ${labels.baseName})`;
@@ -1875,7 +1908,7 @@ function renderCart() {
         const unitLabel = cartItem.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
         tbody.innerHTML += `
             <tr>
-                <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType} · ${unitLabel}]</small></td>
+                <td>${escapeHtml(cartItem.name)} <br><small style="color:var(--text-muted);">[${escapeHtml(cartItem.customerType)} · ${escapeHtml(unitLabel)}]</small></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <button class="menu-btn" style="padding: 2px 6px; font-size: 10px; width: auto;" onclick="decreaseQty(${index})">-</button>
@@ -2039,16 +2072,17 @@ function loadPendingOrdersQueue() {
             if ((order.branchId || 'main') !== currentBranch) return;
 
             if (order.status === 'Pending Verification') {
+                const safeTxId = escapeJsAttr(order.txId);
                 rowsHtml.push(`
                     <tr>
-                        <td><strong>${order.txId}</strong>${order.customerName && order.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${order.customerName}</small>` : ''}</td>
-                        <td>${order.staff || order.soldBy || 'Staff'}</td>
+                        <td><strong>${escapeHtml(order.txId)}</strong>${order.customerName && order.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${escapeHtml(order.customerName)}</small>` : ''}</td>
+                        <td>${escapeHtml(order.staff || order.soldBy || 'Staff')}</td>
                         <td>₦${Number(order.totalAmount || 0).toLocaleString()}</td>
                         <td><span style="color: #d97706; font-weight: bold;">Pending Payment</span></td>
                         <td>
-                            <button class="menu-btn btn-dash" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPendingOrderDetails('${order.txId}')">View 👁</button>
-                            <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="openSplitModal('${order.txId}', ${order.totalAmount})">Process Payment 💳</button>
-                            <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="cancelPendingOrder('${order.txId}')">Cancel ✕</button>
+                            <button class="menu-btn btn-dash" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPendingOrderDetails('${safeTxId}')">View 👁</button>
+                            <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="openSplitModal('${safeTxId}', ${order.totalAmount})">Process Payment 💳</button>
+                            <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="cancelPendingOrder('${safeTxId}')">Cancel ✕</button>
                         </td>
                     </tr>
                 `);
@@ -2056,7 +2090,7 @@ function loadPendingOrdersQueue() {
         });
 
         tbody.innerHTML = rowsHtml.length === 0
-            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue for ${branchNameOf(currentBranch)}.</td></tr>`
+            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No pending payments in queue for ${escapeHtml(branchNameOf(currentBranch))}.</td></tr>`
             : rowsHtml.join('');
     }, error => {
         console.error("loadPendingOrdersQueue error:", error);
@@ -2139,23 +2173,24 @@ function loadCompletedTransactionsForAccountant() {
 
         const rowsHtml = rows.map(tx => {
             const transactionId = tx.txId || tx.id;
-            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            const safeTxId = escapeJsAttr(transactionId);
+            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${escapeHtml(tx.customerName)}</small>` : '';
             const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
-                ? `<button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${transactionId}')">↩ Refund</button>`
+                ? `<button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${safeTxId}')">↩ Refund</button>`
                 : '';
             return `
                 <tr>
-                    <td><strong>${transactionId}</strong>${customerTag}</td>
+                    <td><strong>${escapeHtml(transactionId)}</strong>${customerTag}</td>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
-                    <td>${tx.staff || tx.soldBy || 'Staff'}</td>
+                    <td>${escapeHtml(tx.staff || tx.soldBy || 'Staff')}</td>
                     <td>₦${Number(tx.totalAmount || 0).toLocaleString()}${refundStatusBadge(tx)}</td>
-                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button> ${refundBtn}</td>
+                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${safeTxId}')">View / Reprint</button> ${refundBtn}</td>
                 </tr>
             `;
         });
 
         tbody.innerHTML = rows.length === 0
-            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No completed sales yet for ${branchNameOf(currentBranch)}.</td></tr>`
+            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No completed sales yet for ${escapeHtml(branchNameOf(currentBranch))}.</td></tr>`
             : rowsHtml.join('');
     }, error => {
         console.error("loadCompletedTransactionsForAccountant error:", error);
@@ -2186,8 +2221,8 @@ function viewPendingOrderDetails(txId) {
                 const qty = item.qty || 0;
                 tbody.innerHTML += `
                     <tr>
-                        <td>${item.name || ''}</td>
-                        <td>${qty} ${unitLabel}${qty === 1 ? '' : 's'}</td>
+                        <td>${escapeHtml(item.name)}</td>
+                        <td>${qty} ${escapeHtml(unitLabel)}${qty === 1 ? '' : 's'}</td>
                         <td>₦${Number(item.price || 0).toLocaleString()}</td>
                         <td>₦${Number(item.total || 0).toLocaleString()}</td>
                     </tr>
@@ -2242,10 +2277,10 @@ function openSplitModal(txId, totalAmount) {
         if (currentActiveOrder.customerId && customersCache[currentActiveOrder.customerId]) {
             const c = customersCache[currentActiveOrder.customerId];
             const available = Math.max(0, (Number(c.creditLimit) || 0) - (Number(c.balance) || 0));
-            if (custInfo) custInfo.innerHTML = `Customer: <strong>${c.name}</strong> &nbsp;|&nbsp; Current Balance: ₦${(Number(c.balance) || 0).toLocaleString()} &nbsp;|&nbsp; Credit Available: ₦${available.toLocaleString()}`;
+            if (custInfo) custInfo.innerHTML = `Customer: <strong>${escapeHtml(c.name)}</strong> &nbsp;|&nbsp; Current Balance: ₦${(Number(c.balance) || 0).toLocaleString()} &nbsp;|&nbsp; Credit Available: ₦${available.toLocaleString()}`;
             if (creditContainer) creditContainer.style.display = 'block';
         } else {
-            if (custInfo) custInfo.innerHTML = `Customer: <strong>${currentActiveOrder.customerName}</strong> &nbsp;|&nbsp; Branch: <strong>${branchNameOf(currentActiveOrder.branchId)}</strong>`;
+            if (custInfo) custInfo.innerHTML = `Customer: <strong>${escapeHtml(currentActiveOrder.customerName)}</strong> &nbsp;|&nbsp; Branch: <strong>${escapeHtml(branchNameOf(currentActiveOrder.branchId))}</strong>`;
             if (creditContainer) creditContainer.style.display = 'none';
         }
 
@@ -2259,6 +2294,7 @@ function closeSplitModal() {
     currentActiveOrder = null;
 }
 
+// [FIXED #4] Use tolerance instead of strict equality so kobo rounding doesn't lock out valid checkouts.
 function calcSplit() {
     let totalDue = parseFloat(document.getElementById('split-modal-total').innerText.replace(/,/g, '')) || 0;
     let cashVal = parseFloat(document.getElementById('split-cash').value) || 0;
@@ -2286,29 +2322,28 @@ function calcSplit() {
         }
     }
 
-    if (totalPaid === totalDue && totalDue > 0) {
+    const TOLERANCE = 0.01; // ₦0.01 — catches float drift without accepting real discrepancies
+
+    if (Math.abs(totalPaid - totalDue) < TOLERANCE && totalDue > 0) {
         statusField.value = "Status: Balanced ✅";
         statusField.style.background = "#dcfce7";
         statusField.style.color = "#166534";
-        
         acceptBtn.disabled = false;
         acceptBtn.style.opacity = "1";
         acceptBtn.style.cursor = "pointer";
-    } else if (totalPaid > totalDue) {
-        let excess = totalPaid - totalDue;
+    } else if (totalPaid > totalDue + TOLERANCE) {
+        const excess = totalPaid - totalDue;
         statusField.value = `Status: Overpaid by ₦${excess.toLocaleString()} ⚠`;
         statusField.style.background = "#fef9c3";
         statusField.style.color = "#854d0e";
-        
         acceptBtn.disabled = true;
         acceptBtn.style.opacity = "0.6";
         acceptBtn.style.cursor = "not-allowed";
     } else {
-        let deficit = totalDue - totalPaid;
+        const deficit = totalDue - totalPaid;
         statusField.value = `Status: Balance Remaining ₦${deficit.toLocaleString()}`;
         statusField.style.background = "#fee2e2";
         statusField.style.color = "#991b1b";
-        
         acceptBtn.disabled = true;
         acceptBtn.style.opacity = "0.6";
         acceptBtn.style.cursor = "not-allowed";
@@ -2474,7 +2509,7 @@ function renderReceiptView(orderData, isReprint = false) {
                     printableBox.prepend(cashierRow);
                 }
             }
-            cashierRow.innerHTML = `Cashier: ${cashierName}${orderData.branchId ? ` &middot; Branch: ${branchNameOf(orderData.branchId)}` : ''}`;
+            cashierRow.innerHTML = `Cashier: ${escapeHtml(cashierName)}${orderData.branchId ? ` &middot; Branch: ${escapeHtml(branchNameOf(orderData.branchId))}` : ''}`;
 
             let custRow = printableBox.querySelector('#receipt-customer-row');
             if (orderData.customerId && orderData.customerName) {
@@ -2484,7 +2519,7 @@ function renderReceiptView(orderData, isReprint = false) {
                     custRow.style.cssText = 'font-size: 11px; color: #333; margin-bottom: 5px;';
                     cashierRow.parentNode.insertBefore(custRow, cashierRow.nextSibling);
                 }
-                custRow.innerHTML = `Customer: ${orderData.customerName}`;
+                custRow.innerHTML = `Customer: ${escapeHtml(orderData.customerName)}`;
             } else if (custRow) {
                 custRow.remove();
             }
@@ -2515,7 +2550,7 @@ function renderReceiptView(orderData, isReprint = false) {
                 const refundedTag = Number(item.refundedQty) > 0 ? ` <small style="color:#991b1b;">(${item.refundedQty} refunded)</small>` : '';
                 receiptItemsContainer.innerHTML += `
                     <tr>
-                        <td style="font-weight: bold;">${item.name || ''}${refundedTag}</td>
+                        <td style="font-weight: bold;">${escapeHtml(item.name)}${refundedTag}</td>
                         <td>${qtyDisplay}</td>
                         <td>₦${safeItemTotal}</td>
                     </tr>
@@ -2543,13 +2578,13 @@ function renderReceiptView(orderData, isReprint = false) {
                     if (addressEl) addressEl.textContent = storeData.address || "";
                     if (phoneEl) phoneEl.textContent = storeData.phone ? `Tel: ${storeData.phone}` : "";
                     
-                    triggerThermalPrint(printableBox.innerHTML);
+                    triggerThermalPrint(printableBox ? printableBox.innerHTML : '');
                 }
             }).catch(() => {
-                triggerThermalPrint(printableBox.innerHTML);
+                triggerThermalPrint(printableBox ? printableBox.innerHTML : '');
             });
         } else {
-            triggerThermalPrint(printableBox.innerHTML);
+            triggerThermalPrint(printableBox ? printableBox.innerHTML : '');
         }
     }, 150);
 }
@@ -2639,7 +2674,7 @@ function populateReportsBranchFilter() {
     if (!select) return;
 
     if (currentUserRole !== 'Admin') {
-        select.innerHTML = `<option value="${currentBranch}">${branchNameOf(currentBranch)}</option>`;
+        select.innerHTML = `<option value="${escapeHtml(currentBranch)}">${escapeHtml(branchNameOf(currentBranch))}</option>`;
         select.disabled = true;
         currentReportBranchFilter = currentBranch;
         return;
@@ -2647,7 +2682,7 @@ function populateReportsBranchFilter() {
 
     let options = `<option value="all" ${currentReportBranchFilter === 'all' ? 'selected' : ''}>🌐 All Branches</option>`;
     Object.keys(branchesCache).forEach(id => {
-        options += `<option value="${id}" ${currentReportBranchFilter === id ? 'selected' : ''}>${branchesCache[id].name}</option>`;
+        options += `<option value="${escapeHtml(id)}" ${currentReportBranchFilter === id ? 'selected' : ''}>${escapeHtml(branchesCache[id].name)}</option>`;
     });
     select.innerHTML = options;
     select.disabled = false;
@@ -2728,25 +2763,26 @@ function loadPastSalesHistory(selectedDateString = null) {
 
             const dateStr = txDate ? txDate.toLocaleString() : 'N/A';
             const transactionId = tx.txId || child.key;
+            const safeTxId = escapeJsAttr(transactionId);
             const sellerName = tx.staff || tx.soldBy || 'Staff';
-            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${escapeHtml(tx.customerName)}</small>` : '';
             const statusLabel = tx.refundStatus && tx.refundStatus !== 'Completed' ? (tx.refundStatus === 'Refunded' ? 'Refunded' : 'Partially Refunded') : (tx.status || 'Completed');
             const statusColor = tx.refundStatus === 'Refunded' ? '#991b1b' : (tx.refundStatus === 'Partially Refunded' ? '#b45309' : 'green');
             const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
-                ? `<button class="menu-btn btn-logout" style="padding: 5px 10px; font-size: 11px; width: auto; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${transactionId}')">↩ Refund</button>`
+                ? `<button class="menu-btn btn-logout" style="padding: 5px 10px; font-size: 11px; width: auto; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${safeTxId}')">↩ Refund</button>`
                 : '';
 
             rowsHtml.push(`
                 <tr>
-                    <td><strong>${transactionId}</strong>${customerTag}</td>
-                    <td>${branchNameOf(txBranch)}</td>
+                    <td><strong>${escapeHtml(transactionId)}</strong>${customerTag}</td>
+                    <td>${escapeHtml(branchNameOf(txBranch))}</td>
                     <td>${dateStr}</td>
-                    <td>${sellerName}</td>
+                    <td>${escapeHtml(sellerName)}</td>
                     <td>₦${txTotal.toLocaleString()}${refundStatusBadge(tx)}</td>
                     <td>Cash: ₦${cashPaid.toLocaleString()}<br>Transfer: ₦${transferPaid.toLocaleString()}</td>
-                    <td><span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span></td>
+                    <td><span style="color: ${statusColor}; font-weight: bold;">${escapeHtml(statusLabel)}</span></td>
                     <td>
-                        <button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button>
+                        <button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt('${safeTxId}')">View / Reprint</button>
                         ${refundBtn}
                     </td>
                 </tr>
@@ -2883,7 +2919,7 @@ function populateStaffBranchDropdown() {
     if (!select) return;
     let options = '';
     Object.keys(branchesCache).forEach(id => {
-        options += `<option value="${id}">${branchesCache[id].name}</option>`;
+        options += `<option value="${escapeHtml(id)}">${escapeHtml(branchesCache[id].name)}</option>`;
     });
     select.innerHTML = options || `<option value="main">Main</option>`;
 }
@@ -2901,13 +2937,14 @@ function loadStaffTable() {
         snapshot.forEach(child => {
             const id = child.key;
             const staff = child.val();
+            const safeStaffName = escapeJsAttr(staff.name || '');
             rowsHtml.push(`
                 <tr>
-                    <td>${staff.name}</td>
-                    <td>${staff.role}</td>
-                    <td>${branchNameOf(staff.branchId || 'main')}</td>
+                    <td>${escapeHtml(staff.name)}</td>
+                    <td>${escapeHtml(staff.role)}</td>
+                    <td>${escapeHtml(branchNameOf(staff.branchId || 'main'))}</td>
                     <td>
-                        <button class="menu-btn" style="padding: 3px 8px; font-size:11px; width:auto; display:inline-block; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;" onclick="changeStaffPin('${id}', '${(staff.name || '').replace(/'/g, "\\'")}')">🔑 Change PIN</button>
+                        <button class="menu-btn" style="padding: 3px 8px; font-size:11px; width:auto; display:inline-block; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;" onclick="changeStaffPin('${id}', '${safeStaffName}')">🔑 Change PIN</button>
                         <button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteStaff('${id}')">Remove</button>
                     </td>
                 </tr>
@@ -3090,10 +3127,10 @@ function loadExpensesTable() {
             rowsHtml.push(`
                 <tr>
                     <td>${item.date ? new Date(item.date).toLocaleDateString() : 'N/A'}</td>
-                    <td><strong>${item.category}</strong></td>
-                    <td>${item.description || 'N/A'}</td>
+                    <td><strong>${escapeHtml(item.category)}</strong></td>
+                    <td>${escapeHtml(item.description) || 'N/A'}</td>
                     <td>₦${amount.toLocaleString()}</td>
-                    <td>${item.recordedBy || 'Admin'}</td>
+                    <td>${escapeHtml(item.recordedBy) || 'Admin'}</td>
                     <td>
                         <button class="menu-btn btn-logout" style="padding: 3px 8px; font-size:11px; width:auto;" onclick="deleteExpense('${id}')">Delete</button>
                     </td>
@@ -3102,7 +3139,7 @@ function loadExpensesTable() {
         });
 
         tbody.innerHTML = rowsHtml.length === 0
-            ? `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet for ${branchNameOf(currentBranch)}.</td></tr>`
+            ? `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">No expenses recorded yet for ${escapeHtml(branchNameOf(currentBranch))}.</td></tr>`
             : rowsHtml.join('');
 
         const totalLabel = document.getElementById('total-expenses-label');
@@ -3112,6 +3149,7 @@ function loadExpensesTable() {
     }).catch(err => console.error("loadExpensesTable error:", err));
 }
 
+// [FIXED #8] Reset category dropdown to default after saving an expense.
 function saveExpense() {
     if (!currentStoreId) return;
 
@@ -3136,6 +3174,7 @@ function saveExpense() {
 
     firebase.database().ref(`stores/${currentStoreId}/expenses`).push(expenseData).then(() => {
         alert("Expense recorded successfully!");
+        document.getElementById('expense-category').value = 'Utilities (Electricity/Water)';
         document.getElementById('expense-desc').value = '';
         document.getElementById('expense-amount').value = '';
         document.getElementById('expense-date').value = '';
@@ -3260,9 +3299,9 @@ function renderBranchesTable() {
         const b = branchesCache[id];
         rowsHtml.push(`
             <tr>
-                <td><strong>${b.name}</strong>${b.isMain ? ' <span style="font-size:10px; color:#166534; background:#dcfce7; padding:2px 6px; border-radius:4px; border:1px solid #86efac;">MAIN</span>' : ''}</td>
-                <td>${b.phone || 'N/A'}</td>
-                <td>${b.address || 'N/A'}</td>
+                <td><strong>${escapeHtml(b.name)}</strong>${b.isMain ? ' <span style="font-size:10px; color:#166534; background:#dcfce7; padding:2px 6px; border-radius:4px; border:1px solid #86efac;">MAIN</span>' : ''}</td>
+                <td>${escapeHtml(b.phone) || 'N/A'}</td>
+                <td>${escapeHtml(b.address) || 'N/A'}</td>
                 <td>
                     <button class="menu-btn" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="editBranch('${id}')">Edit</button>
                     ${!b.isMain ? `<button class="menu-btn btn-logout" style="padding: 4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="deleteBranch('${id}')">Delete</button>` : ''}
@@ -3363,7 +3402,7 @@ function loadTransfersView() {
         rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
         const rowsHtml = rows.map(t => {
-            const itemsSummary = Array.isArray(t.items) ? t.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            const itemsSummary = Array.isArray(t.items) ? t.items.map(i => `${escapeHtml(i.name)} x${i.qty}`).join(', ') : '';
             const statusColor = t.status === 'Completed' ? '#166534' : (t.status === 'Cancelled' ? '#991b1b' : '#b45309');
             let actions = `<button class="menu-btn btn-dash" style="padding:4px 8px; font-size:11px; width:auto; display:inline-block;" onclick="printWaybill('${t.id}')">🖨 Waybill</button>`;
 
@@ -3374,11 +3413,11 @@ function loadTransfersView() {
 
             return `
                 <tr>
-                    <td><strong>${t.id}</strong></td>
-                    <td>${branchNameOf(t.fromBranch)}</td>
-                    <td>${branchNameOf(t.toBranch)}</td>
+                    <td><strong>${escapeHtml(t.id)}</strong></td>
+                    <td>${escapeHtml(branchNameOf(t.fromBranch))}</td>
+                    <td>${escapeHtml(branchNameOf(t.toBranch))}</td>
                     <td style="max-width:220px;">${itemsSummary}</td>
-                    <td><span style="color:${statusColor}; font-weight:bold;">${t.status}</span></td>
+                    <td><span style="color:${statusColor}; font-weight:bold;">${escapeHtml(t.status)}</span></td>
                     <td>${t.createdAt ? new Date(t.createdAt).toLocaleString() : 'N/A'}</td>
                     <td>${actions}</td>
                 </tr>
@@ -3399,7 +3438,7 @@ function openCreateTransferModal() {
 
     const fromSelect = document.getElementById('transfer-from-branch');
     const toSelect = document.getElementById('transfer-to-branch');
-    let options = Object.keys(branchesCache).map(id => `<option value="${id}">${branchesCache[id].name}</option>`).join('');
+    let options = Object.keys(branchesCache).map(id => `<option value="${escapeHtml(id)}">${escapeHtml(branchesCache[id].name)}</option>`).join('');
     fromSelect.innerHTML = options;
     toSelect.innerHTML = options;
 
@@ -3422,7 +3461,7 @@ function onTransferFromBranchChange() {
 
     firebase.database().ref(`stores/${currentStoreId}/inventory/${fromBranchId}`).once('value').then(snapshot => {
         if (!snapshot.exists()) {
-            itemsList.innerHTML = `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No stock available at ${branchNameOf(fromBranchId)}.</div>`;
+            itemsList.innerHTML = `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No stock available at ${escapeHtml(branchNameOf(fromBranchId))}.</div>`;
             return;
         }
 
@@ -3434,13 +3473,13 @@ function onTransferFromBranchChange() {
             const name = item.name || item.productName || 'Unnamed Item';
             html += `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 4px; border-bottom:1px solid #f1f5f9; font-size:13px;">
-                    <span>${name} <small style="color:var(--text-muted);">(Stock: ${stock})</small></span>
-                    <input type="number" min="0" max="${stock}" value="0" data-product-id="${child.key}" data-product-name="${name}" data-max-stock="${stock}" class="transfer-qty-input" style="width:70px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px;">
+                    <span>${escapeHtml(name)} <small style="color:var(--text-muted);">(Stock: ${stock})</small></span>
+                    <input type="number" min="0" max="${stock}" value="0" data-product-id="${escapeHtml(child.key)}" data-product-name="${escapeHtml(name)}" data-max-stock="${stock}" class="transfer-qty-input" style="width:70px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px;">
                 </div>
             `;
         });
 
-        itemsList.innerHTML = html || `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No stock available at ${branchNameOf(fromBranchId)}.</div>`;
+        itemsList.innerHTML = html || `<div style="text-align:center; color: var(--text-muted); font-size: 12px; padding: 10px;">No stock available at ${escapeHtml(branchNameOf(fromBranchId))}.</div>`;
     });
 }
 
@@ -3643,7 +3682,7 @@ function printWaybill(transferId) {
 
             const itemsBody = workspace.querySelector('#waybill-items-body');
             if (itemsBody && Array.isArray(t.items)) {
-                itemsBody.innerHTML = t.items.map(i => `<tr><td>${i.name}</td><td>${i.qty}</td></tr>`).join('');
+                itemsBody.innerHTML = t.items.map(i => `<tr><td>${escapeHtml(i.name)}</td><td>${i.qty}</td></tr>`).join('');
             }
         }, 100);
     });
@@ -3674,8 +3713,8 @@ function renderSuppliersTable(dataset) {
         const s = dataset[id];
         return `
             <tr>
-                <td><strong>${s.name || 'Unnamed'}</strong></td>
-                <td>${s.phone || 'N/A'}</td>
+                <td><strong>${escapeHtml(s.name) || 'Unnamed'}</strong></td>
+                <td>${escapeHtml(s.phone) || 'N/A'}</td>
                 <td>₦${(Number(s.totalSupplied) || 0).toLocaleString()}</td>
                 <td>${Number(s.supplyCount) || 0}</td>
                 <td>${s.lastSupplyDate ? new Date(s.lastSupplyDate).toLocaleDateString() : 'N/A'}</td>
@@ -3791,7 +3830,7 @@ function populateSupplySupplierDropdown() {
     if (!select) return;
     let options = '<option value="">-- Select Supplier --</option>';
     Object.keys(suppliersCache).forEach(id => {
-        options += `<option value="${id}">${suppliersCache[id].name}</option>`;
+        options += `<option value="${escapeHtml(id)}">${escapeHtml(suppliersCache[id].name)}</option>`;
     });
     select.innerHTML = options;
 }
@@ -3802,10 +3841,10 @@ function populateSupplyBranchDropdown() {
     let options = '';
     if (currentUserRole === 'Admin') {
         Object.keys(branchesCache).forEach(id => {
-            options += `<option value="${id}" ${id === currentBranch ? 'selected' : ''}>${branchesCache[id].name}</option>`;
+            options += `<option value="${escapeHtml(id)}" ${id === currentBranch ? 'selected' : ''}>${escapeHtml(branchesCache[id].name)}</option>`;
         });
     } else {
-        options = `<option value="${currentBranch}" selected>${branchNameOf(currentBranch)}</option>`;
+        options = `<option value="${escapeHtml(currentBranch)}" selected>${escapeHtml(branchNameOf(currentBranch))}</option>`;
     }
     select.innerHTML = options || `<option value="main">Main</option>`;
 }
@@ -3849,14 +3888,14 @@ function refreshSupplyBranchProducts() {
 }
 
 function updateAllSupplyDatalists() {
-    const options = supplyBranchProductNames.map(n => `<option value="${n}">`).join('');
+    const options = supplyBranchProductNames.map(n => `<option value="${escapeHtml(n)}">`).join('');
     document.querySelectorAll('.supply-item-datalist').forEach(dl => { dl.innerHTML = options; });
 }
 
 function addSupplyItemRow() {
     supplyItemRowCounter++;
     const rowId = 'supply-row-' + supplyItemRowCounter;
-    const options = supplyBranchProductNames.map(n => `<option value="${n}">`).join('');
+    const options = supplyBranchProductNames.map(n => `<option value="${escapeHtml(n)}">`).join('');
 
     const container = document.getElementById('supply-items-container');
     const row = document.createElement('div');
@@ -3884,6 +3923,7 @@ function addSupplyItemRow() {
     container.appendChild(row);
 }
 
+// [FIXED #3] Reject rows that have a product name but zero quantities (silent no-op).
 function saveSupply() {
     if (!currentStoreId) return;
 
@@ -3913,8 +3953,10 @@ function saveSupply() {
         const retailRaw = row.querySelector('.supply-item-retail')?.value;
         const wholesaleRaw = row.querySelector('.supply-item-wholesale')?.value;
 
+        // Completely blank row → skip silently.
         if (!name && qty === 0 && loosePieces === 0) return;
 
+        // Partially filled row → error out.
         if (!name || (qty <= 0 && loosePieces <= 0)) {
             invalidRow = true;
             return;
@@ -4071,16 +4113,17 @@ function loadSuppliesHistory() {
 
         const rowsHtml = rows.map(s => {
             const itemCount = Array.isArray(s.items) ? s.items.length : 0;
+            const safeSupplyId = escapeJsAttr(s.supplyId || '');
             return `
                 <tr>
-                    <td><strong>${s.supplyId || ''}</strong></td>
+                    <td><strong>${escapeHtml(s.supplyId) || ''}</strong></td>
                     <td>${s.date ? new Date(s.date).toLocaleString() : 'N/A'}</td>
-                    <td>${s.supplierName || 'N/A'}</td>
-                    <td>${branchNameOf(s.branchId)}</td>
+                    <td>${escapeHtml(s.supplierName) || 'N/A'}</td>
+                    <td>${escapeHtml(branchNameOf(s.branchId))}</td>
                     <td>${itemCount} item${itemCount === 1 ? '' : 's'}</td>
                     <td>₦${(Number(s.totalCost) || 0).toLocaleString()}</td>
-                    <td>${s.recordedBy || ''}</td>
-                    <td><button class="menu-btn btn-dash" style="padding: 4px 10px; font-size:11px; width:auto; display:inline-block;" onclick="viewSupplyDetails('${s.supplyId}')">View</button></td>
+                    <td>${escapeHtml(s.recordedBy) || ''}</td>
+                    <td><button class="menu-btn btn-dash" style="padding: 4px 10px; font-size:11px; width:auto; display:inline-block;" onclick="viewSupplyDetails('${safeSupplyId}')">View</button></td>
                 </tr>
             `;
         });
@@ -4123,7 +4166,7 @@ function viewSupplyDetails(supplyId) {
             const stockAfterLabel = hasStockHistory ? stockBreakdownLabel(item.stockAfter, upp) : '—';
             tbody.innerHTML += `
                 <tr>
-                    <td>${item.name}</td>
+                    <td>${escapeHtml(item.name)}</td>
                     <td>${stockBeforeLabel}</td>
                     <td style="color:#166534; font-weight:bold;">${qtyAddedLabel}</td>
                     <td>${stockAfterLabel}</td>
@@ -4178,7 +4221,7 @@ function openQuickRestockModal(branchId, productId) {
     const supplierSelect = document.getElementById('restock-supplier-select');
     let options = '<option value="">-- Select Supplier --</option>';
     Object.keys(suppliersCache).forEach(id => {
-        options += `<option value="${id}">${suppliersCache[id].name}</option>`;
+        options += `<option value="${escapeHtml(id)}">${escapeHtml(suppliersCache[id].name)}</option>`;
     });
     supplierSelect.innerHTML = options;
 
@@ -4443,14 +4486,14 @@ function openProductRestockHistory(branchId, productId) {
                     <td>${beforeLabel}</td>
                     <td style="color:#166534; font-weight:bold;">${addedLabel}</td>
                     <td>${afterLabel}</td>
-                    <td>${e.supplierName || 'N/A'}</td>
-                    <td>${e.recordedBy || ''}</td>
+                    <td>${escapeHtml(e.supplierName) || 'N/A'}</td>
+                    <td>${escapeHtml(e.recordedBy) || ''}</td>
                 </tr>
             `;
         }).join('');
     }).catch(err => {
         if (modal.style.display !== 'flex' || modal.dataset.productId !== productId) return;
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#991b1b; padding:20px;">Failed to load history: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#991b1b; padding:20px;">Failed to load history: ${escapeHtml(err.message)}</td></tr>`;
     });
 }
 
@@ -4524,8 +4567,8 @@ function renderCustomersTable(dataset) {
 
         return `
             <tr>
-                <td><strong>${c.name || 'Unnamed'}</strong></td>
-                <td>${c.phone || 'N/A'}</td>
+                <td><strong>${escapeHtml(c.name) || 'Unnamed'}</strong></td>
+                <td>${escapeHtml(c.phone) || 'N/A'}</td>
                 <td style="color:${balanceColor}; font-weight:bold;">₦${balance.toLocaleString()}</td>
                 <td>₦${limit.toLocaleString()}</td>
                 <td>₦${spent.toLocaleString()}</td>
@@ -4700,7 +4743,7 @@ function loadCustomerLedger(id) {
                     <td>${typeLabel}</td>
                     <td style="color:${amtColor}; font-weight:bold;">${amtSign}₦${Number(entry.amount || 0).toLocaleString()}</td>
                     <td>₦${Number(entry.balanceAfter || 0).toLocaleString()}</td>
-                    <td>${entry.note || ''}</td>
+                    <td>${escapeHtml(entry.note) || ''}</td>
                 </tr>
             `;
         });
@@ -4725,11 +4768,11 @@ function loadCustomerPurchaseHistory(id) {
         purchases.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         const rowsHtml = purchases.map(tx => {
-            const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${i.name} x${i.qty}`).join(', ') : '';
+            const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${escapeHtml(i.name)} x${i.qty}`).join(', ') : '';
             return `
                 <tr>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
-                    <td><strong>${tx.txId || ''}</strong> <br><small style="color:var(--text-muted);">${branchNameOf(tx.branchId || 'main')}</small></td>
+                    <td><strong>${escapeHtml(tx.txId) || ''}</strong> <br><small style="color:var(--text-muted);">${escapeHtml(branchNameOf(tx.branchId || 'main'))}</small></td>
                     <td style="max-width:220px;">${itemsSummary}</td>
                     <td>₦${Number(tx.totalAmount || 0).toLocaleString()}</td>
                 </tr>
@@ -4799,6 +4842,7 @@ function updateDebtPaymentPreview() {
     }
 }
 
+// [FIXED #7] Round balanceAfter to avoid float drift.
 function processDebtPayment() {
     const id = document.getElementById('debt-payment-customer-id').value;
     const c = customersCache[id];
@@ -4818,7 +4862,7 @@ function processDebtPayment() {
         return;
     }
 
-    const balanceAfter = Math.max(0, balanceBefore - amount);
+    const balanceAfter = Math.max(0, Math.round((balanceBefore - amount) * 100) / 100);
     const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
     const nowIso = new Date().toISOString();
 
@@ -4916,6 +4960,7 @@ function downloadDebtReceiptPDF() {
 }
 
 // ==================== REFUNDS ====================
+// [FIXED #5] Disable (not just hide) the Customer Balance refund option when there's no balance to reduce.
 function openRefundModal(txId) {
     if (currentUserRole !== 'Admin' && currentUserRole !== 'Accountant') {
         alert("Access Restricted: Only an Admin or Accountant can process refunds.");
@@ -4953,11 +4998,18 @@ function openRefundModal(txId) {
         if (tx.customerId && customersCache[tx.customerId]) {
             const c = customersCache[tx.customerId];
             const balance = Number(c.balance) || 0;
-            custInfoEl.innerHTML = `Customer: <strong>${c.name}</strong> &nbsp;|&nbsp; Outstanding Balance: ₦${balance.toLocaleString()} &nbsp;|&nbsp; Branch: <strong>${branchNameOf(currentActiveRefund.branchId)}</strong>`;
-            if (custBalanceOption) custBalanceOption.style.display = balance > 0 ? 'block' : 'none';
+            custInfoEl.innerHTML = `Customer: <strong>${escapeHtml(c.name)}</strong> &nbsp;|&nbsp; Outstanding Balance: ₦${balance.toLocaleString()} &nbsp;|&nbsp; Branch: <strong>${escapeHtml(branchNameOf(currentActiveRefund.branchId))}</strong>`;
+            if (custBalanceOption) {
+                const hasBalance = balance > 0;
+                custBalanceOption.style.display = hasBalance ? 'block' : 'none';
+                custBalanceOption.disabled = !hasBalance;
+            }
         } else {
-            custInfoEl.innerHTML = `Customer: <strong>${currentActiveRefund.customerName}</strong> &nbsp;|&nbsp; Branch: <strong>${branchNameOf(currentActiveRefund.branchId)}</strong>`;
-            if (custBalanceOption) custBalanceOption.style.display = 'none';
+            custInfoEl.innerHTML = `Customer: <strong>${escapeHtml(currentActiveRefund.customerName)}</strong> &nbsp;|&nbsp; Branch: <strong>${escapeHtml(branchNameOf(currentActiveRefund.branchId))}</strong>`;
+            if (custBalanceOption) {
+                custBalanceOption.style.display = 'none';
+                custBalanceOption.disabled = true;
+            }
         }
 
         renderRefundModalItems(tx);
@@ -4993,15 +5045,15 @@ function renderRefundModalItems(tx) {
         return `
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid #f1f5f9; font-size:13px;" data-refund-row="${idx}">
                 <div style="flex:1;">
-                    <strong>${item.name || 'Item'}</strong><br>
-                    <small style="color:var(--text-muted);">Sold: ${item.qty} ${unitLabel}${item.qty === 1 ? '' : 's'} @ ₦${Number(item.price || 0).toLocaleString()}${refundedNote}</small>
+                    <strong>${escapeHtml(item.name) || 'Item'}</strong><br>
+                    <small style="color:var(--text-muted);">Sold: ${item.qty} ${escapeHtml(unitLabel)}${item.qty === 1 ? '' : 's'} @ ₦${Number(item.price || 0).toLocaleString()}${refundedNote}</small>
                 </div>
                 <input type="number" min="0" max="${remaining}" step="${item.saleUnit === 'Kg' ? '0.01' : (item.saleUnit === 'g' ? '1' : (item.saleUnit === 'Piece' || item.qty % 1 !== 0 ? '0.5' : '1'))}" value="0"
                     data-max-refundable="${remaining}"
                     data-unit-price="${item.price || 0}"
-                    data-item-name="${(item.name || '').replace(/"/g, '&quot;')}"
-                    data-item-id="${item.id || ''}"
-                    data-sale-unit="${item.saleUnit || 'Pack'}"
+                    data-item-name="${escapeHtml(item.name || '')}"
+                    data-item-id="${escapeHtml(item.id || '')}"
+                    data-sale-unit="${escapeHtml(item.saleUnit || 'Pack')}"
                     data-units-per-pack="${item.unitsPerPack || 1}"
                     class="refund-qty-input"
                     style="width:80px; padding:6px; border:1px solid #cbd5e1; border-radius:6px;"
@@ -5241,8 +5293,8 @@ function renderRefundReceiptView(refundData) {
                 const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
                 itemsBody.innerHTML += `
                     <tr>
-                        <td>${item.name || ''}</td>
-                        <td>${item.qty} ${unitLabel}${item.qty === 1 ? '' : 's'}</td>
+                        <td>${escapeHtml(item.name)}</td>
+                        <td>${item.qty} ${escapeHtml(unitLabel)}${item.qty === 1 ? '' : 's'}</td>
                         <td style="text-align:right;">₦${Number(item.amount || 0).toLocaleString()}</td>
                     </tr>
                 `;
@@ -5310,8 +5362,8 @@ function filterPosCustomerSearch() {
         const c = customersCache[id];
         const bal = Number(c.balance) || 0;
         return `
-            <div style="padding:10px; font-size:13px; cursor:pointer; border-bottom:1px solid #f1f5f9;" onclick="selectPosCustomer('${id}')">
-                <strong>${c.name}</strong> — ${c.phone || ''}${bal > 0 ? ` <span style="color:#b91c1c;">(Owes ₦${bal.toLocaleString()})</span>` : ''}
+            <div style="padding:10px; font-size:13px; cursor:pointer; border-bottom:1px solid #f1f5f9;" onclick="selectPosCustomer('${escapeJsAttr(id)}')">
+                <strong>${escapeHtml(c.name)}</strong> — ${escapeHtml(c.phone) || ''}${bal > 0 ? ` <span style="color:#b91c1c;">(Owes ₦${bal.toLocaleString()})</span>` : ''}
             </div>
         `;
     }).join('');
@@ -5349,7 +5401,7 @@ function updatePosCustomerBadge() {
 
     if (currentSelectedCustomer) {
         const owesText = currentSelectedCustomer.balance > 0 ? ` <span style="color:#b91c1c;">(Owes ₦${currentSelectedCustomer.balance.toLocaleString()})</span>` : '';
-        badge.innerHTML = `Selling to: <strong>${currentSelectedCustomer.name}</strong>${owesText} <button class="menu-btn" style="display:inline-block; width:auto; padding:2px 8px; font-size:10px; margin-left:8px; margin-bottom:0;" onclick="clearPosCustomer()">Clear</button>`;
+        badge.innerHTML = `Selling to: <strong>${escapeHtml(currentSelectedCustomer.name)}</strong>${owesText} <button class="menu-btn" style="display:inline-block; width:auto; padding:2px 8px; font-size:10px; margin-left:8px; margin-bottom:0;" onclick="clearPosCustomer()">Clear</button>`;
     } else {
         badge.textContent = 'Selling to: Walk-In Customer';
     }
@@ -5444,19 +5496,19 @@ function renderHeldCartsList(rows) {
         const total = Array.isArray(hc.items) ? hc.items.reduce((sum, i) => sum + (Number(i.total) || 0), 0) : 0;
         return `
             <tr>
-                <td><strong>${hc.label || 'Held Cart'}</strong><br><small style="color:var(--text-muted);">${hc.heldAt ? new Date(hc.heldAt).toLocaleString() : ''} · ${hc.heldBy || ''}</small></td>
+                <td><strong>${escapeHtml(hc.label) || 'Held Cart'}</strong><br><small style="color:var(--text-muted);">${hc.heldAt ? new Date(hc.heldAt).toLocaleString() : ''} · ${escapeHtml(hc.heldBy) || ''}</small></td>
                 <td>${itemCount} item${itemCount === 1 ? '' : 's'}</td>
                 <td>₦${total.toLocaleString()}</td>
                 <td>
-                    <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="resumeHeldCart('${hc.id}')">Resume ▶</button>
-                    <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="discardHeldCart('${hc.id}')">Discard ✕</button>
+                    <button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="resumeHeldCart('${escapeJsAttr(hc.id)}')">Resume ▶</button>
+                    <button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="discardHeldCart('${escapeJsAttr(hc.id)}')">Discard ✕</button>
                 </td>
             </tr>
         `;
     });
 
     tbody.innerHTML = rows.length === 0
-        ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">No held carts for ${branchNameOf(currentBranch)}.</td></tr>`
+        ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">No held carts for ${escapeHtml(branchNameOf(currentBranch))}.</td></tr>`
         : rowsHtml.join('');
 }
 
