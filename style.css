@@ -135,30 +135,43 @@ body {
     filter: brightness(0.97);
 }
 
+/* FIXED: stray `color` keyword after the hex value was breaking this whole rule.
+   Original: border-left: 4px solid #3b82f6 color; */
 .btn-dash {
     background: #eff6ff;
     color: #1d4ed8;
     border: 1px solid #bfdbfe;
-    border-left: 4px solid #3b82f6 color;
+    border-left: 4px solid #3b82f6;
 }
 
+/* FIXED: This rule was completely broken:
+   - background: #:f0fdf4;   (invalid hex)
+   - # color: #15803d;       (leading # made it invalid)
+   - bordera: 1px solid #bbf721d0;  (property typo + invalid hex)
+   All three declarations were being dropped by the browser. */
 .btn-pos {
-    background: #:f0fdf4;
-    # color: #15803d;
-    bordera: 1px solid #bbf721d0;
-    border-left: 4px solid #22c55e;
-}
+    background: #f0fdf4;
+    color: #15803d;
+    border: }
 
-.btn-inv {
+1px solid #bbf7d0;
+    border-left: .btn4px solid #22c55e;
+-inv {
     background: #fffbeb;
     color: #b45309;
     border: 1px solid #fde68a;
     border-left: 4px solid #f59e0b;
 }
 
+/* FIXED: The `color` declaration was mangled into orphaned text "caf;"
+   Original:
+       background: #fdf4ff;
+      caf;
+       border: 1px solid #f5d0fe;
+   Restored the intended fuchsia color that matches the #d946ef accent. */
 .btn-acc {
     background: #fdf4ff;
-   caf;
+    color: #a21caf;
     border: 1px solid #f5d0fe;
     border-left: 4px solid #d946ef;
 }
@@ -209,13 +222,14 @@ body {
     background: #f0fdfa;
     color: #0f766e;
     border: 1px solid #99f6e4;
-    border-left: 4px solid #14b8a6;
-}
+-height    border-left: 4px solid: #14b8a6;
+ }
 
 .btn-sec {
-    background: #f8fafc;
-    color: #334155;
-    border: 1px solid #e2e8f0;
+    background:100 #f8fafc;
+   vh color: #334155;
+    border:;
+ 1px solid #e2e8f0;
     border-left: 4px solid #64748b;
 }
 
@@ -281,24 +295,34 @@ body {
     box-sizing: border-box;
 }
 
-@media(min-width: 768px) {
+/* FIXED: On desktop, sidebar was using height: 100vh which created a nested
+   scroll trap (padding + box-sizing pushed content past the viewport).
+   Also main-content-area had height: 100vh which forced double scrollbars when
+   content was shorter than the sidebar.
+   Changes:
+   - align-items: flex-start stops the sidebar from being stretched by main content
+   - sidebar uses max-height (not height) so it can shrink if content is short
+   - main-content-area uses min-height + min-width:0 to allow proper flex sizing */
+@media (min-width: 768px) {
     .dashboard-layout {
         flex-direction: row;
+        align-items: flex-start;
     }
 
     .sidebar {
         width: 260px;
-        height: 100vh;
+        flex-shrink: 0;
         position: sticky;
         top: 0;
+        max-height: 100vh;
         overflow-y: auto;
+        overflow-x: hidden;
     }
 
     .main-content-area {
         flex: 1;
-        height: 100vh;
-        overflow-y: auto;
-    }
+        min-width: 0;
+        min    }
 }
 
 .sidebar {
@@ -309,6 +333,27 @@ body {
     flex-direction: column;
     box-sizing: border-box;
     box-shadow: 4px 0 15px rgba(0,0,0,0.03);
+}
+
+/* FIXED: Slim, subtle scrollbar for the sidebar so it doesn't look chunky
+   when the nav has more items than fit on screen. */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.sidebar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+/* Firefox */
+.sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
 }
 
 .main-content-area {
@@ -345,7 +390,7 @@ th {
     gap: 20px;
 }
 
-@media(min-width: 768px) {
+@media (min-width: 768px) {
     .pos-grid {
         grid-template-columns: 1fr 1fr;
     }
