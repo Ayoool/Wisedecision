@@ -29,6 +29,7 @@ body {
     display: block;
 }
 
+/* ==================== AUTH / LOGIN SCREEN ==================== */
 .auth-wrapper {
     width: 100%;
     min-height: 100vh;
@@ -43,15 +44,41 @@ body {
         linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
 }
 
+/* Bias the card upward on tall portrait phones so the empty void below shrinks. */
+@media (max-height: 900px) and (orientation: portrait) {
+    .auth-wrapper {
+        align-items: flex-start;
+        padding-top: 15vh;
+    }
+}
+
+/* On very short screens (landscape phones), fall back to centered with tighter padding. */
+@media (max-height: 700px) {
+    .auth-wrapper {
+        align-items: center;
+        padding: 12px;
+    }
+}
+
 .auth-card {
     background: var(--card-bg);
-    padding: 24px;
+    padding: 32px 28px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
     width: 100%;
-    max-width: 380px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.15);
+    max-width: 420px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
     box-sizing: border-box;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.15);
+}
+
+@media (max-height: 700px) {
+    .auth-card { padding: 22px 20px; }
+}
+
+@media (max-width: 360px) {
+    .auth-card { padding: 24px 18px; }
 }
 
 .brand-title {
@@ -77,11 +104,29 @@ body {
     color: #0d9488; /* fallback for older browsers */
 }
 
+@media (max-height: 700px) {
+    .auth-card .brand-title { font-size: 17px; }
+    .auth-card .brand-title .big-w { font-size: 26px; }
+}
+
+@media (max-width: 360px) {
+    .auth-card .brand-title { font-size: 18px; }
+    .auth-card .brand-title .big-w { font-size: 26px; vertical-align: -2px; }
+}
+
+.auth-card .brand-title { margin-bottom: 6px; line-height: 1.15; }
+
 .subtitle {
     font-size: 12px;
     color: var(--text-muted);
     text-align: left;
     margin-bottom: 15px;
+}
+
+.auth-card .subtitle { margin-bottom: 26px; }
+
+@media (max-height: 700px) {
+    .auth-card .subtitle { margin-bottom: 16px; }
 }
 
 .form-group {
@@ -110,10 +155,30 @@ body {
     font-family: inherit;
 }
 
+/* Login-specific input polish */
+.auth-card .form-group input {
+    padding: 12px 14px;
+    font-size: 14px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.auth-card .form-group input::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+}
+
+.auth-card .form-group input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+    background: #ffffff;
+}
+
 .form-group textarea {
     resize: vertical;
 }
 
+/* ==================== BUTTONS ==================== */
 .menu-btn {
     width: 100%;
     padding: 12px 14px;
@@ -135,8 +200,9 @@ body {
     filter: brightness(0.97);
 }
 
-/* FIXED: stray `color` keyword after the hex value was breaking this whole rule.
-   Original: border-left: 4px solid #3b82f6 color; */
+.auth-card .menu-btn { margin-bottom: 12px; }
+
+/* Fixed: stray `color` keyword after the hex value was breaking this whole rule. */
 .btn-dash {
     background: #eff6ff;
     color: #1d4ed8;
@@ -144,31 +210,23 @@ body {
     border-left: 4px solid #3b82f6;
 }
 
-/* FIXED: This rule was completely broken:
-   - background: #:f0fdf4;   (invalid hex)
-   - # color: #15803d;       (leading # made it invalid)
-   - bordera: 1px solid #bbf721d0;  (property typo + invalid hex)
-   All three declarations were being dropped by the browser. */
+/* Fixed: this rule was completely broken in the original file
+   (invalid hex `#:f0fdf4`, orphan `# color:`, misspelled `bordera`). */
 .btn-pos {
     background: #f0fdf4;
     color: #15803d;
-    border: }
+    border: 1px solid #bbf7d0;
+    border-left: 4px solid #22c55e;
+}
 
-1px solid #bbf7d0;
-    border-left: .btn4px solid #22c55e;
--inv {
+.btn-inv {
     background: #fffbeb;
     color: #b45309;
     border: 1px solid #fde68a;
     border-left: 4px solid #f59e0b;
 }
 
-/* FIXED: The `color` declaration was mangled into orphaned text "caf;"
-   Original:
-       background: #fdf4ff;
-      caf;
-       border: 1px solid #f5d0fe;
-   Restored the intended fuchsia color that matches the #d946ef accent. */
+/* Fixed: `color` declaration was mangled into orphaned text "caf;". */
 .btn-acc {
     background: #fdf4ff;
     color: #a21caf;
@@ -222,14 +280,13 @@ body {
     background: #f0fdfa;
     color: #0f766e;
     border: 1px solid #99f6e4;
--height    border-left: 4px solid: #14b8a6;
- }
+    border-left: 4px solid #14b8a6;
+}
 
 .btn-sec {
-    background:100 #f8fafc;
-   vh color: #334155;
-    border:;
- 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #e2e8f0;
     border-left: 4px solid #64748b;
 }
 
@@ -260,6 +317,21 @@ body {
     color: #b91c1c;
 }
 
+/* Secondary / ghost button used on the auth screens. */
+.btn-secondary {
+    background: #f1f5   f9;
+    color: #028 font4c7;
+    border: -size1px solid #cbd5e1;
+    justify-content: center;
+    font-weight: 600;
+}
+
+.btn-secondary:hover {
+:    background: #e2e8f0;
+    color:  #0369a1;
+    filter: none;
+}
+
 .btn-complete-sale {
     width: 100%;
     background-color: #16a34a;
@@ -287,6 +359,7 @@ body {
     transform: none;
 }
 
+/* ==================== DASHBOARD LAYOUT ==================== */
 .dashboard-layout {
     display: flex;
     flex-direction: column;
@@ -295,14 +368,8 @@ body {
     box-sizing: border-box;
 }
 
-/* FIXED: On desktop, sidebar was using height: 100vh which created a nested
-   scroll trap (padding + box-sizing pushed content past the viewport).
-   Also main-content-area had height: 100vh which forced double scrollbars when
-   content was shorter than the sidebar.
-   Changes:
-   - align-items: flex-start stops the sidebar from being stretched by main content
-   - sidebar uses max-height (not height) so it can shrink if content is short
-   - main-content-area uses min-height + min-width:0 to allow proper flex sizing */
+/* Fixed: sidebar used height:100vh which created a nested scroll trap;
+   main-content also used height:100vh causing double scrollbars. */
 @media (min-width: 768px) {
     .dashboard-layout {
         flex-direction: row;
@@ -322,7 +389,8 @@ body {
     .main-content-area {
         flex: 1;
         min-width: 0;
-        min    }
+        min-height: 100vh;
+    }
 }
 
 .sidebar {
@@ -333,28 +401,14 @@ body {
     flex-direction: column;
     box-sizing: border-box;
     box-shadow: 4px 0 15px rgba(0,0,0,0.03);
-}
-
-/* FIXED: Slim, subtle scrollbar for the sidebar so it doesn't look chunky
-   when the nav has more items than fit on screen. */
-.sidebar::-webkit-scrollbar {
-    width: 6px;
-}
-.sidebar::-webkit-scrollbar-track {
-    background: transparent;
-}
-.sidebar::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 3px;
-}
-.sidebar::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-/* Firefox */
-.sidebar {
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;
 }
+
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
 .main-content-area {
     padding: 25px;
@@ -363,6 +417,7 @@ body {
     width: 100%;
 }
 
+/* ==================== TABLES ==================== */
 table {
     width: 100%;
     border-collapse: collapse;
@@ -384,6 +439,7 @@ th {
     font-weight: 700;
 }
 
+/* ==================== POS GRID ==================== */
 .pos-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -396,6 +452,7 @@ th {
     }
 }
 
+/* ==================== MISC PANELS ==================== */
 .alert-card-box {
     background: #fff;
     border-radius: var(--radius);
@@ -411,7 +468,7 @@ th {
     padding: 2px 6px;
     border-radius: 4px;
     font-weight: bold;
-    font-size: 10px;
+10px;
     display: inline-block;
 }
 
@@ -468,13 +525,8 @@ th {
     text-align: center;
 }
 
-.form-message.success {
-    color: #16a34a;
-}
-
-.form-message.error {
-    color: #dc2626;
-}
+.form-message.success { color: #16a34a; }
+.form-message.error   { color: #dc2626; }
 
 #dynamic-accept-print-btn:disabled {
     opacity: 0.6;
@@ -489,6 +541,7 @@ th {
     overflow-y: auto;
 }
 
+/* ==================== PRINT ==================== */
 @media print {
     html,
     body {
@@ -499,9 +552,7 @@ th {
         background: #fff !important;
     }
 
-    body * {
-        display: none !important;
-    }
+    body * { display: none !important; }
 
     #printable-receipt-box,
     #printable-debt-receipt-box,
@@ -584,8 +635,7 @@ div[id*="mimo"] {
     pointer-events: none !important;
 }
 
-/* ================= ACCOUNTANT DASHBOARD: PENDING / COMPLETED TAB TOGGLE ================= */
-
+/* ==================== ACCOUNTANT TAB TOGGLE ==================== */
 .accountant-tab-btn {
     width: auto;
     margin: 0;
@@ -608,8 +658,7 @@ div[id*="mimo"] {
     color: #fff;
 }
 
-/* ================= ACCOUNTANT DASHBOARD: PENDING ORDER DETAILS MODAL ================= */
-
+/* ==================== PENDING ORDER DETAILS MODAL ==================== */
 #pending-order-details-modal table th {
     text-align: left;
 }
@@ -618,8 +667,7 @@ div[id*="mimo"] {
     color: var(--accent);
 }
 
-/* ================= REFUND MODAL & REFUND RECEIPT ================= */
-
+/* ==================== REFUND MODAL ==================== */
 #refund-modal > div {
     max-height: 90vh;
     display: flex;
@@ -632,6 +680,3 @@ div[id*="mimo"] {
     cursor: not-allowed;
     background: #94a3b8 !important;
 }
-
-/* Refund receipts print via the same thermal-width rules as the other three
-   printable boxes above — see the shared @media print block. */
