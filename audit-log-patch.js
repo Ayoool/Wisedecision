@@ -1,7 +1,8 @@
 /* ============================================================
-   audit-log-patch.js  v5 — Firebase-first + price override report
-   Multi-tenant aware. Reads store id / user from runtime,
-   caches the last known values, writes to audit/{storeId}.
+   audit-log-patch.js  v6
+   - Reads store id from Firebase / runtime / DOM.
+   - Asks the cashier to confirm their name once, then saves it
+     to Firebase so every subsequent action stamps the right user.
    ============================================================ */
 (function () {
     'use strict';
@@ -11,33 +12,34 @@
     var __lastKnownUser = null;
     var __lastKnownStore = null;
     var __lastKnownBranch = null;
+    var __promptedThisSession = false;
 
-    /* Set to true if you want per-branch audit isolation:
-       audit/{storeId}/{branchId}/{entryId}
-       Leave false for a single audit trail per tenant. */
     var BRANCH_SCOPED = false;
 
     /* ---------- runtime discovery: user ---------- */
     function currentUser() {
-        var candidates = [
+        if (__lastKnownUser) return __lastKnownUser;
+
+        var cands = [
             window.currentUserName, window.loggedInUserName, window.currentStaffName,
             window.currentUser, window.activeUser, window.userName, window.staffName,
             window.adminName, window.adminUser, window.loggedInStaff, window.currentCashier
         ];
-        for (var i = 0; i < candidates.length; i++) {
-            if (candidates[i]) { __lastKnownUser = String(candidates[i]); return __lastKnownUser; }
+        for (var i = 0; i < cands.length; i++) {
+            if (cands[i]) { __lastKnownUser = String(cands[i]); return __lastKnownUser; }
         }
+
         var el = document.getElementById('user-role-label');
         if (el) {
             var m = (el.textContent || '').match(/logged in as\s+(.+)/i);
             if (m && m[1]) { __lastKnownUser = m[1].trim(); return __lastKnownUser; }
         }
-        if (__lastKnownUser) return __lastKnownUser;
         return 'Unknown';
     }
 
     /* ---------- runtime discovery: store id ---------- */
     function currentStore() {
+        if (__lastKnownStore) return __lastKnownStore;
         var cands = [
             window.currentStoreId, window.storeId, window.storeID,
             window.activeStoreId, window.currentStore, window.loggedInStore,
@@ -58,12 +60,11 @@
             var txt = (brand.textContent || '').trim();
             if (txt && !/wise decision/i.test(txt)) { __lastKnownStore = txt; return __lastKnownStore; }
         }
-        if (__lastKnownStore) return __lastKnownStore;
         return '';
     }
 
-    /* ---------- runtime discovery: branch ---------- */
     function currentBranch() {
+        if (__lastKnownBranch) return __lastKnownBranch;
         var cands = [
             window.currentBranchId, window.currentInventoryBranchFilter,
             window.activeBranchId, window.branchId, window.selectedBranchId
@@ -71,7 +72,6 @@
         for (var i = 0; i < cands.length; i++) {
             if (cands[i]) { __lastKnownBranch = String(cands[i]); return __lastKnownBranch; }
         }
-        if (__lastKnownBranch) return __lastKnownBranch;
         return 'all';
     }
 
@@ -97,6 +97,51 @@
         return 'audit/' + store;
     }
 
+    /* ---------- persist the user name per store in Firebase ---------- */
+    function loadUserNameFromFirebase(cb) {
+        if (__lastKnownUser) { cb && cb(__lastKnownUser); return; }
+        var store = currentStore();
+        if (!store || typeof firebase === 'undefined' || !firebase.database) { cb && cb(null); return; }
+        firebase.database().ref('meta/' + store + '/currentUserName').once('value').then(function (snap) {
+            var v = snap.val();
+            if (v) { __lastKnownUser = String(v); cb && cb(__lastKnownUser); }
+            else { cb && cb(null); }
+        }).catch(function () { cb && cb(null); });
+    }
+
+    function saveUserNameToFirebase(name) {
+        var store = currentStore();
+        if (!store || typeof firebase === 'undefined' || !firebase.database) return;
+        if (!name) return;
+        firebase.database().ref('meta/' + store + '/currentUserName').set(String(name));
+    }
+
+    /* Ask the user once per session to confirm their name. */
+    function ensureUserName(cb) {
+        // already have one?
+        if (__lastKnownUser && __lastKnownUser !== 'Unknown') { cb && cb(); return; }
+
+        // try Firebase first
+        loadUserNameFromFirebase(function (fromFb) {
+            if (fromFb) { cb && cb(); return; }
+
+            // try runtime
+            var guess = currentUser();
+            if (guess && guess !== 'Unknown') { saveUserNameToFirebase(guess); cb && cb(); return; }
+
+            // ask the human
+            if (__promptedThisSession) { cb && cb(); return; }
+            __promptedThisSession = true;
+
+            var entered = window.prompt('Enter your name (used on receipts & audit log):', '');
+            if (entered && entered.trim()) {
+                __lastKnownUser = entered.trim();
+                saveUserNameToFirebase(__lastKnownUser);
+            }
+            cb && cb();
+        });
+    }
+
     /* ---------- public: log ---------- */
     window.auditLog = function (action, target, details, extra) {
         if (typeof firebase === 'undefined' || !firebase.database) return;
@@ -105,22 +150,24 @@
             console.warn('[audit] store id unknown — skipping');
             return;
         }
-        var entry = {
-            action: String(action || 'unknown'),
-            target: String(target || ''),
-            details: (typeof details === 'string') ? details : JSON.stringify(details || {}),
-            user: currentUser(),
-            branch: currentBranch(),
-            date: new Date().toISOString(),
-            ts: Date.now()
-        };
-        if (extra && typeof extra === 'object') {
-            Object.keys(extra).forEach(function (k) { entry[k] = extra[k]; });
-        }
-        var id = 'AL-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-        firebase.database().ref(base + '/' + id).set(entry)
-            .then(function () { cache = null; })
-            .catch(function (e) { console.warn('[audit] write failed', e); });
+        ensureUserName(function () {
+            var entry = {
+                action: String(action || 'unknown'),
+                target: String(target || ''),
+                details: (typeof details === 'string') ? details : JSON.stringify(details || {}),
+                user: currentUser(),
+                branch: currentBranch(),
+                date: new Date().toISOString(),
+                ts: Date.now()
+            };
+            if (extra && typeof extra === 'object') {
+                Object.keys(extra).forEach(function (k) { entry[k] = extra[k]; });
+            }
+            var id = 'AL-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+            firebase.database().ref(base + '/' + id).set(entry)
+                .then(function () { cache = null; })
+                .catch(function (e) { console.warn('[audit] write failed', e); });
+        });
     };
 
     /* ---------- safe wrapper ---------- */
@@ -137,21 +184,23 @@
     wrap('handleStoreLogin', function () {
         var inp = document.getElementById('store-id-input');
         if (inp && inp.value && inp.value.trim()) __lastKnownStore = inp.value.trim();
+
         setTimeout(function () {
             var el = document.getElementById('user-role-label');
             if (el) {
                 var m = (el.textContent || '').match(/logged in as\s+(.+)/i);
-                if (m && m[1]) __lastKnownUser = m[1].trim();
+                if (m && m[1] && m[1] !== 'Admin') { __lastKnownUser = m[1].trim(); }
             }
-            window.auditLog('login', 'session', 'User logged in');
+            ensureUserName(function () {
+                window.auditLog('login', 'session', 'User logged in');
+            });
         }, 1500);
     });
 
     wrap('logout', function () {
         window.auditLog('logout', 'session', 'User logged out');
-        __lastKnownStore = null;
-        __lastKnownUser = null;
-        __lastKnownBranch = null;
+        // Note: we do NOT clear __lastKnownUser — the name persists across logins
+        // for the same device because it's stored per-store in Firebase.
     });
 
     wrap('saveProduct', function () {
@@ -179,13 +228,6 @@
         cart.forEach(function (it) { total += Number(it.qty || 0) * Number(it.price || 0); });
         window.auditLog('sale', 'cart', 'Completed sale, ' + cart.length + ' items, ₦' + total.toFixed(0));
     });
-
-    /* ---------- PRICE OVERRIDE LOGGING ----------
-       The actual override is captured in index.html, inside the addToCart
-       wrapper. That code calls window.auditLog('price_override', ...)
-       directly. Nothing to hook here — this note exists so future-you
-       knows where the logic lives.
-       -------------------------------------------- */
 
     /* ---------- load ---------- */
     function loadAudit(callback, force) {
@@ -265,7 +307,6 @@
             }
 
             body.innerHTML = filtered.map(function (e) {
-                // price_override rows get a highlighted old → new price cell
                 var detailsHtml = esc(e.details);
                 if (e.action === 'price_override' && e.oldPrice != null && e.newPrice != null) {
                     var drop = Number(e.oldPrice) - Number(e.newPrice);
@@ -278,7 +319,7 @@
 
                 return '<tr style="border-bottom:1px solid #f1f5f9;">' +
                     '<td style="padding:8px; white-space:nowrap;">' + fmtDate(e.date) + '</td>' +
-                    '<td style="padding:8px;">' + esc(e.user) + '</td>' +
+                    '<td style="padding:8px;"><strong>' + esc(e.user) + '</strong></td>' +
                     '<td style="padding:8px;"><span style="background:#eff6ff; color:#1d4ed8; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:bold;">' + esc(e.action) + '</span></td>' +
                     '<td style="padding:8px;">' + esc(e.target) + '</td>' +
                     '<td style="padding:8px;">' + detailsHtml + '</td>' +
@@ -296,13 +337,23 @@
         renderAuditLog();
     };
 
-    /* ---------- price overrides quick report ---------- */
     window.showPriceOverridesOnly = function () {
         document.getElementById('audit-filter-user').value = '';
         document.getElementById('audit-filter-action').value = 'price_override';
         document.getElementById('audit-filter-from').value = '';
         document.getElementById('audit-filter-to').value = '';
         renderAuditLog();
+    };
+
+    /* Manual rename button — lets the cashier change the name if needed. */
+    window.changeMyAuditName = function () {
+        var current = currentUser();
+        var entered = window.prompt('Your name (shown on the audit log & receipts):', current === 'Unknown' ? '' : current);
+        if (entered && entered.trim()) {
+            __lastKnownUser = entered.trim();
+            saveUserNameToFirebase(__lastKnownUser);
+            alert('Saved as: ' + __lastKnownUser);
+        }
     };
 
     window.exportAuditLogCSV = function () {
