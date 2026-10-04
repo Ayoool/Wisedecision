@@ -198,6 +198,79 @@
         </div>
     </div>
 
+    <!-- ================= DASHBOARD ANALYTICS TEMPLATE ================= -->
+    <div id="dashboard-analytics-template" style="display: none;">
+
+        <!-- Header + range toggle -->
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top: 24px;">
+            <h3 style="margin:0; font-size: 16px; color: var(--text);">📊 Analytics</h3>
+            <div style="display:flex; gap:6px;">
+                <button id="analytics-range-7"  class="menu-btn analytics-range-btn" style="width:auto; margin:0; padding:6px 14px; font-size:12px;" onclick="setAnalyticsRange(7)">7 Days</button>
+                <button id="analytics-range-30" class="menu-btn analytics-range-btn" style="width:auto; margin:0; padding:6px 14px; font-size:12px;" onclick="setAnalyticsRange(30)">30 Days</button>
+            </div>
+        </div>
+
+        <!-- Trend chart card -->
+        <div class="security-card" style="margin-top: 12px;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px;">
+                <h3 style="margin:0; border:none; padding:0; font-size: 14px;">Revenue Trend</h3>
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    Total: <strong id="analytics-total-revenue" style="color: #15803d;">₦0</strong>
+                    &nbsp;·&nbsp;
+                    Avg/day: <strong id="analytics-avg-revenue" style="color: #0284c7;">₦0</strong>
+                </div>
+            </div>
+            <div id="analytics-chart-wrapper" style="position:relative; margin-top: 10px; width:100%; overflow-x:auto;">
+                <svg id="analytics-trend-svg" viewBox="0 0 700 220" preserveAspectRatio="none"
+                     style="width:100%; height:220px; display:block; font-family: inherit;">
+                </svg>
+                <div id="analytics-empty-note" style="display:none; text-align:center; color:var(--text-muted); font-size: 13px; padding: 60px 10px;">
+                    No sales recorded in this range yet.
+                </div>
+            </div>
+        </div>
+
+        <!-- Two-column row: Top sellers + Peak hours + Slow movers -->
+        <div style="display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px;">
+            <div class="security-card" style="margin:0;">
+                <h3 style="margin:0 0 10px 0; font-size: 14px;">🏆 Top 5 Sellers</h3>
+                <div id="analytics-top-sellers" style="font-size: 13px; color: var(--text-muted);">Loading...</div>
+            </div>
+
+            <div class="security-card" style="margin:0;">
+                <h3 style="margin:0 0 10px 0; font-size: 14px;">⏰ Peak Hours (last 30 days)</h3>
+                <div id="analytics-peak-hours" style="font-size: 12px;"></div>
+            </div>
+
+            <div class="security-card" style="margin:0;">
+                <h3 style="margin:0 0 10px 0; font-size: 14px;">🐌 Slow Movers (0 sales in 30 days)</h3>
+                <div id="analytics-slow-movers" style="font-size: 13px; color: var(--text-muted);">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* local styles for the analytics block */
+        .analytics-range-btn { background:#e2e8f0; color:#1e293b; border:none; font-weight:bold; }
+        .analytics-range-btn.active { background: linear-gradient(135deg,#14b8a6 0%,#0284c7 100%); color:#fff; }
+        .analytics-range-btn:hover { transform:none; filter:brightness(0.96); }
+
+        .analytics-bar-row {
+            display:flex; align-items:center; gap:8px; margin-bottom:6px;
+        }
+        .analytics-bar-label { flex: 0 0 130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; color:#334155; }
+        .analytics-bar-track { flex:1; height: 18px; background:#f1f5f9; border-radius: 6px; overflow:hidden; }
+        .analytics-bar-fill  { height:100%; background: linear-gradient(90deg,#14b8a6,#0284c7); border-radius: 6px; }
+        .analytics-bar-value { flex: 0 0 100px; text-align:right; color:#0f172a; font-weight:600; font-size:12px; }
+
+        .analytics-heat-cell {
+            display:inline-flex; align-items:center; justify-content:center;
+            width: 32px; height: 28px; margin: 1px;
+            border-radius: 6px; font-size: 10px; font-weight:bold;
+            color:#fff; border: 1px solid rgba(0,0,0,0.04);
+        }
+    </style>
+
     <div id="pos-view-template" style="display: none;">
         <h2>Point of Sale (POS) Register</h2>
 
@@ -1543,7 +1616,7 @@
     </div>
 
     <!-- ================= PENDING ORDER DETAILS MODAL ================= -->
-    <div id="pending-order-details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+    <div id="pending-order-details-modal" style="display: none; position: fixed; top: 0 width; left: 0; width: :100%; height: 100%; background:  rgba(0,0,0,0.10065); backdrop-filter: blur(2px%;); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20 heightpx; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <h3 style="margin-top:0; color: var(--text);">Order Details — <span id="pending-details-tx-id">--</span></h3>
 
@@ -1581,7 +1654,7 @@
     </div>
 
     <!-- ================= HELD / PARKED CARTS MODAL ================= -->
-    <div id="held-carts-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
+    <div id="held-carts-modal" style="display: none; position: fixed; top: 0; left: 0;: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 1000; padding: 20px; box-sizing: border-box;">
         <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 12px;">
                 <h3 style="margin:0; color: var(--text);">Held Carts</h3>
@@ -1621,20 +1694,21 @@
 
 
     <!-- Link your external JavaScript file -->
-        <script src="script.js?v=36" defer></script>
-        <script src="perf-patch.js?v=36" defer></script>
-        <script src="bugfix-patch.js?v=36" defer></script>
-        <script src="offline-patch.js?v=36" defer></script>
-        <script src="features-patch.js?v=36" defer></script>
-        <script src="superadmin-patch.js?v=36" defer></script>
-        <script src="activation-patch.js?v=36" defer></script>
-        <script src="superadmin-tools-patch.js?v=36" defer></script>
-        <script src="pos-mode-patch.js?v=36" defer></script>
-        <script src="storeplans-patch.js?v=36" defer></script>
-        <script src="staff-sidebar-patch.js?v=36" defer></script>
-        <script src="manager-preorder-patch.js?v=36" defer></script>
-        <script src="extras-patch.js?v=36" defer></script>
-        <script src="dashboard-categories-patch.js?v=36" defer></script>
+        <script src="script.js?v=37" defer></script>
+        <script src="perf-patch.js?v=37" defer></script>
+        <script src="bugfix-patch.js?v=37" defer></script>
+        <script src="offline-patch.js?v=37" defer></script>
+        <script src="features-patch.js?v=37" defer></script>
+        <script src="superadmin-patch.js?v=37" defer></script>
+        <script src="activation-patch.js?v=37" defer></script>
+        <script src="superadmin-tools-patch.js?v=37" defer></script>
+        <script src="pos-mode-patch.js?v=37" defer></script>
+        <script src="storeplans-patch.js?v=37" defer></script>
+        <script src="staff-sidebar-patch.js?v=37" defer></script>
+        <script src="manager-preorder-patch.js?v=37" defer></script>
+        <script src="extras-patch.js?v=37" defer></script>
+        <script src="dashboard-categories-patch.js?v=37" defer></script>
+        <script src="dashboard-analytics-patch.js?v=37" defer></script>
         <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
