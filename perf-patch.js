@@ -1,12 +1,34 @@
-// ==================== WISE DECISION PERFORMANCE PATCH (v22) ====================
+// ==================== WISE DECISION PERFORMANCE PATCH (v23) ====================
 // Load this AFTER script.js (both with `defer`). It replaces the slow functions in
 // script.js with faster versions and adds a loading spinner for login.
+//
+// v23: Merged extra speed-ups into v22:
+//      - search boxes (POS + Inventory) wait 200ms after typing stops
+//      - customer purchase history queries one customer instead of all transactions
+//      - logout also detaches the listeners created by this file
+//      - sales history uses LOCAL dates for "today / selected day" (v22 mixed UTC + local)
+//      - restored escapeHtml/escapeJsAttr everywhere (v22 dropped them -> script injection risk)
+//      - restored custom unit names (Carton/Sachet/etc.) in POS, cart, dashboard and receipts
+//      - inventory table keeps the unit-name datalists up to date again
 //
 // v22: Receipt footer now says "THANKS FOR YOUR PATRONAGE !!!" above the promo line.
 //      NOTE: This file OVERRIDES renderReceiptView from script.js, so any receipt
 //      text changes must be made HERE, not in script.js.
+//
+// REQUIRED Firebase rules (".indexOn") or the date filters still download everything:
+//   transactions: ["date", "customerId"]   expenses: ["date"]   refunds: ["date"]
 
-console.log("Wise Decision perf-patch.js — v22 loaded (receipt: added THANKS FOR YOUR PATRONAGE footer)");
+console.log("Wise Decision perf-patch.js — v23 loaded (v22 + debounce, customer history query, escapes/unit labels restored)");
+
+// ---------- 0. Small helpers ----------
+function wdDebounce(fn, ms) {
+    let t = null;
+    return function () {
+        const args = arguments, ctx = this;
+        clearTimeout(t);
+        t = setTimeout(function () { fn.apply(ctx, args); }, ms);
+    };
+}
 
 // ---------- 1. Loading spinner ----------
 (function injectLoaderStyles() {
@@ -153,6 +175,7 @@ function handleStoreLogin() {
         let foundStaff = false;
         if (storeData.staff) {
             Object.keys(storeData.staff).forEach(staffKey => {
+                if (foundStaff) return; // first matching PIN wins
                 const staff = storeData.staff[staffKey];
                 if (staff.pin === pin) {
                     foundStaff = true;
@@ -238,7 +261,12 @@ function loadDashboardMetrics() {
             const isExpiringSoon = expiryDate && (expiryDate - now) / (1000 * 60 * 60 * 24) <= 30;
 
             if (isLowStock || isExpiringSoon) {
-                alerts.push({ name: itemName, category, stock, soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg', expiryVal, isLowStock, isExpiringSoon });
+                alerts.push({
+                    name: itemName, category, stock,
+                    soldByWeight: !!item.soldByWeight, weightUnit: item.weightUnit || 'Kg',
+                    expiryVal, isLowStock, isExpiringSoon,
+                    baseUnitName: item.baseUnitName, bulkUnitName: item.bulkUnitName, unitsPerPack: item.unitsPerPack
+                });
             }
         });
 
@@ -350,14 +378,22 @@ let wdSalesQuery = null;
 function loadPastSalesHistory(selectedDateString = null) {
     if (!currentStoreId) return;
 
-    const targetDate = selectedDateString ? new Date(selectedDateString) : new Date();
+    // Target day in LOCAL time (v22 read UTC parts here but compared with local parts below).
+    let targetDate;
+    if (selectedDateString) {
+        const p = String(selectedDateString).split('-');
+        targetDate = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    } else {
+        targetDate = new Date();
+    }
+
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     weekStart.setHours(0, 0, 0, 0);
     const from = new Date(Math.min(
         weekStart.getTime(),
         new Date(monthStartISO()).getTime(),
-        targetDate.getTime() - 86400000
+        new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime() - 86400000
     )).toISOString();
 
     if (wdSalesQuery) wdSalesQuery.off();
@@ -367,16 +403,15 @@ function loadPastSalesHistory(selectedDateString = null) {
         const tbody = document.getElementById('sales-history-body');
         if (!tbody) return;
 
-        let dayRevenue = 0, weekRevenue = 0, monthRevenue = 0;
+        let weekRevenue = 0, monthRevenue = 0;
 
-        const targetYear = targetDate.getUTCFullYear();
-        const targetMonth = targetDate.getUTCMonth();
-        const targetDay = targetDate.getUTCDate();
+        const targetYear = targetDate.getFullYear();
+        const targetMonth = targetDate.getMonth();
+        const targetDay = targetDate.getDate();
 
         let selectedDayRevenue = 0, selectedDayCash = 0, selectedDayTransfer = 0;
 
         const now = new Date();
-        const todayDateStr = now.toDateString();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
 
@@ -393,7 +428,6 @@ function loadPastSalesHistory(selectedDateString = null) {
             const txDate = tx.date ? new Date(tx.date) : null;
 
             if (txDate) {
-                if (txDate.toDateString() === todayDateStr) dayRevenue += txTotal;
                 if (txDate >= weekStart) weekRevenue += txTotal;
                 if (txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth) monthRevenue += txTotal;
             }
@@ -409,25 +443,26 @@ function loadPastSalesHistory(selectedDateString = null) {
 
             const dateStr = txDate ? txDate.toLocaleString() : 'N/A';
             const transactionId = tx.txId || child.key;
+            const safeTxId = escapeJsAttr(transactionId);
             const sellerName = tx.staff || tx.soldBy || 'Staff';
-            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${escapeHtml(tx.customerName)}</small>` : '';
             const statusLabel = tx.refundStatus && tx.refundStatus !== 'Completed' ? (tx.refundStatus === 'Refunded' ? 'Refunded' : 'Partially Refunded') : (tx.status || 'Completed');
             const statusColor = tx.refundStatus === 'Refunded' ? '#991b1b' : (tx.refundStatus === 'Partially Refunded' ? '#b45309' : 'green');
             const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
-                ? `<button class="menu-btn btn-logout" style="padding: 5px 10px; font-size: 11px; width: auto; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${transactionId}')">↩ Refund</button>`
+                ? `<button class="menu-btn btn-logout" style="padding: 5px 10px; font-size: 11px; width: auto; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${safeTxId}')">↩ Refund</button>`
                 : '';
 
             rows.push({ sortKey: txDate ? txDate.getTime() : 0, html: `
                 <tr>
-                    <td><strong>${transactionId}</strong>${customerTag}</td>
-                    <td>${branchNameOf(txBranch)}</td>
+                    <td><strong>${escapeHtml(transactionId)}</strong>${customerTag}</td>
+                    <td>${escapeHtml(branchNameOf(txBranch))}</td>
                     <td>${dateStr}</td>
-                    <td>${sellerName}</td>
+                    <td>${escapeHtml(sellerName)}</td>
                     <td>₦${txTotal.toLocaleString()}${refundStatusBadge(tx)}</td>
                     <td>Cash: ₦${cashPaid.toLocaleString()}<br>Transfer: ₦${transferPaid.toLocaleString()}</td>
-                    <td><span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span></td>
+                    <td><span style="color: ${statusColor}; font-weight: bold;">${escapeHtml(statusLabel)}</span></td>
                     <td>
-                        <button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button>
+                        <button class="menu-btn btn-action-primary" style="padding: 5px 10px; font-size: 11px; width: auto;" onclick="viewPastReceipt('${safeTxId}')">View / Reprint</button>
                         ${refundBtn}
                     </td>
                 </tr>
@@ -479,23 +514,24 @@ function loadCompletedTransactionsForAccountant() {
 
         const rowsHtml = rows.map(tx => {
             const transactionId = tx.txId || tx.id;
-            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${tx.customerName}</small>` : '';
+            const safeTxId = escapeJsAttr(transactionId);
+            const customerTag = tx.customerName && tx.customerName !== 'Walk-In Customer' ? `<br><small style="color:var(--text-muted);">👤 ${escapeHtml(tx.customerName)}</small>` : '';
             const refundBtn = canRefund && tx.refundStatus !== 'Refunded'
-                ? `<button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${transactionId}')">↩ Refund</button>`
+                ? `<button class="menu-btn btn-logout" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block; background:#fef2f2; color:#991b1b; border:1px solid #fecaca;" onclick="openRefundModal('${safeTxId}')">↩ Refund</button>`
                 : '';
             return `
                 <tr>
-                    <td><strong>${transactionId}</strong>${customerTag}</td>
+                    <td><strong>${escapeHtml(transactionId)}</strong>${customerTag}</td>
                     <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
-                    <td>${tx.staff || tx.soldBy || 'Staff'}</td>
+                    <td>${escapeHtml(tx.staff || tx.soldBy || 'Staff')}</td>
                     <td>₦${Number(tx.totalAmount || 0).toLocaleString()}${refundStatusBadge(tx)}</td>
-                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${transactionId}')">View / Reprint</button> ${refundBtn}</td>
+                    <td><button class="menu-btn btn-action-primary" style="padding: 4px 10px; font-size: 11px; width: auto; display: inline-block;" onclick="viewPastReceipt('${safeTxId}')">View / Reprint</button> ${refundBtn}</td>
                 </tr>
             `;
         });
 
         tbody.innerHTML = rows.length === 0
-            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No completed sales yet for ${branchNameOf(currentBranch)}.</td></tr>`
+            ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">No completed sales yet for ${escapeHtml(branchNameOf(currentBranch))}.</td></tr>`
             : rowsHtml.join('');
     }, error => {
         console.error("loadCompletedTransactionsForAccountant error:", error);
@@ -535,6 +571,7 @@ function loadInventoryTable() {
         renderInventoryTable();
         populateInventoryCategoryFilter();
         updateCategoryDatalist();
+        refreshUnitNameDatalists();
     });
 }
 
@@ -548,6 +585,17 @@ function onInventoryBranchFilterChange() {
 }
 
 // ---------- 11. POS: build HTML once instead of innerHTML += in loops ----------
+function wdPosOptionHtml(id, item) {
+    const pName = item.name || item.productName || 'Unnamed Item';
+    const rPrice = item.price || item.retailPrice || 0;
+    const wPrice = item.wholesalePrice || 0;
+    const unitsPerPack = Number(item.unitsPerPack) || 1;
+    const labels = getUnitLabels(item);
+    const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 ${labels.bulkName} = ${unitsPerPack} ${pluralizeUnit(labels.baseName, unitsPerPack)}]` : '');
+
+    return `<option value="${escapeHtml(id)}">${escapeHtml(pName)} (Stock: ${escapeHtml(formatStockLabel(item))})${escapeHtml(pieceNote)} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+}
+
 function loadPosInventoryDropdown() {
     if (!currentStoreId) return;
 
@@ -556,49 +604,43 @@ function loadPosInventoryDropdown() {
         if (!select) return;
 
         if (!inventoryCache[currentBranch]) inventoryCache[currentBranch] = {};
-        let html = '<option value="">-- Choose Inventory Item --</option>';
+        const parts = ['<option value="">-- Choose Inventory Item --</option>'];
 
         snapshot.forEach(child => {
-            const id = child.key;
             const item = child.val();
-            inventoryCache[currentBranch][id] = item;
-
-            const pName = item.name || item.productName || 'Unnamed Item';
-            const rPrice = item.price || item.retailPrice || 0;
-            const wPrice = item.wholesalePrice || 0;
-            const unitsPerPack = Number(item.unitsPerPack) || 1;
-            const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '');
-
-            html += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+            inventoryCache[currentBranch][child.key] = item;
+            parts.push(wdPosOptionHtml(child.key, item));
         });
 
-        select.innerHTML = html;
+        select.innerHTML = parts.join('');
     });
 }
 
-function filterPosInventory() {
+function wdFilterPosInventoryNow() {
     const query = (document.getElementById('pos-search-input')?.value || '').toLowerCase().trim();
     const select = document.getElementById('pos-product-select');
     if (!select) return;
 
     const branchItems = inventoryCache[currentBranch] || {};
-    let html = '<option value="">-- Choose Inventory Item --</option>';
+    const parts = ['<option value="">-- Choose Inventory Item --</option>'];
 
     Object.keys(branchItems).forEach(id => {
         const item = branchItems[id];
         const pName = item.name || item.productName || 'Unnamed Item';
         if (!pName.toLowerCase().includes(query)) return;
-
-        const rPrice = item.price || item.retailPrice || 0;
-        const wPrice = item.wholesalePrice || 0;
-        const unitsPerPack = Number(item.unitsPerPack) || 1;
-        const pieceNote = item.soldByWeight ? '' : (unitsPerPack > 1 ? ` [1 pack = ${unitsPerPack} pcs]` : '');
-
-        html += `<option value="${id}">${pName} (Stock: ${formatStockLabel(item)})${pieceNote} - Retail: ₦${rPrice} | Wholesale: ₦${wPrice}</option>`;
+        parts.push(wdPosOptionHtml(id, item));
     });
 
-    select.innerHTML = html;
+    select.innerHTML = parts.join('');
 }
+// Debounced: the page's oninput handler calls filterPosInventory() by name at call time.
+window.filterPosInventory = wdDebounce(wdFilterPosInventoryNow, 200);
+
+// Inventory search: same 200ms debounce around the existing function from script.js.
+(function debounceInventorySearch() {
+    const original = window.filterInventoryTable;
+    if (typeof original === 'function') window.filterInventoryTable = wdDebounce(original, 200);
+})();
 
 function renderCart() {
     const tbody = document.getElementById('cart-body');
@@ -610,10 +652,11 @@ function renderCart() {
 
     currentCart.forEach((cartItem, index) => {
         grandTotal += cartItem.total;
-        const unitLabel = cartItem.saleUnit === 'Piece' ? 'pcs' : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : 'pack(s)');
+        const labels = getUnitLabels(cartItem);
+        const unitLabel = cartItem.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((cartItem.saleUnit === 'Kg' || cartItem.saleUnit === 'g') ? cartItem.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
         html += `
             <tr>
-                <td>${cartItem.name} <br><small style="color:var(--text-muted);">[${cartItem.customerType} · ${unitLabel}]</small></td>
+                <td>${escapeHtml(cartItem.name)} <br><small style="color:var(--text-muted);">[${escapeHtml(cartItem.customerType)} · ${escapeHtml(unitLabel)}]</small></td>
                 <td>
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <button class="menu-btn" style="padding: 2px 6px; font-size: 10px; width: auto;" onclick="decreaseQty(${index})">-</button>
@@ -658,7 +701,51 @@ function loadBusinessSettings() {
     });
 }
 
-// ---------- 13. Receipts: read name/address/phone only (not the whole store) ----------
+// ---------- 13. Customer purchase history: query one customer, not every transaction ----------
+function loadCustomerPurchaseHistory(id) {
+    const tbody = document.getElementById('profile-purchases-body');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading purchase history...</td></tr>';
+
+    firebase.database().ref(`stores/${currentStoreId}/transactions`).orderByChild('customerId').equalTo(id).once('value').then(snapshot => {
+        const purchases = [];
+        snapshot.forEach(child => { purchases.push(child.val()); });
+        purchases.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const rowsHtml = purchases.map(tx => {
+            const itemsSummary = Array.isArray(tx.items) ? tx.items.map(i => `${escapeHtml(i.name)} x${i.qty}`).join(', ') : '';
+            return `
+                <tr>
+                    <td>${tx.date ? new Date(tx.date).toLocaleString() : 'N/A'}</td>
+                    <td><strong>${escapeHtml(tx.txId) || ''}</strong> <br><small style="color:var(--text-muted);">${escapeHtml(branchNameOf(tx.branchId || 'main'))}</small></td>
+                    <td style="max-width:220px;">${itemsSummary}</td>
+                    <td>₦${Number(tx.totalAmount || 0).toLocaleString()}</td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = purchases.length === 0
+            ? '<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">No purchase history yet.</td></tr>'
+            : rowsHtml.join('');
+    });
+}
+
+// ---------- 14. Logout: also detach the listeners created by this file ----------
+(function wrapLogout() {
+    const originalLogout = window.logout;
+    if (typeof originalLogout !== 'function') return;
+    window.logout = function () {
+        try { if (wdSalesQuery) wdSalesQuery.off(); } catch (e) {}
+        try { if (wdCompletedQuery) wdCompletedQuery.off(); } catch (e) {}
+        try { if (window._wdInvRef) window._wdInvRef.off(); } catch (e) {}
+        wdSalesQuery = null;
+        wdCompletedQuery = null;
+        window._wdInvRef = null;
+        return originalLogout.apply(this, arguments);
+    };
+})();
+
+// ---------- 15. Receipts: read name/address/phone only (not the whole store) ----------
 function renderReceiptView(orderData, isReprint = false) {
     const mainWrapper = document.getElementById('dashboard-main-wrapper');
     if (mainWrapper) {
@@ -719,7 +806,7 @@ function renderReceiptView(orderData, isReprint = false) {
                     printableBox.prepend(cashierRow);
                 }
             }
-            cashierRow.innerHTML = `Cashier: ${cashierName}${orderData.branchId ? ` &middot; Branch: ${branchNameOf(orderData.branchId)}` : ''}`;
+            cashierRow.innerHTML = `Cashier: ${escapeHtml(cashierName)}${orderData.branchId ? ` &middot; Branch: ${escapeHtml(branchNameOf(orderData.branchId))}` : ''}`;
 
             let custRow = printableBox.querySelector('#receipt-customer-row');
             if (orderData.customerId && orderData.customerName) {
@@ -729,7 +816,7 @@ function renderReceiptView(orderData, isReprint = false) {
                     custRow.style.cssText = 'font-size: 11px; color: #333; margin-bottom: 5px;';
                     cashierRow.parentNode.insertBefore(custRow, cashierRow.nextSibling);
                 }
-                custRow.innerHTML = `Customer: ${orderData.customerName}`;
+                custRow.innerHTML = `Customer: ${escapeHtml(orderData.customerName)}`;
             } else if (custRow) {
                 custRow.remove();
             }
@@ -754,12 +841,13 @@ function renderReceiptView(orderData, isReprint = false) {
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? 'pack' : ''));
-                const qtyDisplay = unitLabel ? `${item.qty || 0} ${unitLabel}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
+                const labels = getUnitLabels(item);
+                const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? labels.bulkName.toLowerCase() : ''));
+                const qtyDisplay = unitLabel ? `${item.qty || 0} ${escapeHtml(unitLabel)}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
                 const refundedTag = Number(item.refundedQty) > 0 ? ` <small style="color:#991b1b;">(${item.refundedQty} refunded)</small>` : '';
                 itemsHtml += `
                     <tr>
-                        <td style="font-weight: bold;">${item.name || ''}${refundedTag}</td>
+                        <td style="font-weight: bold;">${escapeHtml(item.name)}${refundedTag}</td>
                         <td>${qtyDisplay}</td>
                         <td>₦${safeItemTotal}</td>
                     </tr>
@@ -776,6 +864,8 @@ function renderReceiptView(orderData, isReprint = false) {
             printableBox.appendChild(promoDiv);
         }
 
+        const printNow = () => triggerThermalPrint(printableBox ? printableBox.innerHTML : '');
+
         if (currentStoreId) {
             getStoreProfile().then(storeData => {
                 const nameEl = workspace.querySelector('#receipt-store-name');
@@ -786,12 +876,10 @@ function renderReceiptView(orderData, isReprint = false) {
                 if (addressEl) addressEl.textContent = storeData.address || "";
                 if (phoneEl) phoneEl.textContent = storeData.phone ? `Tel: ${storeData.phone}` : "";
 
-                triggerThermalPrint(printableBox.innerHTML);
-            }).catch(() => {
-                triggerThermalPrint(printableBox.innerHTML);
-            });
+                printNow();
+            }).catch(printNow);
         } else {
-            triggerThermalPrint(printableBox.innerHTML);
+            printNow();
         }
     }, 150);
 }
@@ -870,11 +958,12 @@ function renderRefundReceiptView(refundData) {
         if (itemsBody) {
             let itemsHtml = '';
             (refundData.items || []).forEach(item => {
-                const unitLabel = item.saleUnit === 'Piece' ? 'pc' : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : 'pack');
+                const labels = getUnitLabels(item);
+                const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : labels.bulkName.toLowerCase());
                 itemsHtml += `
                     <tr>
-                        <td>${item.name || ''}</td>
-                        <td>${item.qty} ${unitLabel}${item.qty === 1 ? '' : 's'}</td>
+                        <td>${escapeHtml(item.name)}</td>
+                        <td>${item.qty} ${escapeHtml(unitLabel)}${item.qty === 1 ? '' : 's'}</td>
                         <td style="text-align:right;">₦${Number(item.amount || 0).toLocaleString()}</td>
                     </tr>
                 `;
