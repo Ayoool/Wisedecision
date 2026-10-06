@@ -774,10 +774,22 @@ div[id*="mimo"] {
 
 .auth-card .brand-title {
     font-size: 26px;
-    color: #0f172a;
-    letter-spacing: 1.5px;
+    color: #0284c7;
+    letter-spacing: 0;
+    white-space: nowrap;
 }
-.auth-card .brand-title .big-w { font-size: 38px; }
+.auth-card .brand-title .big-w {
+    font-size: 44px;
+    line-height: 1;
+    letter-spacing: 0;
+    margin-right: 0;
+    vertical-align: -5px;
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    -webkit-text-fill-color: currentColor;
+    color: inherit;
+}
 
 .auth-card .subtitle {
     color: #64748b;
