@@ -866,3 +866,11 @@ div[id*="mimo"] {
 }
 #super-admin-view tbody tr:hover { background: #f0fdfa; }
 #super-admin-view td { border-bottom: 1px solid #e2e8f0; }
+
+/* ==================== LOGIN SCREEN BACKGROUND PICTURE ==================== */
+/* Put your picture in the same folder as index.html and name it login-bg.jpg */
+.auth-wrapper {
+    background:
+        linear-gradient(rgba(15, 23, 42, 0.45), rgba(15, 23, 42, 0.6)),
+        url("login-bg.jpg") center / cover no-repeat fixed !important;
+}
