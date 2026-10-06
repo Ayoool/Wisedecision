@@ -831,3 +831,38 @@ div[id*="mimo"] {
     background: #f0fdfa;
     color: #0f766e;
 }
+
+/* ==================== SUPER ADMIN DASHBOARD THEME ==================== */
+/* Page: soft light background so the dashboard feels clean and readable */
+#super-admin-view > div {
+    background: linear-gradient(135deg, #f0f9ff 0%, #ecfdf5 100%) !important;
+    color: #0f172a !important;
+}
+
+/* Top header bar: deep navy with a teal accent line */
+#super-admin-view > div > div:first-child {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%) !important;
+    border: none !important;
+    border-bottom: 4px solid #14b8a6 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25);
+}
+#super-admin-view > div > div:first-child h2 { color: #ffffff !important; }
+#super-admin-view > div > div:first-child p  { color: #99f6e4 !important; }
+
+/* Main card */
+#super-admin-view > div > div:nth-child(2) {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px !important;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08) !important;
+}
+#super-admin-view > div > div:nth-child(2) h3 { color: #0f172a !important; }
+
+/* Table header and rows */
+#super-admin-view thead tr {
+    background: #e0f2fe !important;
+    border-bottom: 2px solid #14b8a6 !important;
+    color: #0369a1 !important;
+}
+#super-admin-view tbody tr:hover { background: #f0fdfa; }
+#super-admin-view td { border-bottom: 1px solid #e2e8f0; }
