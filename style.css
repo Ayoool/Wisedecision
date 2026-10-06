@@ -760,3 +760,62 @@ div[id*="mimo"] {
     cursor: not-allowed;
     background: #94a3b8 !important;
 }
+
+/* ==================== LOGIN CARD REFRESH ==================== */
+.auth-card {
+    background: #ffffff;
+    border: none;
+    border-top: 5px solid #14b8a6;
+    border-radius: 22px;
+    max-width: 400px;
+    padding: 40px 32px 30px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+}
+
+.auth-card .brand-title {
+    font-size: 26px;
+    color: #0f172a;
+    letter-spacing: 1.5px;
+}
+.auth-card .brand-title .big-w { font-size: 38px; }
+
+.auth-card .subtitle {
+    color: #64748b;
+    margin-bottom: 30px;
+}
+
+.auth-card .form-group label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #475569;
+}
+
+.auth-card .form-group input {
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.auth-card .form-group input:focus {
+    border-color: #14b8a6;
+    box-shadow: 0 0 0 4px rgba(20,184,166,0.15);
+}
+
+.auth-card .btn-action-primary {
+    margin-top: 10px;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 15px;
+}
+
+.auth-card .btn-secondary {
+    background: transparent;
+    color: #0d9488;
+    border: 2px solid #99f6e4;
+    border-radius: 12px;
+}
+.auth-card .btn-secondary:hover {
+    background: #f0fdfa;
+    color: #0f766e;
+}
