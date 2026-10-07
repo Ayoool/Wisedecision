@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v1) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v2) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,9 +16,14 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v2 FIXES:
+//   * STOPPED THE SHAKING: Banner no longer rewrites innerHTML/style on every 1.2s tick unless data changed.
+//   * STOPPED THE SHAKING: Login link and Sidebar button are strictly idempotent.
+//   * IMPROVED: Banner only re-inserts if it's not already at the top of the workspace.
+//
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v1 loaded");
+console.log("Wise Decision payments-patch.js — v2 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -514,6 +519,7 @@ async function wdpEnsureBanner() {
 
     const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
     if (s.state !== 'overdue' && s.state !== 'due-soon') { if (old) old.remove(); return; }
+    
     let text, bg, bd, col;
     if (s.state === 'overdue') {
         text = s.trial ? 'Your free trial ended ' + s.overdueBy + ' day' + (s.overdueBy === 1 ? '' : 's') + ' ago.' : 'Your subscription is overdue by ' + s.overdueBy + ' day' + (s.overdueBy === 1 ? '' : 's') + '.';
@@ -522,15 +528,35 @@ async function wdpEnsureBanner() {
         text = (s.trial ? 'Your free trial ends ' : 'Your subscription is due ') + (s.days === 0 ? 'today' : 'in ' + s.days + ' day' + (s.days === 1 ? '' : 's')) + ' (' + wdpPretty(wdpBanner.billing.dueDate) + ').';
         bg = '#fffbeb'; bd = '#fde68a'; col = '#92400e';
     }
+
+    // Build the HTML string once to compare
+    const newHtml = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
+        '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
+
     let el = old;
     if (!el) {
         el = document.createElement('div');
         el.id = 'wdp-banner';
         ws.insertBefore(el, ws.firstChild);
-    } else if (el.parentElement !== ws) { ws.insertBefore(el, ws.firstChild); }
-    el.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; font-weight:bold;';
-    el.innerHTML = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
-        '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
+    } else if (el.parentElement !== ws) {
+        ws.insertBefore(el, ws.firstChild);
+    } else if (ws.firstChild !== el) {
+        // Only move if it's not already the first child (avoids layout thrash)
+        ws.insertBefore(el, ws.firstChild);
+    }
+
+    // CRITICAL FIX: Only update DOM if content or style actually changed.
+    // This stops the 1.2s "shaking" because the browser doesn't reflow unnecessarily.
+    const newStyle = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; font-weight:bold;';
+    
+    if (el.dataset.sig !== text + '|' + bg) {
+        el.dataset.sig = text + '|' + bg;
+        el.style.cssText = newStyle;
+        el.innerHTML = newHtml;
+    } else if (el.style.cssText !== newStyle) {
+        // If only the style needs updating (e.g.login color changed slightly)
+        el.style.cssText = newStyle;
+    }
 }
 
 function wdpAttach() {
@@ -567,9 +593,10 @@ function wdpAttach() {
     }
 
     // Login screen link (so a locked store can still pay)
+    // We append this to the login card. To ensure it "remains here", we check for its existence.
     if (!document.getElementById('wdp-login-link')) {
         // Try several likely containers, in order of preference
-        var loginCard = document.querySelector('#login-view .auth-card') ||
+        var loginCard = document.querySelector('#-view .auth-card') ||
                         document.querySelector('.auth-card') ||
                         document.querySelector('#login-view .login-card') ||
                         document.querySelector('.login-card') ||
