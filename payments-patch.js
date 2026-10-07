@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v3) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,15 +16,17 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v3 FIXES:
-//   * STOPPED THE SIDEBAR SHAKE: The Subscription button is now insert-only. We never touch it again
-//     unless it has been removed from the DOM by another patch. No style.display toggling, no repositioning.
-//   * STOPPED THE BANNER SHAKE: Banner only rewrites innerHTML/style when the content actually changes.
-//   * Interval reduced to 5s so any race with other patches is invisible.
+// v4 FIXES (sidebar shake):
+//   * New global hook wdpAttachSidebar() — insert-only, idempotent, no reflows.
+//   * setInterval() replaced with MutationObserver — only reacts when sidebar actually changes.
+//   * Sidebar button uses btn-subscription (no CSS transition) so it never visually pops.
+//   * Other patches (staff-sidebar-patch.js, manager-preorder-patch.js) should call
+//       if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
+//     immediately after they rebuild the sidebar, to eliminate the race entirely.
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v3 loaded");
+console.log("Wise Decision payments-patch.js — v4 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -530,7 +532,6 @@ async function wdpEnsureBanner() {
         bg = '#fffbeb'; bd = '#fde68a'; col = '#92400e';
     }
 
-    // Build the HTML string once to compare
     const newHtml = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
         '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
 
@@ -542,12 +543,9 @@ async function wdpEnsureBanner() {
     } else if (el.parentElement !== ws) {
         ws.insertBefore(el, ws.firstChild);
     } else if (ws.firstChild !== el) {
-        // Only move if it's not already the first child (avoids layout thrash)
         ws.insertBefore(el, ws.firstChild);
     }
 
-    // CRITICAL FIX: Only update DOM if content or style actually changed.
-    // This stops the 1.2s "shaking" because the browser doesn't reflow unnecessarily.
     const newStyle = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; font-weight:bold;';
 
     if (el.dataset.sig !== text + '|' + bg) {
@@ -555,11 +553,39 @@ async function wdpEnsureBanner() {
         el.style.cssText = newStyle;
         el.innerHTML = newHtml;
     } else if (el.style.cssText !== newStyle) {
-        // If only the style needs updating (e.g. color changed slightly)
         el.style.cssText = newStyle;
     }
 }
 
+// =====================================================================
+// SIDEBAR BUTTON — global hook, insert-only, idempotent.
+// Called by wdpAttach AND (recommended) by any patch that rebuilds
+// the sidebar (e.g. staff-sidebar-patch.js, manager-preorder-patch.js).
+// Other patches should add, right after their sidebar rebuild:
+//     if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
+// =====================================================================
+window.wdpAttachSidebar = function () {
+    const side = document.querySelector('#dashboard-main-wrapper .sidebar');
+    const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
+    if (!side || !isAdmin) return;
+
+    // If the button already exists, DO NOTHING — this is the flicker fix.
+    if (document.getElementById('wdp-sidebar-btn')) return;
+
+    const sb = document.createElement('button');
+    sb.id = 'wdp-sidebar-btn';
+    sb.className = 'menu-btn btn-subscription';   // stable class, no CSS transition
+    sb.textContent = '💳 Subscription';
+    sb.onclick = function () { wdpOpenRenew(currentStoreId); };
+
+    const logout = side.querySelector('.btn-logout');
+    if (logout) side.insertBefore(sb, logout);
+    else side.appendChild(sb);
+};
+
+// =====================================================================
+// MAIN ATTACH
+// =====================================================================
 function wdpAttach() {
     // Super Admin: toolbar button + live listener
     if (currentUserRole === 'SuperAdmin') {
@@ -576,34 +602,11 @@ function wdpAttach() {
         }
     }
 
-    // ---------------------------------------------------------------
-    // Store Admin: sidebar button — INSERT-ONLY, never touched again.
-    // This is the FIX for the sidebar shake. If the button is present,
-    // we do absolutely nothing. If another patch removed it, we put it
-    // back once. No style.display toggling, no repositioning, no reflows.
-    // ---------------------------------------------------------------
-    const side = document.querySelector('#dashboard-main-wrapper .sidebar');
-    const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
-
-    if (side && isAdmin && !document.getElementById('wdp-sidebar-btn')) {
-        const sb = document.createElement('button');
-        sb.id = 'wdp-sidebar-btn';
-        sb.className = 'menu-btn btn-sec';
-        sb.textContent = '💳 Subscription';
-        sb.onclick = function () { wdpOpenRenew(currentStoreId); };
-
-        const logout = side.querySelector('.btn-logout');
-        if (logout) {
-            side.insertBefore(sb, logout);
-        } else {
-            side.appendChild(sb);
-        }
-    }
+    // Store Admin: sidebar button via the shared hook
+    if (document.querySelector('#dashboard-main-wrapper .sidebar')) wdpAttachSidebar();
 
     // Login screen link (so a locked store can still pay)
-    // We append this to the login card. To ensure it "remains here", we check for its existence.
     if (!document.getElementById('wdp-login-link')) {
-        // Try several likely containers, in order of preference
         var loginCard = document.querySelector('#login-view .auth-card') ||
                         document.querySelector('.auth-card') ||
                         document.querySelector('#login-view .login-card') ||
@@ -611,7 +614,6 @@ function wdpAttach() {
                         document.querySelector('#login-view .card') ||
                         document.querySelector('#login-view form');
 
-        // Fallback: find the "Login to Store" button and walk up to its card
         if (!loginCard) {
             var btns = document.querySelectorAll('button, input[type="submit"]');
             for (var i = 0; i < btns.length; i++) {
@@ -635,6 +637,27 @@ function wdpAttach() {
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
 
-// Reduced from 1200ms to 5000ms — gives other patches time to finish
-// their sidebar re-renders before we try to re-add the button.
-setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 5000);
+// =====================================================================
+// OBSERVER — fires only when the DOM actually changes.
+// Replaces the old setInterval(1200) which caused the sidebar race.
+// =====================================================================
+(function () {
+    // Initial paint once the page settles
+    window.addEventListener('load', function () {
+        setTimeout(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 300);
+    });
+
+    // Watch for any DOM change on the body and re-run wdpAttach.
+    // Cheap because wdpAttach itself is idempotent (does nothing if
+    // everything is already there). No more racing with other patches.
+    var wdpObserver = new MutationObserver(function () {
+        try { wdpAttach(); } catch (e) { console.warn(e); }
+    });
+    if (document.body) {
+        wdpObserver.observe(document.body, { childList: true, subtree: true });
+    } else {
+        document.addEventListener('DOMContentLoaded', function () {
+            wdpObserver.observe(document.body, { childList: true, subtree: true });
+        });
+    }
+})();
