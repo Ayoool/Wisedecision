@@ -125,7 +125,7 @@ function wdpField(id, label, type, value, extra) {
 function wdpAskStoreId(message) {
     wdpModal('💳 Renew or pay subscription',
         (message ? '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">' + wdpEsc(message) + '</div>' : '') +
-        wdpField('wdp-sid', 'Your Store ID', 'text', '', 'placeholder="e.g. medstar" autocapitalize="none"') +
+        wdpField('wdp-sid', 'Your Store ID', 'text', '', 'placeholder="e.g. oreoloyun" autocapitalize="none"') +
         '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdpOpenRenew(document.getElementById(\'wdp-sid\').value)">Continue</button>');
 }
 
@@ -567,13 +567,34 @@ function wdpAttach() {
     }
 
     // Login screen link (so a locked store can still pay)
-    const card = document.querySelector('#login-view .auth-card');
-    if (card && !document.getElementById('wdp-login-link')) {
-        const wrapDiv = document.createElement('div');
-        wrapDiv.style.cssText = 'text-align:center; margin-top:2px;';
-        wrapDiv.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
-        wrapDiv.firstChild.onclick = function () { wdpOpenRenew(''); };
-        card.appendChild(wrapDiv);
+    if (!document.getElementById('wdp-login-link')) {
+        // Try several likely containers, in order of preference
+        var loginCard = document.querySelector('#login-view .auth-card') ||
+                        document.querySelector('.auth-card') ||
+                        document.querySelector('#login-view .login-card') ||
+                        document.querySelector('.login-card') ||
+                        document.querySelector('#login-view .card') ||
+                        document.querySelector('#login-view form');
+
+        // Fallback: find the "Login to Store" button and walk up to its card
+        if (!loginCard) {
+            var btns = document.querySelectorAll('button, input[type="submit"]');
+            for (var i = 0; i < btns.length; i++) {
+                var t = (btns[i].textContent || btns[i].value || '').trim().toLowerCase();
+                if (t.indexOf('login to store') !== -1) {
+                    loginCard = btns[i].closest('.auth-card, .login-card, .card, form, div');
+                    if (loginCard) break;
+                }
+            }
+        }
+
+        if (loginCard) {
+            var wrapDiv = document.createElement('div');
+            wrapDiv.style.cssText = 'text-align:center; margin-top:10px;';
+            wrapDiv.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
+            wrapDiv.firstChild.onclick = function () { wdpOpenRenew(''); };
+            loginCard.appendChild(wrapDiv);
+        }
     }
 
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
