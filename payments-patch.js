@@ -450,7 +450,7 @@ async function wdpApprove(sid, key) {
         wdpOpenPending();
     } catch (e) {
         wdpBusy = false;
-        if (claimed) { try { await statusRef.set('pending'); } catch (_) {} }
+        if (claimed) { try { await statusRef.set('pending'); } catch const (_) {} }
         alert('Could not approve: ' + e.message + '\n\nNothing was changed — you can try again.');
         if (btn) { btn.disabled = false; btn.textContent = '✔ Approve & record payment'; }
     }
@@ -496,7 +496,7 @@ window.wdsSaveSettings = async function () {
 // =====================================================================
 async function wdpEnsureBanner() {
     const old = document.getElementById('wdp-banner');
-    const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
+    isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
     const wrap = document.getElementById('dashboard-main-wrapper');
     const ws = document.getElementById('workspace-content');
     if (!isAdmin || wdpBannerDismissed || !wrap || !wrap.classList.contains('active') || !ws) { if (old) old.remove(); return; }
@@ -513,6 +513,12 @@ async function wdpEnsureBanner() {
     }
 
     const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
+
+    // --- NEW: skip re-rendering if nothing changed (stops the shaking/flickering) ---
+    const stateKey = s.state + '|' + (s.days || 0) + '|' + (s.overdueBy || 0) + '|' + (s.trial ? '1' : '0') + '|' + (wdpBanner.billing && wdpBanner.billing.dueDate || '');
+    if (old && old.dataset.stateKey === stateKey) return;
+    // --- END NEW ---
+
     if (s.state !== 'overdue' && s.state !== 'due-soon') { if (old) old.remove(); return; }
     let text, bg, bd, col;
     if (s.state === 'overdue') {
@@ -526,8 +532,14 @@ async function wdpEnsureBanner() {
     if (!el) {
         el = document.createElement('div');
         el.id = 'wdp-banner';
+        el.dataset.stateKey = stateKey;
         ws.insertBefore(el, ws.firstChild);
-    } else if (el.parentElement !== ws) { ws.insertBefore(el, ws.firstChild); }
+    } else if (el.parentElement !== ws) {
+        ws.insertBefore(el, ws.firstChild);
+        el.dataset.stateKey = stateKey;
+    } else {
+        el.dataset.stateKey = stateKey;
+    }
     el.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; font-weight:bold;';
     el.innerHTML = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
         '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
@@ -599,4 +611,21 @@ function wdpAttach() {
 
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
-setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 1200);
+
+// =====================================================================
+// Event-driven attach (replaces the old 1.2-second polling loop)
+// =====================================================================
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { try { wdpAttach(); } catch (e) { console.warn(e); } });
+} else {
+    try { wdpAttach(); } catch (e) { console.warn(e); }
+}
+
+// Re-attach when the view changes (login, logout, dashboard switch)
+window.addEventListener('hashchange', function () { try { wdpAttach(); } catch (e) { console.warn(e); } });
+document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { try { wdpAttach(); } catch (e) { console.warn(e); } }
+});
+
+// Slow safety net — every 15 seconds instead of every 1.2 seconds
+setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 15000);
