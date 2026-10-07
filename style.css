@@ -874,3 +874,24 @@ div[id*="mimo"] {
         linear-gradient(rgba(15, 23, 42, 0.45), rgba(15, 23, 42, 0.6)),
         url("login-bg.jpg") center / cover no-repeat fixed !important;
 }
+
+/* ==================== SUBSCRIPTION SIDEBAR BUTTON (payments-patch v4) ==================== */
+/* Stable class for the Subscription sidebar button.
+   No transitions, no hover animation — prevents any visual "pop" or flicker
+   when the button is re-inserted after the sidebar is rebuilt by other patches. */
+.menu-btn.btn-subscription {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #64748b;
+    color: #334155;
+    font-weight: 700;
+    transition: none !important;
+    animation: none !important;
+}
+
+.menu-btn.btn-subscription:hover {
+    transform: none !important;
+    filter: none !important;
+    background: #f1f5f9;
+    color: #0f172a;
+}
