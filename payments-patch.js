@@ -125,7 +125,7 @@ function wdpField(id, label, type, value, extra) {
 function wdpAskStoreId(message) {
     wdpModal('💳 Renew or pay subscription',
         (message ? '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">' + wdpEsc(message) + '</div>' : '') +
-        wdpField('wdp-sid', 'Your Store ID', 'text', '', 'placeholder="e.g. oreoloyun" autocapitalize="none"') +
+        wdpField('wdp-sid', 'Your Store ID', 'text', '', 'placeholder="e.g. medstar" autocapitalize="none"') +
         '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdpOpenRenew(document.getElementById(\'wdp-sid\').value)">Continue</button>');
 }
 
@@ -445,7 +445,7 @@ async function wdpApprove(sid, key) {
             const num = wdpWaNumber(st.phone);
             if (num) window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(receipt), '_blank');
             else prompt('No phone number saved. Copy this receipt:', receipt);
-        } else { alert('Approved. Next due date: support ' + wdpPretty(due.', decidedAtAfter) +: '.'); }
+        } else { alert('Approved. Next due date: ' + wdpPretty(dueAfter) + '.'); }
         if (typeof wdsReload === 'function') { try { await wdsReload(); } catch (e) {} }
         wdpOpenPending();
     } catch (e) {
@@ -465,7 +465,7 @@ async function wdpReject(sid, key) {
         const db = firebase.database();
         const tx = await db.ref('paymentRequests/' + sid + '/' + key + '/status').transaction(function (cur) { return cur === 'pending' ? 'rejected' : (cur === null ? cur : undefined); });
         if (!tx.committed || tx.snapshot.val() !== 'rejected') { alert('Someone has already handled this request.'); wdpOpenPending(); return; }
-        await db.ref('paymentRequests/' + sid + '/' + key).update({ rejectReason: reason.trim() || 'Payment not confirmed. Please contact new Date().toISOString(), decidedBy: 'Super Admin' });
+        await db.ref('paymentRequests/' + sid + '/' + key).update({ rejectReason: reason.trim() || 'Payment not confirmed. Please contact support.', decidedAt: new Date().toISOString(), decidedBy: 'Super Admin' });
         try { await wdsLog(sid, { type: 'payment', text: 'Payment request of ' + wdpMoney(rec.amount) + ' rejected' + (reason.trim() ? ': ' + reason.trim() : '') }); } catch (e) {}
         wdpOpenPending();
     } catch (e) { alert('Failed: ' + e.message); }
