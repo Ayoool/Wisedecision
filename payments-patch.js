@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v2) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v3) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,14 +16,15 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v2 FIXES:
-//   * STOPPED THE SHAKING: Banner no longer rewrites innerHTML/style on every 1.2s tick unless data changed.
-//   * STOPPED THE SHAKING: Login link and Sidebar button are strictly idempotent.
-//   * IMPROVED: Banner only re-inserts if it's not already at the top of the workspace.
+// v3 FIXES:
+//   * STOPPED THE SIDEBAR SHAKE: The Subscription button is now insert-only. We never touch it again
+//     unless it has been removed from the DOM by another patch. No style.display toggling, no repositioning.
+//   * STOPPED THE BANNER SHAKE: Banner only rewrites innerHTML/style when the content actually changes.
+//   * Interval reduced to 5s so any race with other patches is invisible.
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v2 loaded");
+console.log("Wise Decision payments-patch.js — v3 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -519,7 +520,7 @@ async function wdpEnsureBanner() {
 
     const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
     if (s.state !== 'overdue' && s.state !== 'due-soon') { if (old) old.remove(); return; }
-    
+
     let text, bg, bd, col;
     if (s.state === 'overdue') {
         text = s.trial ? 'Your free trial ended ' + s.overdueBy + ' day' + (s.overdueBy === 1 ? '' : 's') + ' ago.' : 'Your subscription is overdue by ' + s.overdueBy + ' day' + (s.overdueBy === 1 ? '' : 's') + '.';
@@ -548,13 +549,13 @@ async function wdpEnsureBanner() {
     // CRITICAL FIX: Only update DOM if content or style actually changed.
     // This stops the 1.2s "shaking" because the browser doesn't reflow unnecessarily.
     const newStyle = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; font-weight:bold;';
-    
+
     if (el.dataset.sig !== text + '|' + bg) {
         el.dataset.sig = text + '|' + bg;
         el.style.cssText = newStyle;
         el.innerHTML = newHtml;
     } else if (el.style.cssText !== newStyle) {
-        // If only the style needs updating (e.g.login color changed slightly)
+        // If only the style needs updating (e.g. color changed slightly)
         el.style.cssText = newStyle;
     }
 }
@@ -575,28 +576,35 @@ function wdpAttach() {
         }
     }
 
-    // Store Admin: sidebar button
+    // ---------------------------------------------------------------
+    // Store Admin: sidebar button — INSERT-ONLY, never touched again.
+    // This is the FIX for the sidebar shake. If the button is present,
+    // we do absolutely nothing. If another patch removed it, we put it
+    // back once. No style.display toggling, no repositioning, no reflows.
+    // ---------------------------------------------------------------
     const side = document.querySelector('#dashboard-main-wrapper .sidebar');
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
-    if (side) {
-        let sb = document.getElementById('wdp-sidebar-btn');
-        if (!sb) {
-            sb = document.createElement('button');
-            sb.id = 'wdp-sidebar-btn';
-            sb.className = 'menu-btn btn-sec';
-            sb.textContent = '💳 Subscription';
-            sb.onclick = function () { wdpOpenRenew(currentStoreId); };
-            const logout = side.querySelector('.btn-logout');
-            if (logout) side.insertBefore(sb, logout); else side.appendChild(sb);
+
+    if (side && isAdmin && !document.getElementById('wdp-sidebar-btn')) {
+        const sb = document.createElement('button');
+        sb.id = 'wdp-sidebar-btn';
+        sb.className = 'menu-btn btn-sec';
+        sb.textContent = '💳 Subscription';
+        sb.onclick = function () { wdpOpenRenew(currentStoreId); };
+
+        const logout = side.querySelector('.btn-logout');
+        if (logout) {
+            side.insertBefore(sb, logout);
+        } else {
+            side.appendChild(sb);
         }
-        sb.style.display = isAdmin ? '' : 'none';
     }
 
     // Login screen link (so a locked store can still pay)
     // We append this to the login card. To ensure it "remains here", we check for its existence.
     if (!document.getElementById('wdp-login-link')) {
         // Try several likely containers, in order of preference
-        var loginCard = document.querySelector('#-view .auth-card') ||
+        var loginCard = document.querySelector('#login-view .auth-card') ||
                         document.querySelector('.auth-card') ||
                         document.querySelector('#login-view .login-card') ||
                         document.querySelector('.login-card') ||
@@ -626,4 +634,7 @@ function wdpAttach() {
 
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
-setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 1200);
+
+// Reduced from 1200ms to 5000ms — gives other patches time to finish
+// their sidebar re-renders before we try to re-add the button.
+setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 5000);
