@@ -14,6 +14,7 @@
     <meta property="og:description" content="Manage sales, inventory, suppliers, staff, expenses and branches with Wise Decision POS.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://ayoool.github.io/Wisedecision/">
+    <meta property="og:image" content="https://ayoool.github.io/Wisedecision/login-bg.jpg">
     <meta property="og:site_name" content="Wise Decision">
     <meta name="theme-color" content="#0f766e">
 
@@ -33,7 +34,7 @@
                 "url": "https://ayoool.github.io/Wisedecision/",
                 "founder": {
                     "@type": "Person",
-                    "name": "Emmanuel Ayoola Fisuyi"
+                    "name": "Emmanuel Ayooola Fisuyi"
                 }
             },
             {
@@ -103,36 +104,33 @@
             gap: 3px;
         }
 
-        /* === LOGO: BIG W === */
+        /* === LOGO: ONE SOLID BLUE, BIG W === */
         .logo {
             font-size: 22px;
             font-weight: 900;
-            letter-spacing: -0.6px;
-            color: #0f172a;
+            letter-spacing: 0;
+            color: #0284c7;
             display: flex;
             align-items: center;
-            gap: 1px;
+            gap: 0;
             line-height: 1;
+            white-space: nowrap;
         }
 
         .big-w {
             font-size: 46px;
             font-weight: 900;
             display: inline-block;
-            transition: transform 0.3s ease, text-shadow 0.3s ease;
+            transition: transform 0.3s ease;
             line-height: 0.85;
-            letter-spacing: -3px;
-            margin-right: -2px;
-            background: linear-gradient(135deg, #0f766e, #0284c7);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-shadow: 0 2px 10px rgba(15, 118, 110, 0.15);
+            letter-spacing: -1px;
+            margin-right: 0;
+            background: none;
+            color: inherit;
         }
 
         .logo:hover .big-w {
-            transform: scale(1.18) rotate(-6deg);
-            text-shadow: 0 4px 18px rgba(15, 118, 110, 0.35);
+            transform: scale(1.12) rotate(-4deg);
         }
 
         .ceo-tag {
@@ -228,22 +226,6 @@
             animation: pulse-glow 6s ease-in-out infinite alternate;
         }
 
-        /* === HERO BACKGROUND IMAGE === */
-        .hero::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background-image: url("https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1920&q=80");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            opacity: 0.09;
-            z-index: -2;
-            border-radius: 30px;
-            -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 78%);
-            mask-image: radial-gradient(ellipse at center, black 40%, transparent 78%);
-        }
-
         @keyframes pulse-glow {
             0% { transform: translateX(-50%) scale(0.9); opacity: 0.5; }
             100% { transform: translateX(-50%) scale(1.15); opacity: 0.8; }
@@ -323,9 +305,25 @@
             margin-top: 28px;
         }
 
+        /* HERO PHOTO */
+        .hero-photo {
+            margin-top: 55px;
+            border-radius: 22px;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 30px 60px rgba(15,23,42,0.18);
+            background: #0f172a;
+        }
+
+        .hero-photo img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
         /* DASHBOARD MOCKUP */
         .dashboard-mockup {
-            margin-top: 55px;
+            margin-top: 40px;
             background: #ffffff;
             border: 1px solid #cbd5e1;
             border-radius: 16px;
@@ -816,6 +814,7 @@
 
             .logo {
                 font-size: 19px;
+                justify-content: center;
             }
 
             .big-w {
@@ -841,6 +840,11 @@
 
             .hero > p {
                 font-size: 16px;
+            }
+
+            .hero-photo {
+                margin-top: 40px;
+                border-radius: 16px;
             }
 
             section:not(.hero):not(.final-cta) {
@@ -935,6 +939,12 @@
         <a href="app.html" class="btn-login action-link">
             Access Store Portal
         </a>
+    </div>
+
+    <!-- HERO PHOTO -->
+    <div class="hero-photo">
+        <img src="login-bg.jpg" width="1600" height="1066"
+             alt="Cashier using Wise Decision POS on a touchscreen at a store checkout with a thermal receipt printer and barcode scanner">
     </div>
 
     <!-- DASHBOARD MOCKUP PREVIEW -->
@@ -1144,7 +1154,7 @@
         <div class="faq-item">
             <h4>Who founded Wise Decision?</h4>
             <div class="faq-answer">
-                <p>Wise Decision was founded by <strong>Emmanuel Ayoola Fisuyi</strong>.</p>
+                <p>Wise Decision was founded by <strong>Emmanuel Ayooola Fisuyi</strong>.</p>
             </div>
         </div>
     </div>
