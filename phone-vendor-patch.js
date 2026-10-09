@@ -585,11 +585,12 @@ window.wdvSavePhone = async function (editId) {
     if (!(sell > 0)) return fail('Selling price must be greater than 0.');
 
     // Duplicate IMEI check
-    var dup = Object.keys(wdvPhonesock).find(function (id) {
-        if (edit',
-Id && id === editId) return false        createdAt:;
+    var dup = Object.keys(wdvPhones).find(function (id) {
+        if (editId && id === editId) return false;
         var p = wdvPhones[id];
-        return p.imei === imei || (imei2 && p.imei === imei2) || (p.imei2 && (p.imei2 === imei || p.imei2 === imei2));
+        return p.imei === imei
+            || (imei2 && p.imei === imei2)
+            || (p.imei2 && (p.imei2 === imei || p.imei2 === imei2));
     });
     if (dup) {
         var d = wdvPhones[dup];
@@ -603,7 +604,8 @@ Id && id === editId) return false        createdAt:;
         costPrice: cost, sellingPrice: sell,
         purchaseDate: purchaseDate, warrantyMonths: warranty,
         notes: notes,
-        status: 'in_st wdvNow(),
+        status: 'in_stock',
+        createdAt: wdvNow(),
         createdBy: (typeof currentStaffName !== 'undefined' && currentStaffName) || 'Admin'
     };
 
@@ -640,7 +642,7 @@ window.wdvSaveBulk = async function () {
     var storage = document.getElementById('wdv-b-storage').value;
     var color = (document.getElementById('wdv-b-color').value || '').trim();
     var condition = document.getElementById('wdv-b-condition').value;
-    var cost = parseFloat(document.getElementById('wdv-b-cost').value) || 0;
+    var cost = parseFloat(document.getElementById('wdv-b-cost').value) ||  EDIT0;
     var sell = parseFloat(document.getElementById('wdv-b-sell').value) || 0;
     var purchaseDate = document.getElementById('wdv-b-date').value || wdvToday();
     var warranty = parseInt(document.getElementById('wdv-b-warranty').value) || 0;
@@ -691,7 +693,7 @@ window.wdvSaveBulk = async function () {
 };
 
 // =====================================================================
-// EDIT / DELETE
+// / DELETE
 // =====================================================================
 window.wdvEditPhone = function (id) { wdvOpenAddPhoneModal(id); };
 
