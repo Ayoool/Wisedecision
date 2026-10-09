@@ -351,3 +351,309 @@ async function wdmLoadDashboardData() {
         console.warn('[materials-patch] dashboard load error:', e);
     }
 }
+
+// =====================================================================
+// WASTAGE / DAMAGED LOG — a page to record broken/spoiled stock
+// =====================================================================
+window.wdmShowWastageLog = function () {
+    var ws = document.getElementById('workspace-content');
+    if (!ws) return;
+
+    ws.innerHTML =
+        '<h2 style="margin:0 0 6px 0;">🔨 Damaged / Wastage Log</h2>' +
+        '<p style="font-size:13px; color:var(--text-muted); margin:0 0 16px 0;">Record broken, spoiled, or otherwise unsellable stock. This deducts from inventory and logs the loss.</p>' +
+
+        // Record wastage form
+        '<div style="background:#fff; padding:16px; border-radius:12px; border:1px solid #eef2f7; margin-bottom:16px; box-shadow:0 6px 18px rgba(15,23,42,0.04);">' +
+          '<h3 style="margin:0 0 12px 0; font-size:14px;">Record New Wastage</h3>' +
+
+          '<label style="display:block; font-size:11px; font-weight:bold; color:#334155; margin-bottom:4px; text-transform:uppercase;">Select Product</label>' +
+          '<select id="wdm-w-product" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; box-sizing:border-box; margin-bottom:12px;"></select>' +
+
+          '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
+            '<div>' +
+              '<label style="display:block; font-size:11px; font-weight:bold; color:#334155; margin-bottom:4px; text-transform:uppercase;">Quantity Wasted</label>' +
+              '<input id="wdm-w-qty" type="number" min="0.01" step="0.01" placeholder="e.g. 3" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; box-sizing:border-box;">' +
+            '</div>' +
+            '<div>' +
+              '<label style="display:block; font-size:11px; font-weight:bold; color:#334155; margin-bottom:4px; text-transform:uppercase;">Reason</label>' +
+              '<select id="wdm-w-reason" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; box-sizing:border-box;">' +
+                '<option>Broken</option>' +
+                '<option>Damp / Water damage</option>' +
+                '<option>Termite / Pest</option>' +
+                '<option>Stolen</option>' +
+                '<option>Lost</option>' +
+                '<option>Theft by staff</option>' +
+                '<option>Customer damage</option>' +
+                '<option>Other</option>' +
+              '</select>' +
+            '</div>' +
+          '</div>' +
+
+          '<label style="display:block; font-size:11px; font-weight:bold; color:#334155; margin-top:12px; margin-bottom:4px; text-transform:uppercase;">Note (optional)</label>' +
+          '<textarea id="wdm-w-note" rows="2" placeholder="e.g. Fell off truck during delivery" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; box-sizing:border-box;"></textarea>' +
+
+          '<div id="wdm-w-error" style="display:none; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:8px; font-size:12px; margin-top:12px;"></div>' +
+
+          '<div style="display:flex; gap:10px; margin-top:14px;">' +
+            '<button class="menu-btn btn-action-primary" style="flex:1; margin:0; justify-content:center; background:linear-gradient(135deg,#dc2626 0%,#991b1b 100%);" onclick="wdmSaveWastage()">🔨 Record Wastage & Deduct Stock</button>' +
+          '</div>' +
+        '</div>' +
+
+        // History
+        '<div style="background:#fff; border-radius:12px; border:1px solid #eef2f7; overflow-x:auto; box-shadow:0 6px 18px rgba(15,23,42,0.04);">' +
+          '<table style="width:100%; border-collapse:collapse; font-size:13px;">' +
+            '<thead><tr style="background:#f8fafc; border-bottom:2px solid #cbd5e1; color:#475569;">' +
+              '<th style="padding:10px; text-align:left;">Date</th>' +
+              '<th style="padding:10px; text-align:left;">Product</th>' +
+              '<th style="padding:10px; text-align:right;">Qty</th>' +
+              '<th style="padding:10px; text-align:left;">Reason</th>' +
+              '<th style="padding:10px; text-align:right;">Loss Value</th>' +
+              '<th style="padding:10px; text-align:left;">Recorded By</th>' +
+            '</tr></thead>' +
+            '<tbody id="wdm-w-history-body"><tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">Loading...</td></tr></tbody>' +
+          '</table>' +
+        '</div>';
+
+    wdmPopulateWastageProductDropdown();
+    wdmLoadWastageHistory();
+};
+
+async function wdmPopulateWastageProductDropdown() {
+    if (!currentStoreId) return;
+    try {
+        const snap = await firebase.database().ref('stores/' + currentStoreId + '/inventory').once('value');
+        const invByBranch = snap.val() || {};
+        const options = [];
+        const seen = {};
+        Object.keys(invByBranch).forEach(function (branchId) {
+            Object.keys(invByBranch[branchId] || {}).forEach(function (id) {
+                const it = invByBranch[branchId][id];
+                if (!it) return;
+                const name = it.name || it.productName || 'Unnamed';
+                const key = name.toLowerCase().trim();
+                if (seen[key]) return;
+                seen[key] = true;
+                options.push({ name: name, id: id, branch: branchId, cost: wdmNum(it.costPrice) });
+            });
+        });
+        options.sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+        const sel = document.getElementById('wdm-w-product');
+        if (sel) {
+            sel.innerHTML = options.map(function (o) {
+                return '<option value="' + wdmEsc(o.branch) + '|' + wdmEsc(o.id) + '">' + wdmEsc(o.name) + '</option>';
+            }).join('') || '<option value="">No products yet</option>';
+        }
+    } catch (e) {
+        console.warn('[materials-patch] wastage dropdown load error:', e);
+    }
+}
+
+window.wdmSaveWastage = async function () {
+    var err = document.getElementById('wdm-w-error');
+    err.style.display = 'none';
+    var fail = function (m) { err.textContent = m; err.style.display = 'block'; };
+
+    var selVal = document.getElementById('wdm-w-product').value;
+    if (!selVal || selVal.indexOf('|') === -1) return fail('Select a product.');
+    var parts = selVal.split('|');
+    var branchId = parts[0];
+    var productId = parts[1];
+
+    var qty = parseFloat(document.getElementById('wdm-w-qty').value) || 0;
+    if (qty <= 0) return fail('Quantity must be greater than 0.');
+
+    var reason = document.getElementById('wdm-w-reason').value;
+    var note = (document.getElementById('wdm-w-note').value || '').trim();
+    var recordedBy = (typeof currentStaffName !== 'undefined' && currentStaffName) || (document.getElementById('user-role-label')?.textContent || 'Admin');
+
+    try {
+        const db = firebase.database();
+        const prodRef = db.ref('stores/' + currentStoreId + '/inventory/' + branchId + '/' + productId);
+        const prodSnap = await prodRef.once('value');
+        const prod = prodSnap.val();
+        if (!prod) return fail('Product not found.');
+
+        var currentStock = wdmNum(prod.stock !== undefined ? prod.stock : (prod.stockQty || 0));
+        if (qty > currentStock) return fail('You only have ' + currentStock + ' in stock. Cannot write off ' + qty + '.');
+
+        var costPerUnit = wdmNum(prod.costPrice);
+        var lossValue = costPerUnit * qty;
+        var newStock = currentStock - qty;
+        var nowIso = wdmNow();
+
+        var wastageId = 'WST-' + Date.now();
+        var updates = {};
+        updates['stores/' + currentStoreId + '/inventory/' + branchId + '/' + productId + '/stock'] = newStock;
+        updates['stores/' + currentStoreId + '/inventory/' + branchId + '/' + productId + '/stockQty'] = newStock;
+        updates['stores/' + currentStoreId + '/wastage/' + wastageId] = {
+            wastageId: wastageId,
+            productId: productId,
+            productName: prod.name || prod.productName || 'Unnamed',
+            branchId: branchId,
+            quantity: qty,
+            reason: reason,
+            note: note,
+            lossValue: lossValue,
+            costPerUnit: costPerUnit,
+            stockBefore: currentStock,
+            stockAfter: newStock,
+            recordedBy: recordedBy,
+            date: nowIso
+        };
+
+        await db.ref().update(updates);
+
+        document.getElementById('wdm-w-qty').value = '';
+        document.getElementById('wdm-w-note').value = '';
+        alert('✅ Wastage recorded. Stock updated.');
+
+        wdmLoadWastageHistory();
+        wdmPopulateWastageProductDropdown();
+    } catch (e) {
+        fail('Could not record: ' + (e.message || e));
+    }
+};
+
+async function wdmLoadWastageHistory() {
+    if (!currentStoreId) return;
+    const tbody = document.getElementById('wdm-w-history-body');
+    if (!tbody) return;
+
+    try {
+        const snap = await firebase.database().ref('stores/' + currentStoreId + '/wastage').once('value');
+        const rows = [];
+        snap.forEach(function (child) { rows.push(child.val()); });
+        rows.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:20px;">No wastage recorded yet. Good news!</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.slice(0, 100).map(function (w) {
+            return '<tr style="border-bottom:1px solid #f1f5f9;">' +
+                '<td style="padding:8px;">' + (w.date ? new Date(w.date).toLocaleString() : '—') + '</td>' +
+                '<td style="padding:8px;"><strong>' + wdmEsc(w.productName) + '</strong></td>' +
+                '<td style="padding:8px; text-align:right;">' + wdmNum(w.quantity) + '</td>' +
+                '<td style="padding:8px;">' + wdmEsc(w.reason) + '</td>' +
+                '<td style="padding:8px; text-align:right; color:#b91c1c; font-weight:bold;">' + wdmMoney(w.lossValue) + '</td>' +
+                '<td style="padding:8px;">' + wdmEsc(w.recordedBy) + '</td>' +
+            '</tr>';
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#991b1b; padding:20px;">Failed to load: ' + wdmEsc(e.message) + '</td></tr>';
+    }
+}
+
+// =====================================================================
+// DELIVERY CHARGE ON POS — inject a checkbox into the POS screen
+// =====================================================================
+function wdmInjectDeliveryCharge() {
+    var posView = document.getElementById('pos-view');
+    if (!posView) return;
+    if (document.getElementById('wdm-delivery-box')) return;
+    if (!wdmIsMaterialsStore()) return;
+
+    // Find the cart panel (contains "Current Order Cart" heading)
+    var cartHeader = null;
+    posView.querySelectorAll('h3').forEach(function (h) {
+        if ((h.textContent || '').indexOf('Current Order Cart') !== -1) cartHeader = h;
+    });
+    if (!cartHeader) return;
+
+    var box = document.createElement('div');
+    box.id = 'wdm-delivery-box';
+    box.style.cssText = 'background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:10px; margin-bottom:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;';
+    box.innerHTML =
+        '<input type="checkbox" id="wdm-delivery-check" style="width:16px; height:16px; margin:0;" onchange="wdmDeliveryToggle()">' +
+        '<label for="wdm-delivery-check" style="margin:0; font-size:12px; font-weight:bold; color:#92400e; cursor:pointer;">🚚 Add delivery charge</label>' +
+        '<input type="number" id="wdm-delivery-amount" placeholder="₦ Amount" min="0" style="width:120px; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; display:none;" oninput="wdmApplyDeliveryCharge()">';
+
+    // Insert before the cart total row
+    var cartContainer = cartHeader.parentNode;
+    if (cartContainer) cartContainer.insertBefore(box, cartHeader.nextSibling);
+}
+
+window.wdmDeliveryToggle = function () {
+    var cb = document.getElementById('wdm-delivery-check');
+    var amt = document.getElementById('wdm-delivery-amount');
+    if (!cb || !amt) return;
+    amt.style.display = cb.checked ? 'inline-block' : 'none';
+    if (!cb.checked) amt.value = '';
+    wdmApplyDeliveryCharge();
+};
+
+window.wdmApplyDeliveryCharge = function () {
+    if (typeof window.wdmDeliveryChargeValue === 'undefined') window.wdmDeliveryChargeValue = 0;
+    var cb = document.getElementById('wdm-delivery-check');
+    var amt = document.getElementById('wdm-delivery-amount');
+    var val = (cb && cb.checked && amt) ? (parseFloat(amt.value) || 0) : 0;
+    window.wdmDeliveryChargeValue = val;
+    // Note: this value is read by the submitOrderForAccountant patch below
+};
+
+// Wrap submitOrderForAccountant to add the delivery charge to the order
+window.addEventListener('load', function () {
+    if (typeof window.submitOrderForAccountant === 'function' && !window.__wdmDeliveryHooked) {
+        window.__wdmDeliveryHooked = true;
+        var orig = window.submitOrderForAccountant;
+        window.submitOrderForAccountant = function () {
+            var result = orig.apply(this, arguments);
+            try {
+                var charge = wdmNum(window.wdmDeliveryChargeValue);
+                if (charge > 0 && typeof currentCart !== 'undefined' && Array.isArray(currentCart)) {
+                    // Add a synthetic "Delivery Charge" line item
+                    currentCart.push({
+                        id: '__delivery__',
+                        name: 'Delivery Charge',
+                        qty: 1,
+                        saleUnit: 'Piece',
+                        unitsPerPack: 1,
+                        piecesNeeded: 1,
+                        price: charge,
+                        total: charge,
+                        customerType: 'Retail',
+                        baseUnitName: '',
+                        bulkUnitName: ''
+                    });
+                    if (typeof renderCart === 'function') renderCart();
+                }
+            } catch (e) { console.warn('[materials-patch] delivery charge hook error:', e); }
+            return result;
+        };
+    }
+});
+
+// =====================================================================
+// DETECT STORE TYPE ON LOGIN — same pattern as phone vendor patch
+// =====================================================================
+function wdmWatchStoreType() {
+    if (!currentStoreId || currentStoreId === 'SUPER_ADMIN') return;
+    try {
+        firebase.database().ref('stores/' + currentStoreId + '/storeType').on('value', function (snap) {
+            wdmStoreType = snap.val() || 'general';
+            wdmApplySidebar();
+        });
+    } catch (e) { /* ignore */ }
+}
+
+// =====================================================================
+// MAIN ATTACH — runs on every DOM change (idempotent)
+// =====================================================================
+function wdmAttach() {
+    if (typeof currentStoreId !== 'undefined' && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdmStoreType) {
+        wdmWatchStoreType();
+    }
+    wdmApplySidebar();
+    wdmInjectDeliveryCharge();
+}
+
+window.addEventListener('load', function () {
+    setTimeout(function () { try { wdmAttach(); } catch (e) { console.warn(e); } }, 900);
+
+    var wdmObs = new MutationObserver(function () {
+        try { wdmAttach(); } catch (e) { console.warn(e); }
+    });
+    if (document.body) wdmObs.observe(document.body, { childList: true, subtree: true });
+});
