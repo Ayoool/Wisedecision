@@ -1,9 +1,12 @@
-// ==================== WISE DECISION ACTIVATION CODES PATCH (v29) ====================
+// ==================== WISE DECISION ACTIVATION CODES PATCH (v30) ====================
 // Loads AFTER script.js and all other patches, with `defer`.
-// Overrides registerBusinessAccount() with a version that requires a single-use
-// activation code, and adds the Super Admin 🎟 Activation codes screen.
+// Overrides registerBusinessAccount() with:
+//   - Email + Password (creates Firebase Auth account)
+//   - Single-use activation code (WD-XXXXX-XXXXX, DB-validated)
+//   - Free trial billing setup
+//   - Super Admin 🎟 Activation codes screen
 
-console.log("Wise Decision activation-patch.js — v29 loaded");
+console.log("Wise Decision activation-patch.js — v30 loaded");
 
 // ---------- Helpers ----------
 var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -21,7 +24,6 @@ function wdaPrettyDate(iso) {
     const t = new Date(iso);
     return isNaN(t) ? '—' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
-
 function wdaWaNumber(phone) {
     let p = String(String(phone || '').split(/[,;/|]/)[0] || '').replace(/[^\d+]/g, '');
     if (!p) return '';
@@ -31,7 +33,6 @@ function wdaWaNumber(phone) {
     else if (/^\d{10}$/.test(p)) p = '234' + p;
     return p;
 }
-
 function wdaGenerateCode() {
     const bytes = new Uint8Array(10);
     crypto.getRandomValues(bytes);
@@ -44,7 +45,6 @@ async function wdaHash(code) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('wd-activation|' + wdaNormalize(code)));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-
 function wdaCodeStatus(rec, nowMs) {
     if (!rec) return 'invalid';
     if (rec.status === 'revoked') return 'revoked';
@@ -52,13 +52,11 @@ function wdaCodeStatus(rec, nowMs) {
     if (rec.expiresAt && new Date(rec.expiresAt).getTime() < nowMs) return 'expired';
     return 'unused';
 }
-
 function wdaTrialBillingFor(rec, usedAtIso) {
     const days = wdaNum(rec && rec.trialDays);
     if (!rec || days <= 0 || !usedAtIso) return null;
     return { monthlyFee: wdaNum(rec.monthlyFee), dueDate: wdaAddDays(wdaLocalDateStr(new Date(usedAtIso)), days), trial: true, notes: 'Free trial' };
 }
-
 function wdaPlanTrialSync(codes, billing) {
     const updates = {};
     Object.keys(codes || {}).forEach(h => {
@@ -70,7 +68,6 @@ function wdaPlanTrialSync(codes, billing) {
     });
     return updates;
 }
-
 function wdaLockState(fails, lastFailMs, nowMs) {
     const LIMIT = 5, PAUSE = 10 * 60 * 1000;
     if (fails >= LIMIT && nowMs - lastFailMs < PAUSE) return Math.ceil((PAUSE - (nowMs - lastFailMs)) / 60000);
@@ -89,22 +86,24 @@ function wdaNoteFail() {
     } catch (e) {}
 }
 function wdaClearFails() { try { localStorage.removeItem('wda_fails'); localStorage.removeItem('wda_last'); } catch (e) {} }
-
 function wdaBusy(msg) { if (typeof wdShowLoader === 'function') wdShowLoader(msg); }
 function wdaIdle() { if (typeof wdHideLoader === 'function') wdHideLoader(); }
 
 // =====================================================================
-// REGISTRATION with a single-use code
+// REGISTRATION with Email + Password AND single-use activation code
 // =====================================================================
 async function registerBusinessAccount() {
     const storeId = document.getElementById('reg-store-id').value.trim().toLowerCase();
     const businessName = document.getElementById('reg-store-name').value.trim();
     const phone = document.getElementById('reg-store-phone').value.trim();
     const address = document.getElementById('reg-store-address').value.trim();
+    const adminEmail = document.getElementById('reg-admin-email').value.trim();
+    const adminPassword = document.getElementById('reg-admin-password').value;
     const adminPin = document.getElementById('reg-admin-pin').value.trim();
 
-    if (!storeId || !businessName || !adminPin) {
-        alert("Store ID, Business Name, and Admin PIN are required.");
+    // --- Validation ---
+    if (!storeId || !businessName || !adminEmail || !adminPassword || !adminPin) {
+        alert("Store ID, Business Name, Admin Email, Password, and PIN are all required.");
         return;
     }
     if (!/^[a-z0-9_-]+$/.test(storeId)) {
@@ -115,17 +114,28 @@ async function registerBusinessAccount() {
         alert("That Store ID is reserved. Please choose another.");
         return;
     }
+    if (adminPassword.length < 6) {
+        alert("Password must be at least 6 characters.");
+        return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminEmail)) {
+        alert("Please enter a valid email address.");
+        return;
+    }
     if (adminPin.length < 4) {
         alert("The Admin PIN must be at least 4 characters. 6 or more is safer.");
         return;
     }
 
+    // --- Activation code lockout check ---
     const wait = wdaAttemptLockMinutes();
     if (wait > 0) {
         alert(`Too many wrong codes. Please wait about ${wait} minute${wait === 1 ? '' : 's'} and try again.`);
         return;
     }
 
+    // --- Ask for the activation code ---
     const entered = prompt("Enter the activation code you received to register this store:");
     if (entered === null) return;
     if (wdaNormalize(entered).length !== 12 || wdaNormalize(entered).indexOf('WD') !== 0) {
@@ -135,9 +145,10 @@ async function registerBusinessAccount() {
     }
 
     wdaBusy('Checking your code...');
-    let hash = null, claimed = false;
+    let hash = null, claimed = false, createdUid = null;
     const db = firebase.database();
     try {
+        // --- Step 1: Validate activation code ---
         hash = await wdaHash(entered);
         const codeRef = db.ref(`activationCodes/${hash}`);
         const rec = (await codeRef.once('value')).val();
@@ -155,6 +166,7 @@ async function registerBusinessAccount() {
             return;
         }
 
+        // --- Step 2: Check Store ID not taken ---
         const existing = await db.ref(`stores/${storeId}/businessName`).once('value');
         if (existing.exists()) {
             wdaIdle();
@@ -162,6 +174,7 @@ async function registerBusinessAccount() {
             return;
         }
 
+        // --- Step 3: Claim the activation code atomically ---
         const claim = await codeRef.child('status').transaction(cur => (cur === 'unused' ? 'used' : (cur === null ? cur : undefined)));
         if (!claim.committed || claim.snapshot.val() !== 'used') {
             wdaIdle();
@@ -170,15 +183,28 @@ async function registerBusinessAccount() {
         }
         claimed = true;
 
+        // --- Step 4: Create Firebase Authentication account ---
+        const userCredential = await firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword);
+        createdUid = userCredential.user.uid;
+
+        // Send verification email (non-blocking)
+        userCredential.user.sendEmailVerification()
+            .then(() => console.log("Verification email sent to " + adminEmail))
+            .catch(err => console.warn("Could not send verification email:", err));
+
+        // --- Step 5: Re-check Store ID (in case someone registered while we were creating the auth account) ---
         const again = await db.ref(`stores/${storeId}/businessName`).once('value');
         if (again.exists()) {
-            await codeRef.child('status').set('unused');
+            // Roll back both the code and the auth account
+            try { await codeRef.child('status').set('unused'); } catch (_) {}
+            try { await firebase.auth().currentUser.delete(); } catch (_) {}
             claimed = false;
             wdaIdle();
             alert("Store ID already exists. Please choose another or login. Your code is still valid.");
             return;
         }
 
+        // --- Step 6: Save store data + mark code as used ---
         const nowIso = new Date().toISOString();
         await db.ref().update({
             [`stores/${storeId}/businessName`]: businessName,
@@ -186,25 +212,56 @@ async function registerBusinessAccount() {
             [`stores/${storeId}/address`]: address,
             [`stores/${storeId}/adminPin`]: adminPin,
             [`stores/${storeId}/status`]: 'active',
+            [`stores/${storeId}/ownerUid`]: createdUid,
+            [`stores/${storeId}/ownerEmail`]: adminEmail,
+            [`stores/${storeId}/activationCode`]: wdaNormalize(entered),
             [`stores/${storeId}/createdAt`]: nowIso,
             [`stores/${storeId}/branches/main`]: { name: 'Main', phone, address, isMain: true, createdAt: nowIso },
+            [`admins/${createdUid}`]: true,
+            [`staff/${storeId}/main/${createdUid}`]: {
+                name: businessName + " (Owner)",
+                role: "Manager",
+                branchId: "main",
+                email: adminEmail
+            },
             [`activationCodes/${hash}/usedBy`]: storeId,
             [`activationCodes/${hash}/usedAt`]: nowIso
         });
         claimed = false;
         wdaClearFails();
 
+        // --- Step 7: Set up trial billing if the code has it ---
         const trial = wdaTrialBillingFor(rec, nowIso);
-        if (trial) { try { await db.ref(`billing/${storeId}`).set(trial); } catch (e) { console.warn("Trial billing will be created by Super Admin:", e.message); } }
+        if (trial) {
+            try { await db.ref(`billing/${storeId}`).set(trial); } catch (e) { console.warn("Trial billing will be created by Super Admin:", e.message); }
+        }
 
         wdaIdle();
-        alert("Business registered successfully! You can now log in." + (trial ? `\n\nYour free trial runs until ${wdaPrettyDate(trial.dueDate)}.` : ''));
+        alert(
+            "🎉 Registration complete!\n\n" +
+            "Check your email inbox (and Spam folder) for a verification link.\n\n" +
+            "You can now log in with your Email and Password." +
+            (trial ? `\n\nYour free trial runs until ${wdaPrettyDate(trial.dueDate)}.` : '')
+        );
         switchView('login-view');
     } catch (e) {
         console.error("Registration error:", e);
+        // Roll back the code if we claimed it but didn't finish
         if (claimed && hash) { try { await db.ref(`activationCodes/${hash}/status`).set('unused'); } catch (_) {} }
+        // Roll back the auth account if we created it but failed later
+        if (createdUid && firebase.auth().currentUser) {
+            try { await firebase.auth().currentUser.delete(); } catch (_) {}
+        }
         wdaIdle();
-        alert("Registration failed: " + e.message + "\n\nYour activation code was not used up — you can try again.");
+        if (e.code === 'auth/email-already-in-use') {
+            alert("This email is already registered to another account. Please use a different email.");
+        } else if (e.code === 'auth/weak-password') {
+            alert("Password is too weak. Please use at least 6 characters.");
+        } else if (e.code === 'auth/invalid-email') {
+            alert("Invalid email format. Please check the email address.");
+        } else {
+            alert("Registration failed: " + e.message + "\n\nYour activation code was not used up — you can try again.");
+        }
     }
 }
 
@@ -319,7 +376,7 @@ function wdaRegisterUrl() { return location.origin + location.pathname.replace(/
 function wdaCodeMessage(g) {
     return `Hello ${g.label}, welcome to Wise Decision POS! 🎉\n\nYour activation code: ${g.code}\n(It works once and is valid until ${wdaPrettyDate(g.expiresAt)}.)\n\nRegister your business here:\n${wdaRegisterUrl()}\n` +
         (g.trialDays > 0 ? `\nYou get a ${g.trialDays}-day free trial to try everything.` : '') +
-        `\n\nAfter registering, log in with your Store ID and the PIN you choose.`;
+        `\n\nAfter registering, log in with your Email and Password.`;
 }
 function wdaCopyCode() {
     if (!wdaLastGenerated) return;
@@ -373,6 +430,3 @@ async function wdaSyncTrials() {
     await firebase.database().ref().update(updates);
     return true;
 }
-
-// Expose a couple of functions globally so the patch overrides the original
-window.registerBusinessAccount = registerBusinessAccount;
