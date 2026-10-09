@@ -1,20 +1,12 @@
-// ==================== WISE DECISION ACTIVATION CODES PATCH (v27) ====================
-// Load AFTER superadmin-patch.js (last), with `defer`.
-//
-//   * Each new customer gets their OWN single-use activation code (WD-XXXXX-XXXXX)
-//   * A code can be revoked before it is used, expires after a number of days,
-//     and only the code's fingerprint (a hash) is stored — never the code itself
-//   * Registering with a valid code starts the store on a free trial automatically
-//   * The old shared code stops working
-//   * Super Admin gets a 🎟 Activation codes screen to make, send and cancel codes
-//
-// NOTE: with the database rules still open this is enforced by the app only. It becomes
-// fully enforced by the database itself when the rules are locked (the next security step).
+// ==================== WISE DECISION ACTIVATION CODES PATCH (v29) ====================
+// Loads AFTER script.js and all other patches, with `defer`.
+// Overrides registerBusinessAccount() with a version that requires a single-use
+// activation code, and adds the Super Admin 🎟 Activation codes screen.
 
 console.log("Wise Decision activation-patch.js — v29 loaded");
 
-// ---------- Helpers (pure ones are tested) ----------
-var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O/1/I so codes are easy to read out
+// ---------- Helpers ----------
+var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 function wdaNum(n) { return Number(n) || 0; }
 function wdaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -44,7 +36,7 @@ function wdaGenerateCode() {
     const bytes = new Uint8Array(10);
     crypto.getRandomValues(bytes);
     let s = '';
-    for (let i = 0; i < bytes.length; i++) s += WDA_ALPHABET[bytes[i] % 32];   // 256 is a multiple of 32, so no bias
+    for (let i = 0; i < bytes.length; i++) s += WDA_ALPHABET[bytes[i] % 32];
     return `WD-${s.slice(0, 5)}-${s.slice(5)}`;
 }
 function wdaNormalize(code) { return String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
@@ -61,14 +53,12 @@ function wdaCodeStatus(rec, nowMs) {
     return 'unused';
 }
 
-// A store that registered with a trial code gets a billing record (fee + trial end date).
 function wdaTrialBillingFor(rec, usedAtIso) {
     const days = wdaNum(rec && rec.trialDays);
     if (!rec || days <= 0 || !usedAtIso) return null;
     return { monthlyFee: wdaNum(rec.monthlyFee), dueDate: wdaAddDays(wdaLocalDateStr(new Date(usedAtIso)), days), trial: true, notes: 'Free trial' };
 }
 
-// Which used codes still need a billing record? (super admin can always write it, even after the rules are locked)
 function wdaPlanTrialSync(codes, billing) {
     const updates = {};
     Object.keys(codes || {}).forEach(h => {
@@ -81,7 +71,6 @@ function wdaPlanTrialSync(codes, billing) {
     return updates;
 }
 
-// Slow down code guessing on this device: 5 wrong tries -> 10 minute pause
 function wdaLockState(fails, lastFailMs, nowMs) {
     const LIMIT = 5, PAUSE = 10 * 60 * 1000;
     if (fails >= LIMIT && nowMs - lastFailMs < PAUSE) return Math.ceil((PAUSE - (nowMs - lastFailMs)) / 60000);
@@ -94,7 +83,7 @@ function wdaNoteFail() {
     try {
         const last = parseInt(localStorage.getItem('wda_last')) || 0;
         let fails = parseInt(localStorage.getItem('wda_fails')) || 0;
-        if (Date.now() - last > 10 * 60 * 1000) fails = 0;   // old failures expire
+        if (Date.now() - last > 10 * 60 * 1000) fails = 0;
         localStorage.setItem('wda_fails', String(fails + 1));
         localStorage.setItem('wda_last', String(Date.now()));
     } catch (e) {}
@@ -173,7 +162,6 @@ async function registerBusinessAccount() {
             return;
         }
 
-        // Claim the code so it can never be used twice, even by two people at the same moment
         const claim = await codeRef.child('status').transaction(cur => (cur === 'unused' ? 'used' : (cur === null ? cur : undefined)));
         if (!claim.committed || claim.snapshot.val() !== 'used') {
             wdaIdle();
@@ -182,7 +170,6 @@ async function registerBusinessAccount() {
         }
         claimed = true;
 
-        // Re-check the Store ID now that the code is ours (someone could have registered it in the meantime)
         const again = await db.ref(`stores/${storeId}/businessName`).once('value');
         if (again.exists()) {
             await codeRef.child('status').set('unused');
@@ -193,7 +180,6 @@ async function registerBusinessAccount() {
         }
 
         const nowIso = new Date().toISOString();
-        // Leaf-by-leaf writes: can never overwrite an existing store's data
         await db.ref().update({
             [`stores/${storeId}/businessName`]: businessName,
             [`stores/${storeId}/phone`]: phone,
@@ -205,10 +191,9 @@ async function registerBusinessAccount() {
             [`activationCodes/${hash}/usedBy`]: storeId,
             [`activationCodes/${hash}/usedAt`]: nowIso
         });
-        claimed = false;   // registration succeeded — the code stays used
+        claimed = false;
         wdaClearFails();
 
-        // Start the free trial (if this code carries one). Super Admin's dashboard also creates it if this write is refused.
         const trial = wdaTrialBillingFor(rec, nowIso);
         if (trial) { try { await db.ref(`billing/${storeId}`).set(trial); } catch (e) { console.warn("Trial billing will be created by Super Admin:", e.message); } }
 
@@ -361,8 +346,6 @@ async function wdaDeleteCode(hash) {
     try { await firebase.database().ref(`activationCodes/${hash}`).remove(); wdaOpenCodes(); } catch (e) { alert("Failed: " + e.message); }
 }
 
-// Button in the Super Admin header. Added by a small timer that keeps checking, so it appears
-// no matter which order the script files load in (and after every refresh of the dashboard).
 function wdaAttach() {
     if (currentUserRole !== 'SuperAdmin') return;
     if (!document.getElementById('wda-open-btn')) {
@@ -377,20 +360,9 @@ function wdaAttach() {
             anchor.parentElement.insertBefore(b, anchor);
         }
     }
-    // Trial sync piggybacks on the Super Admin list reload (wrapped once)
-    if (typeof window.wdsReload === 'function' && !window.wdsReload.__wdaWrapped) {
-        const prev = window.wdsReload;
-        const wrapped = async function () {
-            try { await wdaSyncTrials(); } catch (e) { console.warn("Trial sync skipped:", e.message); }
-            return prev.apply(this, arguments);
-        };
-        wrapped.__wdaWrapped = true;
-        window.wdsReload = wrapped;
-    }
 }
 setInterval(function () { try { wdaAttach(); } catch (e) { console.warn(e); } }, 1200);
 
-// Keep trials in step: any used code whose store has no billing yet gets one (runs when the Super Admin list reloads)
 var wdaLastTrialSync = 0;
 async function wdaSyncTrials() {
     if (currentUserRole !== 'SuperAdmin' || Date.now() - wdaLastTrialSync < 60000) return false;
@@ -401,3 +373,6 @@ async function wdaSyncTrials() {
     await firebase.database().ref().update(updates);
     return true;
 }
+
+// Expose a couple of functions globally so the patch overrides the original
+window.registerBusinessAccount = registerBusinessAccount;
