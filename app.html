@@ -123,12 +123,13 @@
         <!-- ================= VIEW 4: STANDALONE SUPER ADMIN CONTAINER ================= -->
         <div id="super-admin-view" class="view-section">
             <div style="padding: 30px; background: #0f172a; color: #fff; min-height: 100vh;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #1e293b; padding: 15px 20px; border-radius: 12px; border: 1px solid #334155;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #1e293b; padding: 15px 20px; border-radius: 12px; border: 1px solid #334155; flex-wrap: wrap; gap: 10px;">
                     <div>
                         <h2 style="margin: 0; color: #fff; font-size: 20px;">👑 Wise Decision Master Control</h2>
                         <p style="margin: 3px 0 0 0; font-size: 12px; color: #94a3b8;">Manage all registered businesses, subscription statuses, and payment notices.</p>
                     </div>
-                    <div style="display:flex; gap:10px; align-items:center;">
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
+                        <button class="menu-btn" style="width: auto; margin: 0; background: #16a34a; color: #fff;" onclick="openGenerateCodeModal()">➕ Generate Activation Code</button>
                         <button class="menu-btn btn-action-primary" style="width: auto; margin: 0;" onclick="changeSuperAdminMasterPin()">🔑 Change Master PIN</button>
                         <button class="menu-btn btn-logout" style="width: auto; margin: 0;" onclick="switchView('login-view')">Logout / Exit</button>
                     </div>
@@ -1769,6 +1770,50 @@
             <div style="display: flex; gap: 10px;">
                 <button class="menu-btn btn-action-primary" style="margin-bottom:0; justify-content: center;" onclick="extendSession()">Stay Logged In</button>
                 <button class="menu-btn btn-logout" style="margin-bottom:0;" onclick="logout()">Logout Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= GENERATE ACTIVATION CODE MODAL ================= -->
+    <div id="generate-code-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); justify-content: center; align-items: center; z-index: 3000; padding: 20px; box-sizing: border-box;">
+        <div style="background: #ffffff; padding: 20px; border-radius: 14px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; border: 1px solid #eef2f7; box-shadow: 0 20px 45px rgba(15,23,42,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom: 10px;">
+                <h3 style="margin:0; color: var(--text); font-size: 17px;">➕ Generate Activation Code</h3>
+                <button class="menu-btn btn-logout" style="width:auto; margin:0; padding: 6px 12px;" onclick="closeGenerateCodeModal()">✕ Close</button>
+            </div>
+
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 15px;">Create a unique code for a new customer. They will enter this code when registering their business.</p>
+
+            <div class="form-group">
+                <label>Customer Name (for your records)</label>
+                <input type="text" id="gen-code-customer-name" placeholder="e.g. Medstar Pharmacy">
+            </div>
+            <div class="form-group">
+                <label>Plan / Notes (optional)</label>
+                <input type="text" id="gen-code-notes" placeholder="e.g. 1 year subscription, paid ₦50,000">
+            </div>
+            <div class="form-group">
+                <label>Expiry (days from now — leave blank for no expiry)</label>
+                <input type="number" id="gen-code-expiry-days" placeholder="e.g. 30" min="1">
+            </div>
+
+            <button class="menu-btn btn-action-primary" style="width: 100%; justify-content: center; background: #16a34a;" onclick="generateActivationCode()">🎟 Generate & Copy Code</button>
+
+            <h4 style="font-size: 14px; color: var(--text); margin: 25px 0 10px 0;">📋 Generated Codes</h4>
+            <div style="background: #fff; border: 1px solid #eef2f7; border-radius: 10px; overflow-x: auto; max-height: 300px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Customer</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activation-codes-body">
+                        <tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">Loading codes...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
