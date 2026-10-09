@@ -2,8 +2,28 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v1';
-const PRECACHE = ['./app.html', './style.css', './script.js', './perf-patch.js', './bugfix-patch.js', './offline-patch.js'];
+const CACHE = 'wd-shell-v2';
+const PRECACHE = [
+    './app.html',
+    './style.css',
+    './script.js',
+    './perf-patch.js',
+    './bugfix-patch.js',
+    './offline-patch.js',
+    './features-patch.js',
+    './superadmin-patch.js',
+    './activation-patch.js',
+    './superadmin-tools-patch.js',
+    './pos-mode-patch.js',
+    './storeplans-patch.js',
+    './staff-sidebar-patch.js',
+    './manager-preorder-patch.js',
+    './extras-patch.js',
+    './payments-patch.js',
+    './auth-patch.js',
+    './email-auth-patch.js',
+    './phone-vendor-patch.js'
+];
 
 self.addEventListener('install', event => {
     event.waitUntil(
