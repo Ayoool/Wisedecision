@@ -895,3 +895,116 @@ div[id*="mimo"] {
     background: #f1f5f9;
     color: #0f172a;
 }
+
+/* =====================================================================
+   PHONE VENDOR DASHBOARD — added by phone-vendor-patch.js
+   These styles are additive. They do not affect any existing classes.
+   ===================================================================== */
+
+/* Sidebar button for phone sales */
+.btn-phone {
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%) !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    border: none;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.28);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-phone:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(124, 58, 237, 0.38);
+}
+
+.btn-phone:active {
+    transform: translateY(0);
+    box-shadow: 0 3px 8px rgba(124, 58, 237, 0.28);
+}
+
+/* Table cells for phone list — cleaner monospace IMEI display */
+#wdv-table-body td {
+    vertical-align: middle;
+    font-size: 13px;
+}
+
+/* IMEI column: clickable to copy */
+#wdv-table-body td:first-child {
+    transition: color 0.15s ease;
+}
+#wdv-table-body td:first-child:hover {
+    color: #7c3aed;
+}
+
+/* Status chip polish (used in the table) */
+#wdv-table-body span[style*="border-radius:10px"] {
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* The phone inventory toolbar */
+#wdv-search:focus,
+#wdv-filter-brand:focus,
+#wdv-filter-status:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+/* Summary cards — give them a slight hover lift */
+#wdv-summary-cards > div {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#wdv-summary-cards > div:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+/* The phone modal wrapper — smoother appearance */
+#wdv-modal > div {
+    animation: wdvModalIn 0.18s ease-out;
+}
+
+@keyframes wdvModalIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Modal input focus states */
+#wdv-modal input:focus,
+#wdv-modal select:focus,
+#wdv-modal textarea:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+/* Registration store-type selector — matches the rest of the auth card */
+#reg-store-type-selector label {
+    letter-spacing: 0.3px;
+}
+#reg-store-type-selector select:focus,
+#reg-store-type-selector input:focus {
+    outline: none;
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+/* Phone table row hover for better readability */
+#wdv-table-body tr:hover {
+    background: #faf5ff;
+}
+
+/* Delete button (Del) in the phone table */
+#wdv-table-body .menu-btn[onclick*="wdvDeletePhone"] {
+    transition: background 0.15s ease;
+}
+#wdv-table-body .menu-btn[onclick*="wdvDeletePhone"]:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+}
+
+/* Edit button in the phone table */
+#wdv-table-body .menu-btn[onclick*="wdvEditPhone"]:hover {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+}
