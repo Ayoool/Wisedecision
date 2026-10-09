@@ -603,10 +603,14 @@
                 <label>Staff Name</label>
                 <input type="text" id="staff-name-input" placeholder="Enter staff name">
             </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="staff-email-input" placeholder="staff@example.com" autocapitalize="none">
+            </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="form-group">
-                    <label>Login PIN</label>
-                    <input type="password" id="staff-pin-input" placeholder="Enter login PIN">
+                    <label>Temporary Password (at least 6 characters)</label>
+                    <input type="password" id="staff-pin-input" placeholder="Temporary password">
                 </div>
                 <div class="form-group">
                     <label>Role</label>
@@ -1778,6 +1782,7 @@
         <script src="extras-patch.js?v=38" defer></script>
         <script src="payments-patch.js?v=4" defer></script>
         <script src="auth-patch.js?v=1" defer></script>
+        <script src="email-auth-patch.js?v=1" defer></script>
         <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
