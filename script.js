@@ -615,26 +615,44 @@ function handleStoreLogin() {
     });
 }
 
+// ==================== REGISTER BUSINESS (with Email + Password) ====================
 function registerBusinessAccount() {
     const storeId = document.getElementById('reg-store-id').value.trim().toLowerCase();
     const businessName = document.getElementById('reg-store-name').value.trim();
     const phone = document.getElementById('reg-store-phone').value.trim();
     const address = document.getElementById('reg-store-address').value.trim();
+    const adminEmail = document.getElementById('reg-admin-email').value.trim();
+    const adminPassword = document.getElementById('reg-admin-password').value;
     const adminPin = document.getElementById('reg-admin-pin').value.trim();
 
-    if (!storeId || !businessName || !adminPin) {
-        alert("Store ID, Business Name, and Admin PIN are required.");
+    // Validate all fields
+    if (!storeId || !businessName || !adminEmail || !adminPassword || !adminPin) {
+        alert("Store ID, Business Name, Admin Email, Password, and PIN are all required.");
         return;
     }
 
-    const secretRegistrationCode = "Mazanest2026";
-    const userEnteredCode = prompt("Enter the authorized developer license/activation code to register this store:");
-
-    if (userEnteredCode !== secretRegistrationCode) {
-        alert("Access Denied: Invalid or missing authorization code.");
+    // Validate password length
+    if (adminPassword.length < 6) {
+        alert("Password must be at least 6 characters.");
         return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(adminEmail)) {
+        alert("Please enter a valid email address.");
+        return;
+    }
+
+    // [OPTIONAL] Keep the license code prompt if you want extra security.
+    // const secretRegistrationCode = "Mazanest2026";
+    // const userEnteredCode = prompt("Enter the authorized developer license/activation code to register this store:");
+    // if (userEnteredCode !== secretRegistrationCode) {
+    //     alert("Access Denied: Invalid or missing authorization code.");
+    //     return;
+    // }
+
+    // First check if the Store ID is already taken
     const storeRef = firebase.database().ref('stores/' + storeId);
     storeRef.once('value').then(snapshot => {
         if (snapshot.exists()) {
@@ -642,25 +660,62 @@ function registerBusinessAccount() {
             return;
         }
 
-        storeRef.set({
-            businessName,
-            phone,
-            address,
-            adminPin,
-            status: "active",
-            createdAt: new Date().toISOString()
-        }).then(() => {
-            return firebase.database().ref(`stores/${storeId}/branches/main`).set({
-                name: "Main",
-                phone,
-                address,
-                isMain: true,
-                createdAt: new Date().toISOString()
+        // Step 1: Create the Firebase Authentication account for the Admin
+        return firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword)
+            .then(userCredential => {
+                const uid = userCredential.user.uid;
+
+                // Step 2: Send the verification email
+                userCredential.user.sendEmailVerification()
+                    .then(() => console.log("Verification email sent to " + adminEmail))
+                    .catch(err => console.warn("Could not send verification email:", err));
+
+                // Step 3: Save store data, admin record, and branch
+                const storeData = {
+                    businessName,
+                    phone,
+                    address,
+                    adminPin,
+                    status: "active",
+                    ownerUid: uid,
+                    ownerEmail: adminEmail,
+                    createdAt: new Date().toISOString()
+                };
+
+                const updates = {};
+                updates[`stores/${storeId}`] = storeData;
+                updates[`admins/${uid}`] = true;
+                updates[`staff/${storeId}/main/${uid}`] = {
+                    name: businessName + " (Owner)",
+                    role: "Manager",
+                    branchId: "main",
+                    email: adminEmail
+                };
+                updates[`stores/${storeId}/branches/main`] = {
+                    name: "Main",
+                    phone,
+                    address,
+                    isMain: true,
+                    createdAt: new Date().toISOString()
+                };
+
+                return firebase.database().ref().update(updates);
+            })
+            .then(() => {
+                alert("Registration complete!\n\nCheck your email inbox (and Spam folder) for a verification link from Wise Decision, then log in with your Email and Password.");
+                switchView('login-view');
             });
-        }).then(() => {
-            alert("Business registered successfully! You can now log in.");
-            switchView('login-view');
-        });
+    }).catch(error => {
+        console.error("Registration error:", error);
+        if (error.code === 'auth/email-already-in-use') {
+            alert("This email is already registered to another account. Please use a different email, or log in with that email.");
+        } else if (error.code === 'auth/weak-password') {
+            alert("Password is too weak. Please use at least 6 characters.");
+        } else if (error.code === 'auth/invalid-email') {
+            alert("Invalid email format. Please check the email address.");
+        } else {
+            alert("Registration failed: " + error.message);
+        }
     });
 }
 
