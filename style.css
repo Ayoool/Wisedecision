@@ -1,4 +1,4 @@
-:root {
+Add the changes to my style :root {
     --bg: #f0fdf4;
     --card-bg: #ffffff;
     --text: #0f172a;
@@ -894,25 +894,4 @@ div[id*="mimo"] {
     filter: none !important;
     background: #f1f5f9;
     color: #0f172a;
-}
-
-/* ==================== PHONE VENDOR SIDEBAR BUTTON (phone-vendor-patch v1) ==================== */
-/* Matches your existing button style — same structure, same font weight,
-   uses your app's primary teal/blue palette with a subtle left accent border.
-   No transitions so it never visually pops when re-inserted. */
-.menu-btn.btn-phone {
-    background: #f0fdfa;
-    color: #0f766e;
-    border: 1px solid #99f6e4;
-    border-left: 4px solid #14b8a6;
-    font-weight: 700;
-    transition: none !important;
-    animation: none !important;
-}
-
-.menu-btn.btn-phone:hover {
-    transform: none !important;
-    filter: none !important;
-    background: #ccfbf1;
-    color: #115e59;
 }
