@@ -339,55 +339,63 @@ body {
 }
 
 .btn-action-primary {
-    background: linear-gradient(135deg, #14b8a6 0%, #0284c7 100%);
-    color: #fff;
-    border: none;
+    background: linear-gradient(135deg, #14b8a6 02e%, #0284c87 100%);
+    color: #ffff;
+    border: none0;
     text-align: center;
     justify-content: center;
-    box-shadow: 0 6px 16px rgba(20, 184, 166, 0.25);
+;
+    box-shadow: 0    6px 16px rgba( color20, 184, 166,: 0.25);
 }
 
-.btn-action-primary:hover {
-    background: linear-gradient(135deg, #0d9488 0%, #0369a1 100%);
-    color: #fff;
+.btn-action-primary #:hover {
+    background: linear-gradient1(135deg, #0de9488 0%, #0362939a1 100%);
+   b color: #fff;
 }
 
-.btn-logout {
-    background: #fee2e2;
+.btn-logout;
+ {
+    background: #fee   2e2;
     color: #dc2626;
-    border: 1px solid #fecaca;
-    border-left: 4px solid #dc2626;
+    border border: 1px solid #fec:aca;
+    border-left: 4px solid none #dc2626;
     justify-content: center;
 }
 
+;
 .btn-logout:hover {
-    background: #fecaca;
-    color: #b91c1c;
-}
+    background:    #fecaca;
+    color: box #b91c1c;
+-shadow}
 
 .btn-secondary {
-    background: #f1f5f9;
-    color: #0284c7;
-    border: 1px solid #cbd5e1;
-    justify-content: center;
+    background: #:f1f5f9;
+ none    color: #;
+0284c7;
+    border: }
+
+1px solid #cbd5e1.account;
+    justify-content: centerant;
     font-weight: 600;
-}
+-t}
 
 .btn-secondary:hover {
-    background: #e2e8f0;
-    color: #0369a1;
-    filter: none;
+    backgroundab: #e2e8f0;
+   -btn color: #0369a1;
+:hover    filter: none;
 }
 
-.btn-complete-sale {
+.btn-complete-s {
+ale {
     width: 100%;
-    background-color: #16a34a;
-    color: white;
-    padding: 12px;
-    font-size: 14px;
+       background-color: #16a34a;
+    color transform: white;
+    padding: 12px:;
+    font-size: 14px none;
     font-weight: 600;
     border: none;
-    border-radius: 8px;
+   ;
+ border-radius: 8px;
     cursor: pointer;
     margin-top: 15px;
     transition: background-color 0.2s ease, transform 0.1s ease;
@@ -722,15 +730,7 @@ div[id*="mimo"] {
     padding: 6px 14px;
     font-size: 12px;
     font-weight: bold;
-    background: #e2e8f0;
-    color: #1e293b;
-    border: none;
-    box-shadow: none;
-}
-
-.accountant-tab-btn:hover {
-    transform: none;
-    filter: brightness(0.96);
+    background: #e    filter: brightness(0.96);
 }
 
 .accountant-tab-btn.active {
@@ -894,4 +894,105 @@ div[id*="mimo"] {
     filter: none !important;
     background: #f1f5f9;
     color: #0f172a;
+}
+
+/* ==================== PHONE VENDOR — NEW (phone-vendor-patch v1) ==================== */
+
+/* Sidebar button — "📱 Phone Sales" */
+.menu-btn.btn-phone {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    border-left: 4px solid #0ea5e9;
+    font-weight: 700;
+    transition: none !important;
+    animation: none !important;
+}
+.menu-btn.btn-phone:hover {
+    background: #e0f2fe;
+    transform: none !important;
+    filter: none !important;
+}
+
+/* Registration screen — store type selector block */
+#reg-store-type-selector {
+    margin-bottom: 14px;
+}
+#reg-store-type-selector label {
+    font-weight: 700;
+    color: #334155;
+    font-size: 13px;
+    margin-bottom: 6px;
+    display: block;
+}
+#reg-store-type-selector select,
+#reg-store-type-selector input[type="text"] {
+    width: 100%;
+    padding: 13px 14px;
+    font-size: 14px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    box-sizing: border-box;
+    font-family: inherit;
+    color: #0f172a;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+#reg-store-type-selector select:focus,
+#reg-store-type-selector input[type="text"]:focus {
+    outline: none;
+    border-color: #0284c7;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+    background: #ffffff;
+}
+
+/* Phone inventory table — IMEI cell is monospace and copyable */
+#wdv-table-body td:first-child {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: all;
+}
+#wdv-table-body tr:hover {
+    background: #f8fafc;
+}
+
+/* Phone inventory — summary cards hover (subtle, no shake) */
+#wdv-summary-cards > div {
+    transition: none !important;
+}
+
+/* Phone modal — inputs, selects and textareas all share one style */
+#wdv-modal input[type="text"],
+#wdv-modal input[type="number"],
+#wdv-modal input[type="date"],
+#wdv-modal select,
+#wdv-modal textarea {
+    font-family: inherit;
+    color: #0f172a;
+    background: #ffffff;
+}
+
+#wdv-modal input[type="text"]:focus,
+#wdv-modal input[type="number"]:focus,
+#wdv-modal input[type="date"]:focus,
+#wdv-modal select:focus,
+#wdv-modal textarea:focus {
+    outline: none;
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+/* Bulk paste textarea — monospace so IMEIs line up neatly */
+#wdv-b-imeis {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+    letter-spacing: 0.5px;
+    line-height: 1.6;
+}
+
+/* Small screens — phone inventory table scrolls horizontally */
+@media (max-width: 767px) {
+    #workspace-content table {
+        min-width: 700px;
+    }
 }
