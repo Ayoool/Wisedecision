@@ -1,12 +1,16 @@
-// ==================== WISE DECISION ACTIVATION CODES PATCH (v30) ====================
+// ==================== WISE DECISION ACTIVATION CODES PATCH (v31) ====================
 // Loads AFTER script.js and all other patches, with `defer`.
 // Overrides registerBusinessAccount() with:
 //   - Email + Password (creates Firebase Auth account)
 //   - Single-use activation code (WD-XXXXX-XXXXX, DB-validated)
 //   - Free trial billing setup
 //   - Super Admin 🎟 Activation codes screen
+//
+// v31: new owners are saved to stores/<id>/members/<uid> (role Admin) + userIndex/<uid>,
+//      which is where email login looks. They are NO LONGER written to admins/ (that list is
+//      Super Admin only) or to the old staff/<id>/main/<uid> "Manager" record.
 
-console.log("Wise Decision activation-patch.js — v30 loaded");
+console.log("Wise Decision activation-patch.js — v31 loaded");
 
 // ---------- Helpers ----------
 var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -217,13 +221,8 @@ async function registerBusinessAccount() {
             [`stores/${storeId}/activationCode`]: wdaNormalize(entered),
             [`stores/${storeId}/createdAt`]: nowIso,
             [`stores/${storeId}/branches/main`]: { name: 'Main', phone, address, isMain: true, createdAt: nowIso },
-            [`admins/${createdUid}`]: true,
-            [`staff/${storeId}/main/${createdUid}`]: {
-                name: businessName + " (Owner)",
-                role: "Manager",
-                branchId: "main",
-                email: adminEmail
-            },
+            [`stores/${storeId}/members/${createdUid}`]: { role: 'Admin', who: 'admin', name: businessName + ' (Owner)', at: nowIso },
+            [`userIndex/${createdUid}`]: { storeIds: [storeId] },
             [`activationCodes/${hash}/usedBy`]: storeId,
             [`activationCodes/${hash}/usedAt`]: nowIso
         });
