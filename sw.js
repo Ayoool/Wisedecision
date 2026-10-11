@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v7';
+const CACHE = 'wd-shell-v8';
 const PRECACHE = [
     './app.html',
     './style.css',
@@ -25,7 +25,8 @@ const PRECACHE = [
     './phone-vendor-patch.js',
     './phone-sale-patch.js',
     './materials-patch.js',
-    './materials-polish-patch.js'
+    './materials-polish-patch.js',
+    './phone-extras-patch.js'
 ];
 
 self.addEventListener('install', event => {
