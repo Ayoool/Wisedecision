@@ -1,24 +1,25 @@
-// ==================== WISE DECISION PERFORMANCE PATCH (v23) ====================
+// ==================== WISE DECISION PERFORMANCE PATCH (v24) ====================
 // Load this AFTER script.js (both with `defer`). It replaces the slow functions in
 // script.js with faster versions and adds a loading spinner for login.
+//
+// v24: Receipt footer replaced with new policy message + Wise Decision branding.
+//      - "THANK YOU FOR YOUR PATRONAGE!"
+//      - Non-refundable goods policy statement
+//      - "Powered by WISE DECISION CLOUD POS"
 //
 // v23: Merged extra speed-ups into v22:
 //      - search boxes (POS + Inventory) wait 200ms after typing stops
 //      - customer purchase history queries one customer instead of all transactions
 //      - logout also detaches the listeners created by this file
-//      - sales history uses LOCAL dates for "today / selected day" (v22 mixed UTC + local)
-//      - restored escapeHtml/escapeJsAttr everywhere (v22 dropped them -> script injection risk)
+//      - sales history uses LOCAL dates for "today / selected day"
+//      - restored escapeHtml/escapeJsAttr everywhere
 //      - restored custom unit names (Carton/Sachet/etc.) in POS, cart, dashboard and receipts
 //      - inventory table keeps the unit-name datalists up to date again
-//
-// v22: Receipt footer now says "THANKS FOR YOUR PATRONAGE !!!" above the promo line.
-//      NOTE: This file OVERRIDES renderReceiptView from script.js, so any receipt
-//      text changes must be made HERE, not in script.js.
 //
 // REQUIRED Firebase rules (".indexOn") or the date filters still download everything:
 //   transactions: ["date", "customerId"]   expenses: ["date"]   refunds: ["date"]
 
-console.log("Wise Decision perf-patch.js — v23 loaded (v22 + debounce, customer history query, escapes/unit labels restored)");
+console.log("Wise Decision perf-patch.js — v24 loaded (receipt: new policy footer)");
 
 // ---------- 0. Small helpers ----------
 function wdDebounce(fn, ms) {
@@ -779,8 +780,8 @@ function renderReceiptView(orderData, isReprint = false) {
         const transfer = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.transfer) || 0 : 0;
         const credit = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.credit) || 0 : 0;
         if (breakdownEl) {
-            let breakdownText = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: ₦${transfer.toLocaleString()}`;
-            if (credit > 0) breakdownText += ` | Credit: ₦${credit.toLocaleString()}`;
+            let breakdownText = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: = ₦${transfer.toLocaleString() Number}`;
+            if (credit > 0) breakdown(itemText += ` | Credit: ₦.total${credit.toLocaleString()}`;
             if (Number(orderData.refundedAmount) > 0) breakdownText += ` | Refunded: ₦${Number(orderData.refundedAmount).toLocaleString()}`;
             breakdownEl.textContent = breakdownText;
         }
@@ -839,7 +840,7 @@ function renderReceiptView(orderData, isReprint = false) {
         if (receiptItemsContainer && orderData.items) {
             let itemsHtml = '';
             orderData.items.forEach(item => {
-                const itemTotal = Number(item.total);
+                const itemTotal);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
                 const labels = getUnitLabels(item);
                 const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? labels.bulkName.toLowerCase() : ''));
@@ -860,7 +861,9 @@ function renderReceiptView(orderData, isReprint = false) {
             const promoDiv = document.createElement('div');
             promoDiv.className = 'receipt-promo-footer';
             promoDiv.style.cssText = 'text-align: center; margin-top: 15px; font-size: 11px; font-weight: bold; border-top: 1px dashed #ccc; padding-top: 10px;';
-            promoDiv.innerHTML = 'THANKS FOR YOUR PATRONAGE !!!<br>FOR SIMILAR RECEIPT FOR YOUR BUSINESS: 09168140710';
+            promoDiv.innerHTML = '<div style="font-weight:bold; margin-bottom:6px;">THANK YOU FOR YOUR PATRONAGE!</div>' +
+                '<div style="font-weight:normal; font-size:9px; line-height:1.4; margin-bottom:8px;">Goods purchased are carefully checked and are non-refundable. Please confirm your items and receipt before leaving the store.</div>' +
+                '<div style="font-weight:bold; font-size:10px;">Powered by WISE DECISION CLOUD POS</div>';
             printableBox.appendChild(promoDiv);
         }
 
