@@ -1,23 +1,64 @@
-// ==================== WISE DECISION RECEIPT QR CODE PATCH (v5) ====================
+// ==================== WISE DECISION RECEIPT QR CODE PATCH (v7) ====================
 // Load AFTER store-logo-patch.js.
 //
-// v5: fixed syntax errors (mangled wdqInject declaration, stray backtick in targets).
-// v4: QR encodes a FULL absolute URL (with domain) instead of a relative path.
+// v7: Store name, address, and phone are now read directly from Firebase
+//     (stores/{storeId}) instead of scraped from the receipt DOM. This fixes the
+//     bug where the placeholder "WISE DECISION" was published before the real
+//     store name finished loading from the database.
 
-console.log("Wise Decision receipt-qr-patch.js — v5 loaded");
+console.log("Wise Decision receipt-qr-patch.js — v7 loaded");
 
-// ---------- Load QR library on demand ----------
-function wdqLoadLib() {
-    return new Promise(function (resolve, reject) {
+// ---------- QR library loading (eager + multi-CDN fallback) ----------
+var wdqLibReady = null;
+
+function wdqLoadLibOnce() {
+    if (wdqLibReady) return wdqLibReady;
+    wdqLibReady = new Promise(function (resolve, reject) {
         if (window.qrcode) return resolve(window.qrcode);
-        var s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
-        s.onload = function () {
-            if (window.qrcode) resolve(window.qrcode);
-            else reject(new Error('QR library did not initialise.'));
-        };
-        s.onerror = function () { reject(new Error('Could not load QR library.')); };
-        document.head.appendChild(s);
+
+        var cdns = [
+            'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
+            'https://unpkg.com/qrcode-generator@1.4.4/qrcode.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'
+        ];
+        var idx = 0;
+        function tryNext() {
+            if (idx >= cdns.length) return reject(new Error('All QR CDNs failed.'));
+            var s = document.createElement('script');
+            s.src = cdns[idx++];
+            s.onload = function () {
+                if (window.qrcode) resolve(window.qrcode);
+                else tryNext();
+            };
+            s.onerror = function () { tryNext(); };
+            document.head.appendChild(s);
+        }
+        tryNext();
+    });
+    return wdqLibReady;
+}
+
+// ---------- Store info cache (fetched once per session) ----------
+var wdqStoreInfo = null;
+function wdqFetchStoreInfo() {
+    if (wdqStoreInfo) return Promise.resolve(wdqStoreInfo);
+    return new Promise(function (resolve) {
+        try {
+            if (typeof firebase === 'undefined' || !firebase.database || typeof currentStoreId === 'undefined' || !currentStoreId) {
+                return resolve({ name: '', address: '', phone: '' });
+            }
+            firebase.database().ref('stores/' + currentStoreId).once('value')
+                .then(function (snap) {
+                    var s = snap.val() || {};
+                    wdqStoreInfo = {
+                        name: s.businessName || s.name || '',
+                        address: s.address || '',
+                        phone: s.phone || ''
+                    };
+                    resolve(wdqStoreInfo);
+                })
+                .catch(function () { resolve({ name: '', address: '', phone: '' }); });
+        } catch (e) { resolve({ name: '', address: '', phone: '' }); }
     });
 }
 
@@ -29,9 +70,7 @@ function wdqRandomCode() {
     return out;
 }
 
-// ---------- Build an absolute verify URL from the current page location ----------
-// Example: on https://ayoool.github.io/Wisedecision/app.html
-// returns  https://ayoool.github.io/Wisedecision/verify.html?c=xxxxxxxx
+// ---------- Build absolute verify URL ----------
 function wdqBuildVerifyUrl(code) {
     var origin = window.location.origin;
     var path = window.location.pathname;
@@ -47,12 +86,9 @@ function wdqNumFromText(s) {
     return parseFloat(cleaned) || 0;
 }
 
-// ---------- Extract receipt data from the DOM ----------
-function wdqScrapeReceipt(container) {
-    var storeName = wdqText(container.querySelector('#receipt-store-name, #debt-receipt-store-name, #refund-receipt-store-name, #wdf-r-store, #wdp-r-store'));
-    var address   = wdqText(container.querySelector('#receipt-store-address, #debt-receipt-store-address, #refund-receipt-store-address, #wdf-r-addr, #wdp-r-addr'));
-    var phone     = wdqText(container.querySelector('#receipt-store-phone, #debt-receipt-store-phone, #refund-receipt-store-phone, #wdf-r-tel, #wdp-r-tel'));
-
+// ---------- Scrape receipt data (items & totals from DOM; store info from Firebase) ----------
+function wdqScrapeReceipt(container, storeInfo) {
+    // Receipt ID
     var idCandidates = ['#receipt-tx-id', '#debt-receipt-tx-id', '#refund-receipt-id', '#waybill-id'];
     var receiptId = '';
     for (var i = 0; i < idCandidates.length && !receiptId; i++) {
@@ -66,6 +102,7 @@ function wdqScrapeReceipt(container) {
     }
     if (!receiptId) return null;
 
+    // Date
     var dateStr = wdqText(container.querySelector('#receipt-date, #debt-receipt-date, #refund-receipt-date, #waybill-date'));
     var dateIso = new Date().toISOString();
     if (dateStr && dateStr !== '--') {
@@ -73,6 +110,7 @@ function wdqScrapeReceipt(container) {
         if (!isNaN(parsed)) dateIso = parsed.toISOString();
     }
 
+    // Total
     var totalStr = wdqText(container.querySelector('#receipt-grand-total, #debt-receipt-amount-paid, #refund-receipt-total'));
     var total = wdqNumFromText(totalStr);
     if (!total) {
@@ -80,6 +118,7 @@ function wdqScrapeReceipt(container) {
         if (totalLine) total = wdqNumFromText(totalLine[1]);
     }
 
+    // Items
     var items = [];
     var itemRows = container.querySelectorAll('#receipt-items-body tr, #refund-receipt-items-body tr');
     if (itemRows.length) {
@@ -89,43 +128,27 @@ function wdqScrapeReceipt(container) {
                 var name = wdqText(cells[0]).replace(/\s+/g, ' ');
                 var qty = wdqText(cells[1]);
                 if (name) items.push({ name: name, qty: qty });
-            } else if (cells.length === 1) {
-                var txt = wdqText(cells[0]);
-                if (txt) items.push({ name: txt, qty: '' });
             }
         });
     }
-    if (!items.length) {
-        var bodyEl = container.querySelector('#wdf-r-body, #wdp-r-body');
-        if (bodyEl) {
-            bodyEl.querySelectorAll('div').forEach(function (d) {
-                var txt = (d.textContent || '').trim();
-                var m = txt.match(/^(\d+)\s*[×x]\s*(.+)$/);
-                if (m && m[2]) items.push({ name: m[2].trim(), qty: m[1] });
-            });
-        }
-    }
 
+    // Customer
     var customer = wdqText(container.querySelector('#debt-receipt-customer-name'));
-    if (!customer) {
-        var custLine = (container.textContent || '').match(/Customer:\s*([^\n]+)/i);
-        if (custLine) customer = custLine[1].trim().split('·')[0].trim();
-    }
     if (customer === '--' || customer === 'Walk-in Customer') customer = '';
 
     return {
-        storeName: storeName || 'Store',
-        address: address || '',
-        phone: phone ? phone.replace(/^Tel:\s*/i, '') : '',
+        storeName: storeInfo.name || 'Store',
+        address:   storeInfo.address || '',
+        phone:     storeInfo.phone || '',
         receiptId: receiptId,
-        date: dateIso,
-        total: total,
-        customer: customer,
-        items: items
+        date:      dateIso,
+        total:     total,
+        customer:  customer,
+        items:     items
     };
 }
 
-// ---------- Write the scrubbed copy to Firebase ----------
+// ---------- Publish public receipt to Firebase ----------
 function wdqPublish(code, data) {
     try {
         if (typeof firebase === 'undefined' || !firebase.database) return Promise.resolve(false);
@@ -143,17 +166,14 @@ function wdqPublish(code, data) {
     } catch (e) { return Promise.resolve(false); }
 }
 
-// ---------- Render the QR as a GIF data URL (thermal-printer friendly) ----------
+// ---------- Render QR ----------
 function wdqRenderQR(holder, url) {
-    wdqLoadLib().then(function (qrFactory) {
+    wdqLoadLibOnce().then(function (qrFactory) {
         try {
             var qr = qrFactory(0, 'M');
             qr.addData(url);
             qr.make();
-
-            // createDataURL(cellSize, margin) returns a GIF data URL.
             var dataUrl = qr.createDataURL(4, 2);
-
             holder.innerHTML = '';
             var img = document.createElement('img');
             img.src = dataUrl;
@@ -162,15 +182,15 @@ function wdqRenderQR(holder, url) {
             holder.appendChild(img);
         } catch (e) {
             console.error('[qr] render failed:', e);
-            holder.innerHTML = '<div style="font-size:9px;color:#991b1b;">QR unavailable</div>';
+            holder.innerHTML = '<div style="font-size:9px;color:#991b1b;">QR error</div>';
         }
     }).catch(function (e) {
         console.error('[qr] library failed:', e);
-        holder.innerHTML = '';
+        holder.innerHTML = '<div style="font-size:9px;color:#991b1b;">QR unavailable</div>';
     });
 }
 
-// ---------- Check whether a container is visible on screen ----------
+// ---------- Visibility check ----------
 function wdqIsVisible(el) {
     var node = el;
     while (node) {
@@ -190,48 +210,54 @@ var WDQ_TARGETS = [
     'wdp-printable'
 ];
 
-// ---------- Cache ----------
 var wdqDone = {};
 
-// ---------- Main per-container routine ----------
+// ---------- Inject per-container ----------
 function wdqInject(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
     if (!wdqIsVisible(container)) return;
 
-    var data = wdqScrapeReceipt(container);
-    if (!data) return;
+    // Skip if this container already shows a QR
+    if (container.querySelector('.wdq-qr-wrap')) {
+        // But if the receipt ID has changed, remove and reprocess
+        var existingId = wdqDone[containerId] && wdqDone[containerId].receiptId;
+        var currentId = wdqText(container.querySelector('#receipt-tx-id, #debt-receipt-tx-id, #refund-receipt-id, #waybill-id'));
+        if (existingId && currentId && existingId === currentId) return;
+        container.querySelector('.wdq-qr-wrap').remove();
+    }
 
-    if (wdqDone[containerId] && wdqDone[containerId].receiptId === data.receiptId) return;
+    // Fetch store info from Firebase (cached after first call), then build & publish
+    wdqFetchStoreInfo().then(function (storeInfo) {
+        var data = wdqScrapeReceipt(container, storeInfo);
+        if (!data) return;
+        if (wdqDone[containerId] && wdqDone[containerId].receiptId === data.receiptId) return;
 
-    var existing = container.querySelector('.wdq-qr-wrap');
-    if (existing) existing.remove();
+        var code = wdqRandomCode();
+        var url = wdqBuildVerifyUrl(code);
 
-    var code = wdqRandomCode();
-    var url = wdqBuildVerifyUrl(code);
+        var wrap = document.createElement('div');
+        wrap.className = 'wdq-qr-wrap';
+        wrap.style.cssText =
+            'text-align:center; margin-top:12px; padding-top:8px; ' +
+            'border-top:1px dashed #ccc; font-family:monospace;';
+        var holderId = 'wdq-qr-' + containerId;
+        wrap.innerHTML =
+            '<div style="font-size:9px; color:#555; letter-spacing:0.5px; margin-bottom:4px;">SCAN TO VERIFY</div>' +
+            '<div id="' + holderId + '" style="display:inline-block; padding:3px; background:#fff; min-width:140px; min-height:140px;"></div>' +
+            '<div style="font-size:9px; color:#888; margin-top:4px;">' + data.receiptId + '</div>';
 
-    var wrap = document.createElement('div');
-    wrap.className = 'wdq-qr-wrap';
-    wrap.style.cssText =
-        'text-align:center; margin-top:12px; padding-top:8px; ' +
-        'border-top:1px dashed #ccc; font-family:monospace;';
-    var holderId = 'wdq-qr-' + containerId;
-    wrap.innerHTML =
-        '<div style="font-size:9px; color:#555; letter-spacing:0.5px; margin-bottom:4px;">SCAN TO VERIFY</div>' +
-        '<div id="' + holderId + '" style="display:inline-block; padding:3px; background:#fff;"></div>' +
-        '<div style="font-size:9px; color:#888; margin-top:4px;">' + data.receiptId + '</div>';
+        container.appendChild(wrap);
 
-    container.appendChild(wrap);
+        var holder = document.getElementById(holderId);
+        if (holder) wdqRenderQR(holder, url);
 
-    var holder = document.getElementById(holderId);
-    if (holder) wdqRenderQR(holder, url);
-
-    wdqDone[containerId] = { receiptId: data.receiptId, code: code };
-
-    wdqPublish(code, data);
+        wdqDone[containerId] = { receiptId: data.receiptId, code: code };
+        wdqPublish(code, data);
+    });
 }
 
-// ---------- Scan all targets ----------
+// ---------- Scan all ----------
 function wdqScan() {
     WDQ_TARGETS.forEach(wdqInject);
 }
@@ -242,7 +268,14 @@ function wdqAttach() {
 }
 
 window.addEventListener('load', function () {
-    setTimeout(wdqAttach, 1200);
+    wdqLoadLibOnce().then(function () {
+        console.log('[qr] library ready');
+        wdqAttach();
+    }).catch(function (e) {
+        console.error('[qr] library could not be loaded from any CDN:', e);
+    });
+
+    setTimeout(wdqAttach, 1500);
     var obs = new MutationObserver(function () {
         if (window.__wdqSched) return;
         window.__wdqSched = true;
