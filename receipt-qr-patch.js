@@ -1,21 +1,10 @@
-// ==================== WISE DECISION RECEIPT QR CODE PATCH (v2) ====================
+// ==================== WISE DECISION RECEIPT QR CODE PATCH (v4) ====================
 // Load AFTER store-logo-patch.js.
 //
-// What this does:
-//   1. Detects when a receipt is displayed on screen
-//   2. Reads the receipt content from the DOM (store, total, items)
-//   3. Generates a short random public code (8 characters)
-//   4. Writes a scrubbed public copy to `publicReceipts/{code}` in Firebase
-//   5. Renders a QR pointing to verify.html?c={code} so customers can scan it
-//
-// The public copy contains ONLY:
-//   storeName, address, phone, receiptId, date, total, customer (name only), items[name,qty]
-//   NO customer phone, NO cost prices, NO internal notes, NO balance owed, NO profit.
+// v4 change: QR now encodes a FULL absolute URL (with domain) instead of a relative
+// path. Previously phones couldn't resolve "verify.html?c=xxx" and fell back to search.
 
-console.log("Wise Decision receipt-qr-patch.js — v2 loaded");
-
-// ---------- CONFIG ----------
-var WDQ_VERIFY_PATH = 'verify.html';   // relative to app.html on same origin
+console.log("Wise Decision receipt-qr-patch.js — v4 loaded");
 
 // ---------- Load QR library on demand ----------
 function wdqLoadLib() {
@@ -40,6 +29,16 @@ function wdqRandomCode() {
     return out;
 }
 
+// ---------- Build an absolute verify URL from the current page location ----------
+// Example: on https://ayoool.github.io/Wisedecision/app.html
+// returns  https://ayoool.github.io/Wisedecision/verify.html?c=xxxxxxxx
+function wdqBuildVerifyUrl(code) {
+    var origin = window.location.origin;              // e.g. https://ayoool.github.io
+    var path = window.location.pathname;              // e.g. /Wisedecision/app.html
+    var dir = path.replace(/\/[^\/]*$/, '/');         // e.g. /Wisedecision/
+    return origin + dir + 'verify.html?c=' + code;
+}
+
 // ---------- Text helpers ----------
 function wdqText(el) { return el ? String(el.textContent || '').trim() : ''; }
 function wdqNumFromText(s) {
@@ -50,29 +49,23 @@ function wdqNumFromText(s) {
 
 // ---------- Extract receipt data from the DOM ----------
 function wdqScrapeReceipt(container) {
-    // Store info
     var storeName = wdqText(container.querySelector('#receipt-store-name, #debt-receipt-store-name, #refund-receipt-store-name, #wdf-r-store, #wdp-r-store'));
     var address   = wdqText(container.querySelector('#receipt-store-address, #debt-receipt-store-address, #refund-receipt-store-address, #wdf-r-addr, #wdp-r-addr'));
     var phone     = wdqText(container.querySelector('#receipt-store-phone, #debt-receipt-store-phone, #refund-receipt-store-phone, #wdf-r-tel, #wdp-r-tel'));
 
-    // Receipt identifier
-    var idCandidates = [
-        '#receipt-tx-id', '#debt-receipt-tx-id', '#refund-receipt-id', '#waybill-id'
-    ];
+    var idCandidates = ['#receipt-tx-id', '#debt-receipt-tx-id', '#refund-receipt-id', '#waybill-id'];
     var receiptId = '';
     for (var i = 0; i < idCandidates.length && !receiptId; i++) {
         var t = wdqText(container.querySelector(idCandidates[i]));
         if (t && t !== '--' && !/000000/.test(t)) receiptId = t;
     }
     if (!receiptId) {
-        // Fallback: scan entire receipt text for a pattern
         var all = container.textContent || '';
         var m = all.match(/\b(WD-\d{6}|FS-\d{6}|RF-\d{6}|PMT-\d{6}|LW-\d{6})\b/);
         if (m) receiptId = m[1];
     }
-    if (!receiptId) return null;   // can't publicise a receipt without an ID
+    if (!receiptId) return null;
 
-    // Date
     var dateStr = wdqText(container.querySelector('#receipt-date, #debt-receipt-date, #refund-receipt-date, #waybill-date'));
     var dateIso = new Date().toISOString();
     if (dateStr && dateStr !== '--') {
@@ -80,18 +73,14 @@ function wdqScrapeReceipt(container) {
         if (!isNaN(parsed)) dateIso = parsed.toISOString();
     }
 
-    // Total
-    var totalStr = wdqText(container.querySelector('#receipt-grand-total, #debt-receipt-amount-paid, #refund-receipt-total, #wdp-r-body'));
+    var totalStr = wdqText(container.querySelector('#receipt-grand-total, #debt-receipt-amount-paid, #refund-receipt-total'));
     var total = wdqNumFromText(totalStr);
-    // Try harder for main POS: search for "TOTAL:" line
     if (!total) {
         var totalLine = (container.textContent || '').match(/TOTAL[:\s]+₦?([\d,]+\.?\d*)/i);
         if (totalLine) total = wdqNumFromText(totalLine[1]);
     }
 
-    // Items (best-effort — varies by receipt type)
     var items = [];
-    // Main POS items table
     var itemRows = container.querySelectorAll('#receipt-items-body tr, #refund-receipt-items-body tr');
     if (itemRows.length) {
         itemRows.forEach(function (row) {
@@ -106,7 +95,6 @@ function wdqScrapeReceipt(container) {
             }
         });
     }
-    // Fashion / Water receipts: lines inside the receipt body
     if (!items.length) {
         var bodyEl = container.querySelector('#wdf-r-body, #wdp-r-body');
         if (bodyEl) {
@@ -118,10 +106,8 @@ function wdqScrapeReceipt(container) {
         }
     }
 
-    // Customer name only (never phone)
     var customer = wdqText(container.querySelector('#debt-receipt-customer-name'));
     if (!customer) {
-        // Look for "Customer:" line in the receipt body
         var custLine = (container.textContent || '').match(/Customer:\s*([^\n]+)/i);
         if (custLine) customer = custLine[1].trim().split('·')[0].trim();
     }
@@ -157,25 +143,29 @@ function wdqPublish(code, data) {
     } catch (e) { return Promise.resolve(false); }
 }
 
-// ---------- Render the QR ----------
+// ---------- Render the QR as a GIF data URL (thermal-printer friendly) ----------
 function wdqRenderQR(holder, url) {
     wdqLoadLib().then(function (qrFactory) {
         try {
             var qr = qrFactory(0, 'M');
             qr.addData(url);
             qr.make();
-            holder.innerHTML = qr.createSvgTag({ cellSize: 3, margin: 1, scalable: true });
-            var svg = holder.querySelector('svg');
-            if (svg) {
-                svg.setAttribute('width', '96');
-                svg.setAttribute('height', '96');
-                svg.style.display = 'block';
-                svg.style.margin = '0 auto';
-            }
+
+            // createDataURL(cellSize, margin) returns a GIF data URL.
+            var dataUrl = qr.createDataURL(4, 2);
+
+            holder.innerHTML = '';
+            var img = document.createElement('img');
+            img.src = dataUrl;
+            img.alt = '';
+            img.style.cssText = 'display:block; margin:0 auto; width:140px; height:140px; image-rendering:pixelated;';
+            holder.appendChild(img);
         } catch (e) {
+            console.error('[qr] render failed:', e);
             holder.innerHTML = '<div style="font-size:9px;color:#991b1b;">QR unavailable</div>';
         }
-    }).catch(function () {
+    }).catch(function (e) {
+        console.error('[qr] library failed:', e);
         holder.innerHTML = '';
     });
 }
@@ -197,14 +187,14 @@ var WDQ_TARGETS = [
     'printable-refund-receipt-box',
     'printable-waybill-box',
     'wdf-printable',
-    'wdp-printable'
+    'wdp-printable`'
 ];
 
-// ---------- Cache: containerId -> { receiptId, code } ----------
+// --------- |- Cache --------- `-
 var wdqDone = {};
 
-// ---------- Main per-container routine ----------
-function wdqInject(containerId) {
+var// ---------- Main per-container routine ----------
+ urlfunction wdqInject(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
     if (!wdqIsVisible(container)) return;
@@ -212,18 +202,14 @@ function wdqInject(containerId) {
     var data = wdqScrapeReceipt(container);
     if (!data) return;
 
-    // Already handled this exact receipt in this container?
     if (wdqDone[containerId] && wdqDone[containerId].receiptId === data.receiptId) return;
 
-    // Remove any stale QR from a previous receipt
     var existing = container.querySelector('.wdq-qr-wrap');
     if (existing) existing.remove();
 
-    // Generate a fresh code and try to publish
     var code = wdqRandomCode();
-    var url = WDQ_VERIFY_PATH + '?c=' + code;
+    var url = wdqBuildVerifyUrl(code);   // ← v4: builds full absolute URL
 
-    // Create the wrapper with a placeholder
     var wrap = document.createElement('div');
     wrap.className = 'wdq-qr-wrap';
     wrap.style.cssText =
@@ -242,7 +228,6 @@ function wdqInject(containerId) {
 
     wdqDone[containerId] = { receiptId: data.receiptId, code: code };
 
-    // Publish asynchronously — the QR is already on screen with the URL.
     wdqPublish(code, data);
 }
 
