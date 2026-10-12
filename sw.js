@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v8';
+const CACHE = 'wd-shell-v10';
 const PRECACHE = [
     './app.html',
     './style.css',
@@ -26,7 +26,11 @@ const PRECACHE = [
     './phone-sale-patch.js',
     './materials-patch.js',
     './materials-polish-patch.js',
-    './phone-extras-patch.js'
+    './phone-extras-patch.js',
+    './fashion-patch.js',
+    './fashion-layaway-patch.js',
+    './fashion-reserve-patch.js',
+    './fashion-barcode-patch.js'
 ];
 
 self.addEventListener('install', event => {
@@ -72,9 +76,10 @@ self.addEventListener('fetch', event => {
     const url = new URL(request.url);
     const sameOrigin = url.origin === self.location.origin;
     const isFirebaseSdk = url.hostname === 'www.gstatic.com';
-    if (!sameOrigin && !isFirebaseSdk) return;   // never touch database traffic
+    const isJsBarcodeCdn = url.hostname === 'cdn.jsdelivr.net';   // for offline barcode library
+    if (!sameOrigin && !isFirebaseSdk && !isJsBarcodeCdn) return;   // never touch database traffic
 
-    if (isFirebaseSdk) {
+    if (isFirebaseSdk || isJsBarcodeCdn) {
         // Versioned library files never change — serve from cache, fetch once if missing
         event.respondWith(
             caches.match(request).then(hit => hit || fetch(request).then(response => {
