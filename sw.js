@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v15';
+const CACHE = 'wd-shell-v16';
 const PRECACHE = [
     './app.html',
     './style.css',
@@ -33,7 +33,9 @@ const PRECACHE = [
     './fashion-categories-patch.js',
     './fashion-barcode-patch.js',
     './store-logo-patch.js',
-    'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js'
+    './receipt-qr-patch.js',
+    'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
+    'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js'
 ];
 
 self.addEventListener('install', event => {
@@ -79,7 +81,7 @@ self.addEventListener('fetch', event => {
     const url = new URL(request.url);
     const sameOrigin = url.origin === self.location.origin;
     const isFirebaseSdk = url.hostname === 'www.gstatic.com';
-    const isJsBarcodeCdn = url.hostname === 'cdn.jsdelivr.net';   // for offline barcode library
+    const isJsBarcodeCdn = url.hostname === 'cdn.jsdelivr.net';   // for offline barcode & QR libraries
     if (!sameOrigin && !isFirebaseSdk && !isJsBarcodeCdn) return;   // never touch database traffic
 
     if (isFirebaseSdk || isJsBarcodeCdn) {
