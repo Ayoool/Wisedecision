@@ -1,10 +1,10 @@
-// ==================== WISE DECISION RECEIPT QR CODE PATCH (v4) ====================
+// ==================== WISE DECISION RECEIPT QR CODE PATCH (v5) ====================
 // Load AFTER store-logo-patch.js.
 //
-// v4 change: QR now encodes a FULL absolute URL (with domain) instead of a relative
-// path. Previously phones couldn't resolve "verify.html?c=xxx" and fell back to search.
+// v5: fixed syntax errors (mangled wdqInject declaration, stray backtick in targets).
+// v4: QR encodes a FULL absolute URL (with domain) instead of a relative path.
 
-console.log("Wise Decision receipt-qr-patch.js — v4 loaded");
+console.log("Wise Decision receipt-qr-patch.js — v5 loaded");
 
 // ---------- Load QR library on demand ----------
 function wdqLoadLib() {
@@ -33,9 +33,9 @@ function wdqRandomCode() {
 // Example: on https://ayoool.github.io/Wisedecision/app.html
 // returns  https://ayoool.github.io/Wisedecision/verify.html?c=xxxxxxxx
 function wdqBuildVerifyUrl(code) {
-    var origin = window.location.origin;              // e.g. https://ayoool.github.io
-    var path = window.location.pathname;              // e.g. /Wisedecision/app.html
-    var dir = path.replace(/\/[^\/]*$/, '/');         // e.g. /Wisedecision/
+    var origin = window.location.origin;
+    var path = window.location.pathname;
+    var dir = path.replace(/\/[^\/]*$/, '/');
     return origin + dir + 'verify.html?c=' + code;
 }
 
@@ -187,14 +187,14 @@ var WDQ_TARGETS = [
     'printable-refund-receipt-box',
     'printable-waybill-box',
     'wdf-printable',
-    'wdp-printable`'
+    'wdp-printable'
 ];
 
-// --------- |- Cache --------- `-
+// ---------- Cache ----------
 var wdqDone = {};
 
-var// ---------- Main per-container routine ----------
- urlfunction wdqInject(containerId) {
+// ---------- Main per-container routine ----------
+function wdqInject(containerId) {
     var container = document.getElementById(containerId);
     if (!container) return;
     if (!wdqIsVisible(container)) return;
@@ -208,7 +208,7 @@ var// ---------- Main per-container routine ----------
     if (existing) existing.remove();
 
     var code = wdqRandomCode();
-    var url = wdqBuildVerifyUrl(code);   // ← v4: builds full absolute URL
+    var url = wdqBuildVerifyUrl(code);
 
     var wrap = document.createElement('div');
     wrap.className = 'wdq-qr-wrap';
