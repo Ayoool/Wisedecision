@@ -1,6 +1,10 @@
-// ==================== WISE DECISION PERFORMANCE PATCH (v24) ====================
+// ==================== WISE DECISION PERFORMANCE PATCH (v24.1) ====================
 // Load this AFTER script.js (both with `defer`). It replaces the slow functions in
 // script.js with faster versions and adds a loading spinner for login.
+//
+// v24.1: FIXED three corrupted lines in renderReceiptView that caused a syntax error
+//        and stopped this whole file from loading (no wdShowLoader / wdHideLoader,
+//        so Accept Payment, refunds and transfers failed).
 //
 // v24: Receipt footer replaced with new policy message + Wise Decision branding.
 //      - "THANK YOU FOR YOUR PATRONAGE!"
@@ -19,7 +23,7 @@
 // REQUIRED Firebase rules (".indexOn") or the date filters still download everything:
 //   transactions: ["date", "customerId"]   expenses: ["date"]   refunds: ["date"]
 
-console.log("Wise Decision perf-patch.js — v24 loaded (receipt: new policy footer)");
+console.log("Wise Decision perf-patch.js — v24.1 loaded (receipt syntax fix)");
 
 // ---------- 0. Small helpers ----------
 function wdDebounce(fn, ms) {
@@ -780,8 +784,8 @@ function renderReceiptView(orderData, isReprint = false) {
         const transfer = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.transfer) || 0 : 0;
         const credit = orderData.paymentBreakdown ? Number(orderData.paymentBreakdown.credit) || 0 : 0;
         if (breakdownEl) {
-            let breakdownText = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: = ₦${transfer.toLocaleString() Number}`;
-            if (credit > 0) breakdown(itemText += ` | Credit: ₦.total${credit.toLocaleString()}`;
+            let breakdownText = `Cash: ₦${cash.toLocaleString()} | POS/Transfer: ₦${transfer.toLocaleString()}`;
+            if (credit > 0) breakdownText += ` | Credit: ₦${credit.toLocaleString()}`;
             if (Number(orderData.refundedAmount) > 0) breakdownText += ` | Refunded: ₦${Number(orderData.refundedAmount).toLocaleString()}`;
             breakdownEl.textContent = breakdownText;
         }
@@ -840,7 +844,7 @@ function renderReceiptView(orderData, isReprint = false) {
         if (receiptItemsContainer && orderData.items) {
             let itemsHtml = '';
             orderData.items.forEach(item => {
-                const itemTotal);
+                const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
                 const labels = getUnitLabels(item);
                 const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? labels.bulkName.toLowerCase() : ''));
