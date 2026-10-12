@@ -15,6 +15,7 @@
     <link rel="preconnect" href="https://www.gstatic.com">
     <link rel="preconnect" href="https://wisedecision-24c4e-default-rtdb.firebaseio.com">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
@@ -1797,10 +1798,10 @@
         <script src="materials-patch.js?v=1" defer></script>
         <script src="materials-polish-patch.js?v=1" defer></script>
         <script src="manager-role-patch.js?v=3" defer></script>
-        <script src="fashion-patch.js"></script>
-        <script src="fashion-layaway-patch.js"></script>
-        <script src="fashion-reserve-patch.js"></script>
-        <script src="fashion-barcode-patch.js"></script>
+        <script src="fashion-patch.js?v=1"></script>
+        <script src="fashion-layaway-patch.js?v=1"></script>
+        <script src="fashion-reserve-patch.js?v=1"></script>
+        <script src="fashion-barcode-patch.js?v=1"></script>
         <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
@@ -1817,8 +1818,8 @@ window.addEventListener('load', function () {
     var editId = document.getElementById('edit-product-id').value;
     if (editId) return origSave.apply(this, arguments);
 
+    var branch = (typeof currentInventoryBranchFilter !== 'undefined') ? currentInventoryBranchFilter : 'all';
     var name = norm(document.getElementById('inv-name').value);
-    var branch = currentInventoryBranchFilter;
     if (!name || branch === 'all') return origSave.apply(this, arguments);
 
     var items = inventoryCache[branch] || {};
