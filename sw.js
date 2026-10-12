@@ -1,4 +1,4 @@
-const CACHE = 'wd-shell-v17';
+const CACHE = 'wd-shell-v19';
 const PRECACHE = [
     './app.html',
     './verify.html',
