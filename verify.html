@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Verify Receipt — Wise Decision</title>
+
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://wisedecision-24c4e-default-rtdb.firebaseio.com">
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
+
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            color: #0f172a;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 45px rgba(15,23,42,0.12);
+            max-width: 440px;
+            width: 100%;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .shield {
+            width: 72px; height: 72px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: linear-gradient(135deg,#16a34a 0%,#15803d 100%);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 40px; color: #fff;
+            box-shadow: 0 10px 20px rgba(22,163,74,0.3);
+        }
+        .shield.warn { background: linear-gradient(135deg,#dc2626 0%,#991b1b 100%); box-shadow: 0 10px 20px rgba(220,38,38,0.3); }
+        h1 { margin: 0 0 6px 0; font-size: 20px; letter-spacing: 0.2px; }
+        .sub { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+        .store-name { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 4px; letter-spacing: 0.3px; }
+        .store-meta { font-size: 12px; color: #64748b; line-height: 1.6; margin-bottom: 22px; }
+        .divider { height: 1px; background: #e2e8f0; margin: 20px 0; }
+        .row { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; text-align: left; }
+        .row .label { color: #64748b; }
+        .row .value { font-weight: 600; text-align: right; max-width: 60%; word-break: break-word; }
+        .items { text-align: left; font-size: 13px; color: #334155; margin-top: 8px; }
+        .items .item { padding: 6px 0; border-bottom: 1px dashed #e2e8f0; }
+        .items .item:last-child { border-bottom: none; }
+        .total-box {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-top: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .total-box .lbl { font-size: 12px; color: #166534; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .total-box .amt { font-size: 22px; font-weight: 800; color: #15803d; }
+        .footer { font-size: 11px; color: #94a3b8; margin-top: 22px; line-height: 1.6; }
+        .footer strong { color: #0f172a; }
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top-color: #0284c7;
+            border-radius: 50%;
+            width: 36px; height: 36px;
+            animation: spin 0.9s linear infinite;
+            margin: 30px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .err-msg { color: #991b1b; font-size: 13px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="card" id="card">
+        <div class="spinner" id="spinner"></div>
+        <div class="sub">Verifying receipt...</div>
+    </div>
+
+    <script>
+    (function () {
+        var dbUrl = 'https://wisedecision-24c4e-default-rtdb.firebaseio.com';
+        var code = new URLSearchParams(location.search).get('c');
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function money(n) {
+            return '₦' + (Number(n) || 0).toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+        function prettyDate(iso) {
+            var d = new Date(iso);
+            if (isNaN(d)) return '—';
+            return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' +
+                   d.toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function showError(msg) {
+            document.getElementById('card').innerHTML =
+                '<div class="shield warn">✕</div>' +
+                '<h1>Not Verified</h1>' +
+                '<div class="sub">We could not verify this receipt.</div>' +
+                '<div class="err-msg">' + esc(msg) + '</div>' +
+                '<div class="footer">If you believe this is an error, please contact the store where the purchase was made.</div>';
+        }
+
+        if (!code) { showError('No receipt code was provided in the link.'); return; }
+
+        window.addEventListener('load', function () {
+            if (typeof firebase === 'undefined') {
+                showError('Could not reach the verification service.');
+                return;
+            }
+            try {
+                firebase.initializeApp({ databaseURL: dbUrl });
+            } catch (e) { /* already initialized */ }
+
+            firebase.database().ref('publicReceipts/' + code).once('value')
+                .then(function (snap) {
+                    var r = snap.val();
+                    if (!r) { showError('This receipt code was not found. It may be a fake receipt.'); return; }
+                    render(r, code);
+                })
+                .catch(function (e) {
+                    showError('Verification service is temporarily unavailable.');
+                });
+        });
+
+        function render(r, code) {
+            var items = r.items || [];
+            var itemsHtml = items.length
+                ? items.map(function (it) {
+                    return '<div class="item"><strong>' + esc(it.name) + '</strong>' +
+                        (it.qty ? ' <span style="color:#64748b;">× ' + esc(it.qty) + '</span>' : '') +
+                        '</div>';
+                }).join('')
+                : '<div class="item" style="color:#94a3b8;">No items recorded</div>';
+
+            document.getElementById('card').innerHTML =
+                '<div class="shield">✓</div>' +
+                '<h1>Verified Receipt</h1>' +
+                '<div class="sub">This receipt is genuine and was issued by the store below.</div>' +
+                '<div class="store-name">' + esc(r.storeName || 'Store') + '</div>' +
+                (r.address ? '<div class="store-meta">' + esc(r.address) + '</div>' : '') +
+                (r.phone ? '<div class="store-meta">Tel: ' + esc(r.phone) + '</div>' : '') +
+                '<div class="divider"></div>' +
+                '<div class="row"><span class="label">Receipt No.</span><span class="value">' + esc(r.receiptId || code) + '</span></div>' +
+                '<div class="row"><span class="label">Date issued</span><span class="value">' + esc(prettyDate(r.date)) + '</span></div>' +
+                (r.customer ? '<div class="row"><span class="label">Customer</span><span class="value">' + esc(r.customer) + '</span></div>' : '') +
+                '<div class="divider"></div>' +
+                '<div style="text-align:left; font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; font-weight:700;">Items</div>' +
+                '<div class="items">' + itemsHtml + '</div>' +
+                '<div class="total-box"><span class="lbl">Total</span><span class="amt">' + money(r.total) + '</span></div>' +
+                '<div class="footer">Verified by <strong>Wise Decision Cloud POS</strong><br>Scanned code: ' + esc(code) + '</div>';
+        }
+    })();
+    </script>
+</body>
+</html>
