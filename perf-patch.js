@@ -1,7 +1,9 @@
-// ==================== WISE DECISION PERFORMANCE PATCH (v24.1) ====================
+// ==================== WISE DECISION PERFORMANCE PATCH (v24.3) ====================
 // Load this AFTER script.js (both with `defer`). It replaces the slow functions in
 // script.js with faster versions and adds a loading spinner for login.
 //
+// v24.3: Receipt footer restyled (centered, divided sections, clean spacing).
+// v24.2: Receipt footer changed (check items before leaving; no refund policy line).
 // v24.1: FIXED three corrupted lines in renderReceiptView that caused a syntax error
 //        and stopped this whole file from loading (no wdShowLoader / wdHideLoader,
 //        so Accept Payment, refunds and transfers failed).
@@ -23,7 +25,7 @@
 // REQUIRED Firebase rules (".indexOn") or the date filters still download everything:
 //   transactions: ["date", "customerId"]   expenses: ["date"]   refunds: ["date"]
 
-console.log("Wise Decision perf-patch.js — v24.1 loaded (receipt syntax fix)");
+console.log("Wise Decision perf-patch.js — v24.3 loaded (professional receipt footer)");
 
 // ---------- 0. Small helpers ----------
 function wdDebounce(fn, ms) {
@@ -864,10 +866,14 @@ function renderReceiptView(orderData, isReprint = false) {
         if (printableBox && !printableBox.querySelector('.receipt-promo-footer')) {
             const promoDiv = document.createElement('div');
             promoDiv.className = 'receipt-promo-footer';
-            promoDiv.style.cssText = 'text-align: center; margin-top: 15px; font-size: 11px; font-weight: bold; border-top: 1px dashed #ccc; padding-top: 10px;';
-            promoDiv.innerHTML = '<div style="font-weight:bold; margin-bottom:6px;">THANK YOU FOR YOUR PATRONAGE!</div>' +
-                '<div style="font-weight:normal; font-size:9px; line-height:1.4; margin-bottom:8px;">Goods purchased are carefully checked and are non-refundable. Please confirm your items and receipt before leaving the store.</div>' +
-                '<div style="font-weight:bold; font-size:10px;">Powered by WISE DECISION CLOUD POS</div>';
+            promoDiv.style.cssText = 'text-align: center; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #000; color: #000;';
+            promoDiv.innerHTML =
+                '<div style="font-size: 13px; font-weight: 800; letter-spacing: 1px; line-height: 1.3;">THANK YOU FOR YOUR PATRONAGE!</div>' +
+                '<div style="margin: 8px auto; width: 60%; border-top: 1px solid #000;"></div>' +
+                '<div style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.5;">PLEASE CHECK YOUR ITEMS BEFORE<br>LEAVING THE STORE.</div>' +
+                '<div style="margin: 10px 0 8px 0; border-top: 1px dashed #000;"></div>' +
+                '<div style="font-size: 8px; font-weight: 700; letter-spacing: 1.5px;">POWERED BY</div>' +
+                '<div style="font-size: 11px; font-weight: 900; letter-spacing: 1px; margin-top: 2px;">WISE DECISION CLOUD POS</div>';
             printableBox.appendChild(promoDiv);
         }
 
