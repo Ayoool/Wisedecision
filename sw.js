@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v10';
+const CACHE = 'wd-shell-v12';
 const PRECACHE = [
     './app.html',
     './style.css',
@@ -30,7 +30,9 @@ const PRECACHE = [
     './fashion-patch.js',
     './fashion-layaway-patch.js',
     './fashion-reserve-patch.js',
-    './fashion-barcode-patch.js'
+    './fashion-categories-patch.js',
+    './fashion-barcode-patch.js',
+    'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js'
 ];
 
 self.addEventListener('install', event => {
