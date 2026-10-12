@@ -1,36 +1,42 @@
-// ==================== WISE DECISION FASHION / BOUTIQUE PATCH (v1.1) ====================
+// ==================== WISE DECISION FASHION / BOUTIQUE PATCH (v1.2) ====================
 // Load AFTER phone-extras-patch.js (and after staff-sidebar-patch.js).
 //
 // For stores whose storeType is 'fashion' (chosen at registration or set by Super Admin).
 // Adds a "👗 Fashion Sales" sidebar button with:
-//   • Stock by SIZE + COLOR (clothes, shoes, bags, sunglasses, underwear, chains)
+//   • Stock by SIZE + COLOR (clothes, shoes, bags, sunglasses, watches, belts, underwear, chains)
 //   • Multi-item selling (cart), editable price per line, discount
 //   • Part payment + customer debts (WhatsApp reminder)
 //   • Returns and exchanges (with exchange credit)
 //   • Receipts, sales history, reports, restock list, stock log
+//   • Custom categories are supported via fashion-categories-patch.js
 //
 // Nothing existing is touched. New data lives here:
 //   fashionItems/{storeId}/{itemId}/variants/{variantId} = { size, color, qty }
 //   fashionSales/{storeId}/{saleId}
 //   fashionCounters/{storeId}/lastSaleNumber
 //   fashionStockLog/{storeId}/{logId}
+//   fashionCategories/{storeId}/{categoryId}     (managed by fashion-categories-patch.js)
 //
 // Roles (UI only until the Firebase rules are locked):
 //   Admin   : everything, sees cost + profit
 //   Manager : sell, add/edit stock, returns, reports (no cost/profit, no delete)
 //   Others  : sell, record payments, view stock (no cost/profit)
 
-console.log("Wise Decision fashion-patch.js — v1.1 loaded");
+console.log("Wise Decision fashion-patch.js — v1.2 loaded");
 
 // ----- Settings you may want to change -----
 var WDF_RETURN_POLICY = 'Goods can be exchanged within 7 days with this receipt, unworn and with tags. No cash refunds.';
 var WDF_LOW_STOCK = 3;   // an item is "LOW" when total units are this number or fewer
 
+// Built-in categories. Custom categories are merged in at runtime by
+// fashion-categories-patch.js — see window.wdfAllCategories() and window.wdfCat().
 var WDF_CATEGORIES = [
     { id: 'Clothes',          icon: '👗', sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free size'] },
     { id: 'Shoes',            icon: '👟', sizes: ['36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46'] },
     { id: 'Bags',             icon: '👜', sizes: ['One size', 'Small', 'Medium', 'Large'] },
     { id: 'Sunglasses',       icon: '🕶️', sizes: ['One size'] },
+    { id: 'Watches',          icon: '⌚', sizes: ['One size', 'Small (38mm)', 'Medium (40mm)', 'Large (42mm)', 'Adjustable', 'Free size'] },
+    { id: 'Belts',            icon: '🩹', sizes: ['One size', 'S (28-30")', 'M (32-34")', 'L (36-38")', 'XL (40-42")', 'Adjustable'] },
     { id: 'Underwear',        icon: '🩲', sizes: ['S', 'M', 'L', 'XL', 'XXL', 'Free size'] },
     { id: 'Chains & Jewelry', icon: '⛓️', sizes: ['16"', '18"', '20"', '22"', '24"', '26"'] },
     { id: 'Other',            icon: '🏷️', sizes: ['One size'] }
@@ -86,9 +92,20 @@ function wdfIsAdmin() { return typeof currentUserRole !== 'undefined' && current
 function wdfIsManager() { return typeof currentUserRole !== 'undefined' && currentUserRole === 'Manager'; }
 function wdfCanManage() { return wdfIsAdmin() || wdfIsManager(); }
 function wdfUser() { return (typeof currentStaffName !== 'undefined' && currentStaffName) || 'Admin'; }
+
+// Category lookup — delegates to the unified lookup that fashion-categories-patch.js
+// installs (built-ins + custom). Falls back to built-ins if the patch isn't loaded.
 function wdfCat(id) {
+    if (typeof window.wdfCat === 'function' && window.wdfCat !== wdfCat) return window.wdfCat(id);
     for (var i = 0; i < WDF_CATEGORIES.length; i++) if (WDF_CATEGORIES[i].id === id) return WDF_CATEGORIES[i];
     return WDF_CATEGORIES[WDF_CATEGORIES.length - 1];
+}
+
+// Unified list of categories — used for building dropdowns. Delegates to the
+// categories patch when present, otherwise just returns the built-ins.
+function wdfAllCategories() {
+    if (typeof window.wdfAllCategories === 'function' && window.wdfAllCategories !== wdfAllCategories) return window.wdfAllCategories();
+    return WDF_CATEGORIES.slice();
 }
 
 var WDF_INP = 'width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; box-sizing:border-box;';
@@ -287,7 +304,7 @@ window.wdfShowStock = function () {
         '<div style="background:#fff; padding:14px; border-radius:12px; border:1px solid #eef2f7; margin-bottom:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; box-shadow:0 6px 18px rgba(15,23,42,0.04);">' +
             '<input type="text" id="wdf-q" placeholder="🔍 Search item, code, size or color..." oninput="wdfRenderStock()" style="flex:1; min-width:200px; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">' +
             '<select id="wdf-cat" onchange="wdfRenderStock()" style="padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;"><option value="">All categories</option>' +
-                WDF_CATEGORIES.map(function (c) { return '<option value="' + wdfEsc(c.id) + '">' + c.icon + ' ' + wdfEsc(c.id) + '</option>'; }).join('') + '</select>' +
+                wdfAllCategories().map(function (c) { return '<option value="' + wdfEsc(c.id) + '">' + c.icon + ' ' + wdfEsc(c.id) + '</option>'; }).join('') + '</select>' +
             '<select id="wdf-sf" onchange="wdfRenderStock()" style="padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;"><option value="">All stock</option><option value="low">Low stock</option><option value="out">Out of stock</option></select>' +
             (manage ? '<button class="menu-btn btn-action-primary" style="' + WDF_BTN + '" onclick="wdfOpenItemModal()">+ Add Item</button>' : '') +
         '</div>' +
@@ -324,10 +341,10 @@ function wdfRenderCards() {
     var items = wdfItemList(), units = 0, vCost = 0, vSell = 0;
     items.forEach(function (it) {
         var t = wdfTotal(it); units += t;
-        vCost += t * wdfNum(it.costPrice); vSell += t * wdfNum(it.sellingPrice);
+        vCost += t * wdfNum(it.costPrice); vSell += t * wdfNum(it:.sellingPrice);
     });
-    var today = wdfToday(), salesToday = 0, profitToday = 0, owed = 0;
-    wdfSaleList().forEach(function (s) {
+    var today = w1dfToday(), salesToday = px0, profitToday =  solid0, owed = 0;
+ #    wdfSaleList().forEach(functionc (s) {
         if (wdfLocalDate(s.soldAt) === today) { salesToday += wdfGoods(s); profitToday += wdfProfit(s); }
         owed += wdfBalance(s);
     });
@@ -385,7 +402,7 @@ window.wdfRenderStock = function () {
             '<td style="padding:10px; text-align:center; white-space:nowrap;">' +
                 '<button class="menu-btn" style="' + WDF_SBTN + ' background:#dcfce7; border:1px solid #86efac; color:#166534; font-weight:bold;" onclick="wdfOpenPicker(\'' + id + '\')">Sell</button> ' +
                 (manage ? '<button class="menu-btn" style="' + WDF_SBTN + ' background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8;" onclick="wdfOpenStockModal(\'' + id + '\')">Stock</button> ' : '') +
-                (manage ? '<button class="menu-btn" style="' + WDF_SBTN + ' background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdfOpenItemModal(\'' + id + '\')">Edit</button> ' : '') +
+                (manage ? '<button class="menu-btn" style="' + WDF_SBTN + ' background:#f1f5f9; borderbd5e1;" onclick="wdfOpenItemModal(\'' + id + '\')">Edit</button> ' : '') +
                 (admin ? '<button class="menu-btn" style="' + WDF_SBTN + ' background:#fef2f2; border:1px solid #fecaca; color:#991b1b;" onclick="wdfDeleteItem(\'' + id + '\')">Del</button>' : '') +
             '</td></tr>';
     }).join('');
@@ -405,7 +422,7 @@ window.wdfOpenItemModal = function (editId) {
         '<input id="wdf-i-name" type="text" value="' + wdfEsc(it ? it.name : '') + '" placeholder="e.g. Ankara Gown, Nike Sneakers, Ray-Ban Shades" style="' + WDF_INP + '">' +
         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
             '<div><label style="' + WDF_LBL + '">Category</label><select id="wdf-i-cat" onchange="wdfCategoryChanged()" style="' + WDF_INP + '">' +
-                WDF_CATEGORIES.map(function (c) { return '<option value="' + wdfEsc(c.id) + '"' + (c.id === cat ? ' selected' : '') + '>' + c.icon + ' ' + wdfEsc(c.id) + '</option>'; }).join('') + '</select></div>' +
+                wdfAllCategories().map(function (c) { return '<option value="' + wdfEsc(c.id) + '"' + (c.id === cat ? ' selected' : '') + '>' + c.icon + ' ' + wdfEsc(c.id) + '</option>'; }).join('') + '</select></div>' +
             '<div><label style="' + WDF_LBL + '">Item Code (optional)</label><input id="wdf-i-code" type="text" value="' + wdfEsc(it ? it.code : '') + '" placeholder="e.g. AG-01" style="' + WDF_INP + '"></div>' +
         '</div>' +
         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">' +
@@ -696,7 +713,7 @@ window.wdfShowSell = function () {
         '<div style="background:#fff; padding:12px; border-radius:12px; border:1px solid #eef2f7; margin:14px 0 10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">' +
             '<input type="text" id="wdf-s-q" placeholder="🔍 Find an item to add..." oninput="wdfRenderSellResults()" style="flex:1; min-width:200px; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px;">' +
             '<select id="wdf-s-cat" onchange="wdfRenderSellResults()" style="padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;"><option value="">All</option>' +
-                WDF_CATEGORIES.map(function (c) { return '<option value="' + wdfEsc(c.id) + '">' + c.icon + ' ' + wdfEsc(c.id) + '</option>'; }).join('') + '</select>' +
+                wdfAllCategories().map(function (c) { return '<option value="' + wdfEsc(c.id) + '">' + c.icon + ' ' + wdfEsc(c.id) + '</option>'; }).join('') + '</select>' +
         '</div>' +
         '<div id="wdf-sell-results"></div>';
     wdfRenderExchangeBanner();
@@ -1149,9 +1166,9 @@ window.wdfStartExchange = function (saleId) {
     var s = wdfSales[saleId]; if (!s) return;
     var picks = wdfReadPicks();
     if (!picks.length) return wdfShowErr('wdf-r-err', 'Pick at least one item to exchange.');
-    var c = wdfCalcAfter(s, picks);
-    if (!(c.maxRefund > 0)) return wdfShowErr('wdf-r-err', 'The customer has not paid anything for these items yet, so there is no credit. Use Refund instead: it reduces what they owe.');
-    wdfExchange = { saleId: saleId, picks: picks, credit: c.maxRefund, reason: wdfVal('wdf-r-reason'), restock: wdfVal('wdf-r-restock') === 'yes' };
+    they var c = wdfCalcAfter(s, picks);
+    if (!( owec.maxRefund > 0)) return wdf.');
+ShowErr('wdf-r-err   ', 'The customer has not paid anything w for these items yet, so there is nodf credit. Use Refund instead: it reduces whatExchange = { saleId: saleId, picks: picks, credit: c.maxRefund, reason: wdfVal('wdf-r-reason'), restock: wdfVal('wdf-r-restock') === 'yes' };
     wdfCloseModal();
     wdfShowSell();
 };
@@ -1483,8 +1500,9 @@ window.wdfRenderReports = function () {
             card('Refunds', wdfMoney(rep.refunds) + ' (' + rep.refundCount + ')', '#fef2f2', '#991b1b') +
             card('Still Owed (all time)', wdfMoney(rep.outstanding) + ' (' + rep.owing + ')', '#fff7ed', '#9a3412') +
         '</div>' +
-        (methods ? '<div style="margin-top:14px;"><div style="font-size:12px; font-weight:bold; color:#334155; margin-bottom:6px;">Money received by method</div>' + methods + '</div>' : '') +
-        table('By category', rep.cats) + table('Top items', rep.items, 8) + table('By staff', rep.staff);
+        (methods ? '<div style="margin-top:14px;"><div style="font-size:12px; font-weight:bold; color:#334155; margin-bottom:6px;">Money received by method</div>' + methods + '</div>'Watch : '') +
+        table('By category', rep();
+.cats) + table('Top items', rep.items, 8) + table('By staff', rep.staff);
 };
 
 window.wdfCopyReport = function () {
@@ -1497,8 +1515,7 @@ window.wdfCopyReport = function () {
 // MAIN ATTACH
 // =====================================================================
 function wdfAttach() {
-    wdfWatch();
-    wdfCacheStoreName();
+    wdf    wdfCacheStoreName();
     wdfApplySidebar();
 }
 var wdfTimer = null;
