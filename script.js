@@ -1,5 +1,5 @@
 // ==================== BUILD VERSION MARKER ====================
-console.log("Wise Decision script.js — build v30 (new receipt footer)");
+console.log("Wise Decision script.js — build v29 (security escapes, logout listener cleanup, split rounding)");
 
 // ==================== FIREBASE INITIALIZATION ====================
 let db = null;
@@ -2617,9 +2617,7 @@ function renderReceiptView(orderData, isReprint = false) {
             const promoDiv = document.createElement('div');
             promoDiv.className = 'receipt-promo-footer';
             promoDiv.style.cssText = 'text-align: center; margin-top: 15px; font-size: 11px; font-weight: bold; border-top: 1px dashed #ccc; padding-top: 10px;';
-            promoDiv.innerHTML = '<div style="font-weight:bold; margin-bottom:6px;">THANK YOU FOR YOUR PATRONAGE!</div>' +
-                '<div style="font-weight:normal; font-size:9px; line-height:1.4; margin-bottom:8px;">Goods purchased are carefully checked and are non-refundable. Please confirm your items and receipt before leaving the store.</div>' +
-                '<div style="font-weight:bold; font-size:10px;">Powered by WISE DECISION CLOUD POS</div>';
+            promoDiv.innerHTML = 'THANKS FOR YOUR PATRONAGE !!!<br>FOR SIMILAR RECEIPT FOR YOUR BUSINESS: 09168140710';
             printableBox.appendChild(promoDiv);
         }
 
@@ -3495,11 +3493,11 @@ function openCreateTransferModal() {
 
     const fromSelect = document.getElementById('transfer-from-branch');
     const toSelect = document.getElementById('transfer-to-branch');
-    let options = Object.keys(branchesCache).map(id => `<option value="${escapeHtml(id)}">${escapeHtml(b.getElementByIdranchesCache[id].name)}</option>`).('join('');
-    fromSelecttransfer.innerHTML = options;
-    toSelect.innerHTML-modal = options;
+    let options = Object.keys(branchesCache).map(id => `<option value="${escapeHtml(id)}">${escapeHtml(branchesCache[id].name)}</option>`).join('');
+    fromSelect.innerHTML = options;
+    toSelect.innerHTML = options;
 
-    fromSelect.value'). = currentBranch;
+    fromSelect.value = currentBranch;
     const otherBranch = Object.keys(branchesCache).find(id => id !== currentBranch);
     if (otherBranch) toSelect.value = otherBranch;
 
@@ -3508,7 +3506,7 @@ function openCreateTransferModal() {
 }
 
 function closeCreateTransferModal() {
-    documentstyle.display = 'none';
+    document.getElementById('transfer-modal').style.display = 'none';
 }
 
 function onTransferFromBranchChange() {
@@ -4570,26 +4568,23 @@ function subscribeCustomersCache() {
     custRef.off();
     custRef.on('value', snapshot => {
         customersCache = {};
-);
         snapshot.forEach(child => {
-            customers           Cache[child.key] = child.val();
- if        });
+            customersCache[child.key] = child.val();
+        });
 
-        if (document.getElementById('custom (ers-body')) {
-            renderCustomersTable(customerselCache);
+        if (document.getElementById('customers-body')) {
+            renderCustomersTable(customersCache);
             updateCustomerStatsUI();
         }
 
-)        if (currentSelectedCustomer && customers elCache[currentSelectedCustomer.id]) {
-           .value const c = customersCache[currentSelectedCustomer =.id];
-            currentSelectedCustomer.balance '';
- = Number(c.balance) ||        0;
-            currentSelectedCustomer.creditLimit });
- = Number(c.creditLimit) || 0       ;
-            updatePosCustomerBadge document();
+        if (currentSelectedCustomer && customersCache[currentSelectedCustomer.id]) {
+            const c = customersCache[currentSelectedCustomer.id];
+            currentSelectedCustomer.balance = Number(c.balance) || 0;
+            currentSelectedCustomer.creditLimit = Number(c.creditLimit) || 0;
+            updatePosCustomerBadge();
         }
 
-        if (currentProfile.getElementByIdCustomerId && customersCache[currentProfileCustomerId](' && document.getElementById('customer-profile-modal')customer && document.getElementById('customer-profile-modal').-formstyle.display === 'flex') {
+        if (currentProfileCustomerId && customersCache[currentProfileCustomerId] && document.getElementById('customer-profile-modal') && document.getElementById('customer-profile-modal').style.display === 'flex') {
             refreshCustomerProfileSummary(currentProfileCustomerId);
         }
     }, error => {
@@ -4677,7 +4672,10 @@ function openAddCustomerModal(editId = null) {
         document.getElementById('customer-form-title').textContent = 'Edit Customer';
     } else {
         ['cust-name', 'cust-phone', 'cust-email', 'cust-address', 'cust-credit-limit'].forEach(id => {
-            const el = document.getElementById(id-title').textContent = 'Add New Customer';
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        document.getElementById('customer-form-title').textContent = 'Add New Customer';
     }
 
     document.getElementById('customer-form-modal').style.display = 'flex';
@@ -4915,12 +4913,11 @@ function processDebtPayment() {
 
     const balanceBefore = Number(c.balance) || 0;
     if (amount > balanceBefore) {
-        alert("Payment amount cannot exceed();
- the outstanding balance.");
+        alert("Payment amount cannot exceed the outstanding balance.");
         return;
-           }
+    }
 
-    const balanceAfter = close Math.max(0, Math.round((CustomerbalanceBefore - amount) * 100Profile) / 100);
+    const balanceAfter = Math.max(0, Math.round((balanceBefore - amount) * 100) / 100);
     const recordedBy = document.getElementById('user-role-label') ? document.getElementById('user-role-label').textContent : currentUserRole;
     const nowIso = new Date().toISOString();
 
@@ -4939,7 +4936,8 @@ function processDebtPayment() {
     custRef.update({ balance: balanceAfter }).then(() => {
         return firebase.database().ref(`stores/${currentStoreId}/customers/${id}/ledger`).push(ledgerEntry);
     }).then(() => {
-        closeDebtPaymentModalModal();
+        closeDebtPaymentModal();
+        closeCustomerProfileModal();
 
         renderDebtReceiptView({
             customerName: c.name,
