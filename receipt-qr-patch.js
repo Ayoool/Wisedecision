@@ -1,21 +1,20 @@
-// ==================== WISE DECISION RECEIPT QR CODE PATCH (v7) ====================
+// ==================== WISE DECISION RECEIPT QR CODE PATCH (v8) ====================
 // Load AFTER store-logo-patch.js.
 //
-// v7: Store name, address, and phone are now read directly from Firebase
-//     (stores/{storeId}) instead of scraped from the receipt DOM. This fixes the
-//     bug where the placeholder "WISE DECISION" was published before the real
-//     store name finished loading from the database.
+// v8: Respects a per-store flag stores/{storeId}/showQR set from the Super Admin
+//     dashboard. When OFF, no QR appears on that store's receipts.
+//     Default = ON, so existing stores keep QR until explicitly disabled.
+// v7: Store name/address/phone fetched from Firebase (not the receipt DOM).
+// v6: QR library loads eagerly at page start with 3 CDN fallbacks.
 
-console.log("Wise Decision receipt-qr-patch.js — v7 loaded");
+console.log("Wise Decision receipt-qr-patch.js — v8 loaded");
 
-// ---------- QR library loading (eager + multi-CDN fallback) ----------
+// ---------- QR library (eager + multi-CDN fallback) ----------
 var wdqLibReady = null;
-
 function wdqLoadLibOnce() {
     if (wdqLibReady) return wdqLibReady;
     wdqLibReady = new Promise(function (resolve, reject) {
         if (window.qrcode) return resolve(window.qrcode);
-
         var cdns = [
             'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
             'https://unpkg.com/qrcode-generator@1.4.4/qrcode.min.js',
@@ -38,31 +37,55 @@ function wdqLoadLibOnce() {
     return wdqLibReady;
 }
 
-// ---------- Store info cache (fetched once per session) ----------
-var wdqStoreInfo = null;
+// ---------- Store info cache (per store) ----------
+var wdqStoreInfoCache = {};
 function wdqFetchStoreInfo() {
-    if (wdqStoreInfo) return Promise.resolve(wdqStoreInfo);
+    var storeId = (typeof currentStoreId !== 'undefined') ? currentStoreId : null;
+    if (!storeId) return Promise.resolve({ name: '', address: '', phone: '' });
+    if (wdqStoreInfoCache[storeId]) return Promise.resolve(wdqStoreInfoCache[storeId]);
     return new Promise(function (resolve) {
         try {
-            if (typeof firebase === 'undefined' || !firebase.database || typeof currentStoreId === 'undefined' || !currentStoreId) {
+            if (typeof firebase === 'undefined' || !firebase.database) {
                 return resolve({ name: '', address: '', phone: '' });
             }
-            firebase.database().ref('stores/' + currentStoreId).once('value')
+            firebase.database().ref('stores/' + storeId).once('value')
                 .then(function (snap) {
                     var s = snap.val() || {};
-                    wdqStoreInfo = {
+                    var info = {
                         name: s.businessName || s.name || '',
                         address: s.address || '',
                         phone: s.phone || ''
                     };
-                    resolve(wdqStoreInfo);
+                    wdqStoreInfoCache[storeId] = info;
+                    resolve(info);
                 })
                 .catch(function () { resolve({ name: '', address: '', phone: '' }); });
         } catch (e) { resolve({ name: '', address: '', phone: '' }); }
     });
 }
 
-// ---------- Generate random code ----------
+// ---------- Show-QR flag (per store) ----------
+var wdqShowCache = {};
+function wdqFetchShowQR() {
+    var storeId = (typeof currentStoreId !== 'undefined') ? currentStoreId : null;
+    if (!storeId) return Promise.resolve(true);
+    if (wdqShowCache[storeId] !== undefined) return Promise.resolve(wdqShowCache[storeId]);
+    return new Promise(function (resolve) {
+        try {
+            if (typeof firebase === 'undefined' || !firebase.database) return resolve(true);
+            firebase.database().ref('stores/' + storeId + '/showQR').once('value')
+                .then(function (snap) {
+                    var v = snap.val();
+                    if (v === null || v === undefined) v = true;
+                    wdqShowCache[storeId] = !!v;
+                    resolve(wdqShowCache[storeId]);
+                })
+                .catch(function () { wdqShowCache[storeId] = true; resolve(true); });
+        } catch (e) { resolve(true); }
+    });
+}
+
+// ---------- Random code ----------
 function wdqRandomCode() {
     var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     var out = '';
@@ -70,7 +93,7 @@ function wdqRandomCode() {
     return out;
 }
 
-// ---------- Build absolute verify URL ----------
+// ---------- Verify URL builder ----------
 function wdqBuildVerifyUrl(code) {
     var origin = window.location.origin;
     var path = window.location.pathname;
@@ -86,9 +109,8 @@ function wdqNumFromText(s) {
     return parseFloat(cleaned) || 0;
 }
 
-// ---------- Scrape receipt data (items & totals from DOM; store info from Firebase) ----------
+// ---------- Scrape receipt ----------
 function wdqScrapeReceipt(container, storeInfo) {
-    // Receipt ID
     var idCandidates = ['#receipt-tx-id', '#debt-receipt-tx-id', '#refund-receipt-id', '#waybill-id'];
     var receiptId = '';
     for (var i = 0; i < idCandidates.length && !receiptId; i++) {
@@ -102,7 +124,6 @@ function wdqScrapeReceipt(container, storeInfo) {
     }
     if (!receiptId) return null;
 
-    // Date
     var dateStr = wdqText(container.querySelector('#receipt-date, #debt-receipt-date, #refund-receipt-date, #waybill-date'));
     var dateIso = new Date().toISOString();
     if (dateStr && dateStr !== '--') {
@@ -110,7 +131,6 @@ function wdqScrapeReceipt(container, storeInfo) {
         if (!isNaN(parsed)) dateIso = parsed.toISOString();
     }
 
-    // Total
     var totalStr = wdqText(container.querySelector('#receipt-grand-total, #debt-receipt-amount-paid, #refund-receipt-total'));
     var total = wdqNumFromText(totalStr);
     if (!total) {
@@ -118,7 +138,6 @@ function wdqScrapeReceipt(container, storeInfo) {
         if (totalLine) total = wdqNumFromText(totalLine[1]);
     }
 
-    // Items
     var items = [];
     var itemRows = container.querySelectorAll('#receipt-items-body tr, #refund-receipt-items-body tr');
     if (itemRows.length) {
@@ -132,7 +151,6 @@ function wdqScrapeReceipt(container, storeInfo) {
         });
     }
 
-    // Customer
     var customer = wdqText(container.querySelector('#debt-receipt-customer-name'));
     if (customer === '--' || customer === 'Walk-in Customer') customer = '';
 
@@ -148,7 +166,7 @@ function wdqScrapeReceipt(container, storeInfo) {
     };
 }
 
-// ---------- Publish public receipt to Firebase ----------
+// ---------- Publish to Firebase ----------
 function wdqPublish(code, data) {
     try {
         if (typeof firebase === 'undefined' || !firebase.database) return Promise.resolve(false);
@@ -182,12 +200,8 @@ function wdqRenderQR(holder, url) {
             holder.appendChild(img);
         } catch (e) {
             console.error('[qr] render failed:', e);
-            holder.innerHTML = '<div style="font-size:9px;color:#991b1b;">QR error</div>';
         }
-    }).catch(function (e) {
-        console.error('[qr] library failed:', e);
-        holder.innerHTML = '<div style="font-size:9px;color:#991b1b;">QR unavailable</div>';
-    });
+    }).catch(function () {});
 }
 
 // ---------- Visibility check ----------
@@ -218,42 +232,52 @@ function wdqInject(containerId) {
     if (!container) return;
     if (!wdqIsVisible(container)) return;
 
-    // Skip if this container already shows a QR
-    if (container.querySelector('.wdq-qr-wrap')) {
-        // But if the receipt ID has changed, remove and reprocess
-        var existingId = wdqDone[containerId] && wdqDone[containerId].receiptId;
-        var currentId = wdqText(container.querySelector('#receipt-tx-id, #debt-receipt-tx-id, #refund-receipt-id, #waybill-id'));
-        if (existingId && currentId && existingId === currentId) return;
-        container.querySelector('.wdq-qr-wrap').remove();
-    }
+    // First check the flag — is QR enabled for this store?
+    wdqFetchShowQR().then(function (show) {
+        var existing = container.querySelector('.wdq-qr-wrap');
 
-    // Fetch store info from Firebase (cached after first call), then build & publish
-    wdqFetchStoreInfo().then(function (storeInfo) {
-        var data = wdqScrapeReceipt(container, storeInfo);
-        if (!data) return;
-        if (wdqDone[containerId] && wdqDone[containerId].receiptId === data.receiptId) return;
+        if (!show) {
+            // QR disabled — remove any wrapper that exists
+            if (existing) existing.remove();
+            return;
+        }
 
-        var code = wdqRandomCode();
-        var url = wdqBuildVerifyUrl(code);
+        // Skip if already injected for the current receipt
+        if (existing) {
+            var existingId = wdqDone[containerId] && wdqDone[containerId].receiptId;
+            var currentId = wdqText(container.querySelector('#receipt-tx-id, #debt-receipt-tx-id, #refund-receipt-id, #waybill-id'));
+            if (existingId && currentId && existingId === currentId) return;
+            existing.remove();
+        }
 
-        var wrap = document.createElement('div');
-        wrap.className = 'wdq-qr-wrap';
-        wrap.style.cssText =
-            'text-align:center; margin-top:12px; padding-top:8px; ' +
-            'border-top:1px dashed #ccc; font-family:monospace;';
-        var holderId = 'wdq-qr-' + containerId;
-        wrap.innerHTML =
-            '<div style="font-size:9px; color:#555; letter-spacing:0.5px; margin-bottom:4px;">SCAN TO VERIFY</div>' +
-            '<div id="' + holderId + '" style="display:inline-block; padding:3px; background:#fff; min-width:140px; min-height:140px;"></div>' +
-            '<div style="font-size:9px; color:#888; margin-top:4px;">' + data.receiptId + '</div>';
+        // Fetch store info (cached), then build & publish
+        wdqFetchStoreInfo().then(function (storeInfo) {
+            var data = wdqScrapeReceipt(container, storeInfo);
+            if (!data) return;
+            if (wdqDone[containerId] && wdqDone[containerId].receiptId === data.receiptId) return;
 
-        container.appendChild(wrap);
+            var code = wdqRandomCode();
+            var url = wdqBuildVerifyUrl(code);
 
-        var holder = document.getElementById(holderId);
-        if (holder) wdqRenderQR(holder, url);
+            var wrap = document.createElement('div');
+            wrap.className = 'wdq-qr-wrap';
+            wrap.style.cssText =
+                'text-align:center; margin-top:12px; padding-top:8px; ' +
+                'border-top:1px dashed #ccc; font-family:monospace;';
+            var holderId = 'wdq-qr-' + containerId;
+            wrap.innerHTML =
+                '<div style="font-size:9px; color:#555; letter-spacing:0.5px; margin-bottom:4px;">SCAN TO VERIFY</div>' +
+                '<div id="' + holderId + '" style="display:inline-block; padding:3px; background:#fff; min-width:140px; min-height:140px;"></div>' +
+                '<div style="font-size:9px; color:#888; margin-top:4px;">' + data.receiptId + '</div>';
 
-        wdqDone[containerId] = { receiptId: data.receiptId, code: code };
-        wdqPublish(code, data);
+            container.appendChild(wrap);
+
+            var holder = document.getElementById(holderId);
+            if (holder) wdqRenderQR(holder, url);
+
+            wdqDone[containerId] = { receiptId: data.receiptId, code: code };
+            wdqPublish(code, data);
+        });
     });
 }
 
@@ -263,19 +287,13 @@ function wdqScan() {
 }
 
 // ---------- Init ----------
-function wdqAttach() {
-    try { wdqScan(); } catch (e) { /* silent */ }
-}
-
 window.addEventListener('load', function () {
     wdqLoadLibOnce().then(function () {
         console.log('[qr] library ready');
-        wdqAttach();
-    }).catch(function (e) {
-        console.error('[qr] library could not be loaded from any CDN:', e);
-    });
+        wdqScan();
+    }).catch(function (e) { console.error('[qr] library failed:', e); });
 
-    setTimeout(wdqAttach, 1500);
+    setTimeout(wdqScan, 1500);
     var obs = new MutationObserver(function () {
         if (window.__wdqSched) return;
         window.__wdqSched = true;
