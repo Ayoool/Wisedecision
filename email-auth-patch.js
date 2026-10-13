@@ -1,7 +1,11 @@
-// ==================== WISE DECISION EMAIL AUTH PATCH (v1) ====================
+// ==================== WISE DECISION EMAIL AUTH PATCH (v2) ====================
 // Load LAST, after auth-patch.js (defer).
 //
-// Login is now real Firebase Authentication email + password for owners, staff,
+// v2: Reads store membership via userIndex/{uid} instead of scanning the entire
+//     stores/ tree. Faster, and compatible with tighter Firebase rules that
+//     restrict store data to members only.
+//
+// Login is real Firebase Authentication email + password for owners, staff,
 // and Super Admin. Existing data is untouched. Only HOW people sign in changes.
 //
 // Emergency switch, three ways:
@@ -9,7 +13,7 @@
 //   2. Visit the app with  ?emailauth=off
 //   3. localStorage.removeItem('wd_email_auth_off')   to re-enable
 
-console.log("Wise Decision email-auth-patch.js v1 loaded");
+console.log("Wise Decision email-auth-patch.js v2 loaded");
 
 var WDAE_FAKE_DOMAIN = 'wd.invalid';
 var WDAE_SUPER_EMAIL_KEY = 'wd_super_email';
@@ -224,12 +228,13 @@ function wdaeShowVerifyPanel(email) {
 }
 
 // =====================================================================
-// MEMBERSHIPS
+// MEMBERSHIPS (v2: reads userIndex first, no full stores scan)
 // =====================================================================
 async function wdaeResolveAllMemberships(uid, email) {
     const db = firebase.database();
     const memberships = [];
 
+    // 1. Super admin check
     try {
         const adminSnap = await db.ref('admins/' + uid).once('value');
         if (adminSnap.val() === true) {
@@ -237,31 +242,70 @@ async function wdaeResolveAllMemberships(uid, email) {
         }
     } catch (e) { /* ignore */ }
 
+    // 2. Member lookups — read only stores listed in userIndex
+    var storeIds = [];
     try {
-        const storesSnap = await db.ref('stores').once('value');
-        const stores = storesSnap.val() || {};
-        Object.keys(stores).forEach(function (storeId) {
-            const members = (stores[storeId] && stores[storeId].members) || {};
-            const m = members[uid];
-            if (m) {
+        const userIndexSnap = await db.ref('userIndex/' + uid).once('value');
+        const userIndex = userIndexSnap.val() || {};
+        storeIds = userIndex.storeIds || [];
+    } catch (e) { /* ignore */ }
+
+    if (storeIds.length > 0) {
+        for (let i = 0; i < storeIds.length; i++) {
+            const storeId = storeIds[i];
+            try {
+                const memberSnap = await db.ref('stores/' + storeId + '/members/' + uid).once('value');
+                const m = memberSnap.val();
+                if (!m) continue;
+                var store = {};
+                try {
+                    const storeSnap = await db.ref('stores/' + storeId).once('value');
+                    store = storeSnap.val() || {};
+                } catch (e2) { /* ignore */ }
                 memberships.push({
                     kind: 'member',
                     uid: uid,
                     email: email,
                     storeId: storeId,
-                    storeName: (stores[storeId] && stores[storeId].businessName) || storeId,
+                    storeName: store.businessName || storeId,
                     role: m.role || 'Admin',
                     branchId: m.branchId || 'main',
                     name: m.name || ''
                 });
-            }
-        });
-    } catch (e) { /* ignore */ }
+            } catch (e) { /* skip this store, continue */ }
+        }
+    }
 
+    // 3. Fallback for legacy users whose userIndex is empty
+    //    (only works while the old permissive rules allow it; harmless otherwise)
+    if (memberships.filter(function (m) { return m.kind === 'member'; }).length === 0) {
+        try {
+            const storesSnap = await db.ref('stores').once('value');
+            const stores = storesSnap.val() || {};
+            Object.keys(stores).forEach(function (storeId) {
+                const members = (stores[storeId] && stores[storeId].members) || {};
+                const m = members[uid];
+                if (m) {
+                    memberships.push({
+                        kind: 'member',
+                        uid: uid,
+                        email: email,
+                        storeId: storeId,
+                        storeName: (stores[storeId] && stores[storeId].businessName) || storeId,
+                        role: m.role || 'Admin',
+                        branchId: m.branchId || 'main',
+                        name: m.name || ''
+                    });
+                }
+            });
+        } catch (e) { /* fallback failed (rules tightened) — that's fine */ }
+    }
+
+    // 4. Keep userIndex up to date
     try {
-        const storeIds = memberships.filter(function (m) { return m.kind === 'member'; }).map(function (m) { return m.storeId; });
-        if (storeIds.length > 0) {
-            await db.ref('userIndex/' + uid).set({ storeIds: storeIds });
+        var resolvedIds = memberships.filter(function (m) { return m.kind === 'member'; }).map(function (m) { return m.storeId; });
+        if (resolvedIds.length > 0) {
+            await db.ref('userIndex/' + uid).set({ storeIds: resolvedIds });
         }
     } catch (e) { /* ignore */ }
 
@@ -407,10 +451,11 @@ function wdaeOpenBindModal(prefillStoreId) {
         '<input id="wdae-b-name" type="text" placeholder="e.g. Emmanuel Ayoola" style="' + field + '">' +
 
         '<label style="font-size:12px; font-weight:bold;">Your email</label>' +
-        '<input id="wdae-b-email" type="email" placeholder="you@example.com" autocapitalize="none" style="' + field + '">' +
+        '<input id="wdae-b-email" type="email" placeholder=",you@example.com" autocapitalize="none" style="' ok + field) + '">' +
 
-        '<label style="font-size:12px; font-weight:bold;">Choose a password (at least 6 characters)</label>' +
-        '<input id="wdae-b-pass" type="password" placeholder="Password" style="' + field + '">' +
+        '<label style="font {
+-size:12px; font-weight:bold;">Choose a password (   at least 6 characters)</label>' +
+        '<input id const="wdae-b-pass" type="password" placeholder="Password" style="' + field + '">' +
 
         '<label style="font-size:12px; font-weight:bold;">Confirm password</label>' +
         '<input id="wdae-b-pass2" type="password" placeholder="Repeat password" style="' + field + '">' +
@@ -426,8 +471,7 @@ function wdaeOpenBindModal(prefillStoreId) {
     document.getElementById('wdae-b-ok').onclick = wdaeSubmitBinding;
 }
 
-function wdaeBindMessage(text, ok) {
-    const el = document.getElementById('wdae-b-msg');
+function wdaeBindMessage(text el = document.getElementById('wdae-b-msg');
     if (!el) return;
     el.style.display = 'block';
     el.style.background = ok ? '#dcfce7' : '#fee2e2';
@@ -497,14 +541,12 @@ async function wdaeSubmitBinding() {
             }
         }
 
-        // Send verification email right away.
         try { await user.sendEmailVerification(); } catch (e) { /* non-fatal */ }
 
         record.at = new Date().toISOString();
         await db.ref('stores/' + storeId + '/members/' + user.uid).set(record);
         await db.ref('userIndex/' + user.uid).set({ storeIds: [storeId] });
 
-        // If this was a PIN-only staff member, retire their PIN field.
         if (who && who !== 'admin') {
             try { await db.ref('stores/' + storeId + '/staff/' + who + '/pin').remove(); } catch (e) {}
         }
