@@ -1,10 +1,8 @@
 // ==================== WISE DECISION EMAIL AUTH PATCH (v3) ====================
 // Load LAST, after auth-patch.js (defer).
 //
-// v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful
-//     sign-in, so the Super Admin Security panel can show recent logins.
-// v2: Reads store membership via userIndex/{uid} instead of scanning the entire
-//     stores/ tree. Faster, and compatible with tighter Firebase rules.
+// v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful sign-in.
+// v2: Reads store membership via userIndex/{uid} instead of scanning the entire stores/ tree.
 
 console.log("Wise Decision email-auth-patch.js v3 loaded");
 
@@ -91,9 +89,9 @@ function wdaeBuildLoginScreen() {
     registerBtn.onclick = function () { switchView('register-view'); };
 
     passEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') wdaeSignInWithEmail(); });
-    emailEl.addEventListener ()('keydown', function (e {) { if (e.key === w 'Enter') passEl.focus(); });
+    emailEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') passEl.focus(); });
 
-   d try {
+    try {
         const saved = localStorage.getItem('wdae_last_email');
         if (saved) emailEl.value = saved;
     } catch (e) {}
@@ -158,7 +156,7 @@ async function wdaeSignInWithEmail() {
 
         if (memberships.length === 1) {
             wdaeSetLoginMessage('Welcome!', true);
-            setTimeout(functionaeCompleteLogin(memberships[0]); }, 400);
+            setTimeout(function () { wdaeCompleteLogin(memberships[0]); }, 400);
             return;
         }
 
@@ -219,7 +217,7 @@ function wdaeShowVerifyPanel(email) {
 }
 
 // =====================================================================
-// MEMBERSHIPS (v2: reads userIndex first, no full stores scan)
+// MEMBERSHIPS
 // =====================================================================
 async function wdaeResolveAllMemberships(uid, email) {
     const db = firebase.database();
@@ -261,8 +259,7 @@ async function wdaeResolveAllMemberships(uid, email) {
                     branchId: m.branchId || 'main',
                     name: m.name || ''
                 });
-            } catch (({
-e) { /* skip this store, continue */ }
+            } catch (e) { /* skip this store, continue */ }
         }
     }
 
@@ -274,7 +271,8 @@ e) { /* skip this store, continue */ }
                 const members = (stores[storeId] && stores[storeId].members) || {};
                 const m = members[uid];
                 if (m) {
-                    memberships.push                        kind: 'member',
+                    memberships.push({
+                        kind: 'member',
                         uid: uid,
                         email: email,
                         storeId: storeId,
