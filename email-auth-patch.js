@@ -2,16 +2,7 @@
 // Load LAST, after auth-patch.js (defer).
 //
 // v2: Reads store membership via userIndex/{uid} instead of scanning the entire
-//     stores/ tree. Faster, and compatible with tighter Firebase rules that
-//     restrict store data to members only.
-//
-// Login is real Firebase Authentication email + password for owners, staff,
-// and Super Admin. Existing data is untouched. Only HOW people sign in changes.
-//
-// Emergency switch, three ways:
-//   1. localStorage.setItem('wd_email_auth_off','1')
-//   2. Visit the app with  ?emailauth=off
-//   3. localStorage.removeItem('wd_email_auth_off')   to re-enable
+//     stores/ tree. Faster, and compatible with tighter Firebase rules.
 
 console.log("Wise Decision email-auth-patch.js v2 loaded");
 
@@ -136,7 +127,6 @@ async function wdaeSignInWithEmail() {
         const user = userCred.user;
         const uid = user.uid;
 
-        // Option B: email must be verified before access.
         if (!user.emailVerified) {
             wdaeShowVerifyPanel(email);
             return;
@@ -150,7 +140,6 @@ async function wdaeSignInWithEmail() {
             return;
         }
 
-        // If multiple memberships and a choice was made in the last 24h, use it.
         if (memberships.length > 1) {
             try {
                 const last = JSON.parse(localStorage.getItem('wdae_last_store_' + uid) || 'null');
@@ -234,7 +223,6 @@ async function wdaeResolveAllMemberships(uid, email) {
     const db = firebase.database();
     const memberships = [];
 
-    // 1. Super admin check
     try {
         const adminSnap = await db.ref('admins/' + uid).once('value');
         if (adminSnap.val() === true) {
@@ -242,7 +230,6 @@ async function wdaeResolveAllMemberships(uid, email) {
         }
     } catch (e) { /* ignore */ }
 
-    // 2. Member lookups — read only stores listed in userIndex
     var storeIds = [];
     try {
         const userIndexSnap = await db.ref('userIndex/' + uid).once('value');
@@ -276,8 +263,6 @@ async function wdaeResolveAllMemberships(uid, email) {
         }
     }
 
-    // 3. Fallback for legacy users whose userIndex is empty
-    //    (only works while the old permissive rules allow it; harmless otherwise)
     if (memberships.filter(function (m) { return m.kind === 'member'; }).length === 0) {
         try {
             const storesSnap = await db.ref('stores').once('value');
@@ -301,7 +286,6 @@ async function wdaeResolveAllMemberships(uid, email) {
         } catch (e) { /* fallback failed (rules tightened) — that's fine */ }
     }
 
-    // 4. Keep userIndex up to date
     try {
         var resolvedIds = memberships.filter(function (m) { return m.kind === 'member'; }).map(function (m) { return m.storeId; });
         if (resolvedIds.length > 0) {
@@ -451,11 +435,10 @@ function wdaeOpenBindModal(prefillStoreId) {
         '<input id="wdae-b-name" type="text" placeholder="e.g. Emmanuel Ayoola" style="' + field + '">' +
 
         '<label style="font-size:12px; font-weight:bold;">Your email</label>' +
-        '<input id="wdae-b-email" type="email" placeholder=",you@example.com" autocapitalize="none" style="' ok + field) + '">' +
+        '<input id="wdae-b-email" type="email" placeholder="you@example.com" autocapitalize="none" style="' + field + '">' +
 
-        '<label style="font {
--size:12px; font-weight:bold;">Choose a password (   at least 6 characters)</label>' +
-        '<input id const="wdae-b-pass" type="password" placeholder="Password" style="' + field + '">' +
+        '<label style="font-size:12px; font-weight:bold;">Choose a password (at least 6 characters)</label>' +
+        '<input id="wdae-b-pass" type="password" placeholder="Password" style="' + field + '">' +
 
         '<label style="font-size:12px; font-weight:bold;">Confirm password</label>' +
         '<input id="wdae-b-pass2" type="password" placeholder="Repeat password" style="' + field + '">' +
@@ -471,7 +454,8 @@ function wdaeOpenBindModal(prefillStoreId) {
     document.getElementById('wdae-b-ok').onclick = wdaeSubmitBinding;
 }
 
-function wdaeBindMessage(text el = document.getElementById('wdae-b-msg');
+function wdaeBindMessage(text, ok) {
+    const el = document.getElementById('wdae-b-msg');
     if (!el) return;
     el.style.display = 'block';
     el.style.background = ok ? '#dcfce7' : '#fee2e2';
