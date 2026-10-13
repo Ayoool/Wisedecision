@@ -1,47 +1,51 @@
-// ==================== WISE DECISION SUPER ADMIN QR TOGGLE PATCH (v1) ====================
+// ==================== WISE DECISION SUPER ADMIN QR TOGGLE PATCH (v2) ====================
 // Load AFTER superadmin-patch.js.
-// Adds a "QR Code" column to the Super Admin store directory with an ON/OFF toggle per store.
-// Toggle writes to stores/{storeId}/showQR — the QR patch reads it.
+//
+// v2: Works with the CARD layout of the Super Admin dashboard (not a table).
+//     Injects a "📱 QR ON / QR OFF" button next to the Lock and PIN buttons
+//     on each store card. Toggle writes to stores/{storeId}/showQR.
 
-console.log("Wise Decision superadmin-qr-toggle-patch.js — v1 loaded");
+console.log("Wise Decision superadmin-qr-toggle-patch.js — v2 loaded");
 
 var waqtStoreQR = {};   // { storeId: true|false }
 
-function waqtEl(id) { return document.getElementById(id); }
 function waqtEsc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// ---------- Update the toggle button appearance ----------
+// ---------- Update the button appearance after a toggle ----------
 function waqtUpdateToggleUI(storeId, isOn) {
-    var btn = document.querySelector('[data-waqt-store="' + storeId.replace(/"/g, '\\"') + '"]');
-    if (!btn) return;
-    if (isOn) {
-        btn.textContent = 'QR ON';
-        btn.style.background = '#16a34a';
-        btn.style.color = '#fff';
-        btn.style.border = '1px solid #15803d';
-    } else {
-        btn.textContent = 'QR OFF';
-        btn.style.background = '#e2e8f0';
-        btn.style.color = '#64748b';
-        btn.style.border = '1px solid #cbd5e1';
-    }
+    var btns = document.querySelectorAll('[data-waqt-store="' + storeId.replace(/"/g, '\\"') + '"]');
+    btns.forEach(function (btn) {
+        if (isOn) {
+            btn.textContent = '📱 QR ON';
+            btn.style.background = '#dcfce7';
+            btn.style.color = '#166534';
+            btn.style.border = '1px solid #86efac';
+            btn.title = 'QR code is currently ON — click to turn off';
+        } else {
+            btn.textContent = '📱 QR OFF';
+            btn.style.background = '#f1f5f9';
+            btn.style.color = '#64748b';
+            btn.style.border = '1px solid #cbd5e1';
+            btn.title = 'QR code is currently OFF — click to turn on';
+        }
+    });
 }
 
 // ---------- Toggle handler ----------
 window.waqtToggle = function (btn) {
     var storeId = btn.getAttribute('data-waqt-store');
     if (!storeId) return;
-    var current = waqtStoreQR[storeId] !== false;
+
+    var current = (waqtStoreQR[storeId] !== false);
     var next = !current;
 
     // Optimistic UI
     waqtStoreQR[storeId] = next;
     waqtUpdateToggleUI(storeId, next);
 
-    // Save
     firebase.database().ref('stores/' + storeId + '/showQR').set(next)
         .catch(function (err) {
             // Revert on failure
@@ -51,77 +55,92 @@ window.waqtToggle = function (btn) {
         });
 };
 
-// ---------- Inject header + body cells ----------
-function waqtInjectColumn() {
-    var tbody = waqtEl('super-admin-stores-body');
-    if (!tbody) return;
+// ---------- Extract the store ID from a card ----------
+function waqtGetStoreIdFromCard(card) {
+    // Cards typically contain a line like "medstar · 09132564109, ..."
+    var text = card.textContent || '';
+    var m = text.match(/(?:^|\s)([a-z][a-z0-9_-]{2,})\s*·/);
+    if (m) return m[1];
 
-    // 1) Header cell — add once
-    var thead = tbody.parentElement.querySelector('thead tr');
-    if (thead && !thead.querySelector('th[data-waqt]')) {
-        var th = document.createElement('th');
-        th.setAttribute('data-waqt', '1');
-        th.setAttribute('style', 'padding: 12px; text-align: center;');
-        th.textContent = 'QR Code';
-        var existingTh = thead.querySelectorAll('th');
-        if (existingTh.length) thead.insertBefore(th, existingTh[existingTh.length - 1]);
-        else thead.appendChild(th);
-    }
+    // Fallback: look for any element with a data-store attribute
+    var withData = card.querySelector('[data-store]');
+    if (withData) return withData.getAttribute('data-store');
 
-    // 2) Body cells — add to each row
-    var rows = tbody.querySelectorAll('tr');
-    rows.forEach(function (row) {
-        if (row.querySelector('td[data-waqt]')) return;
-        var cells = row.querySelectorAll('td');
-        if (!cells.length) return;
-        var storeId = (cells[0].textContent || '').trim();
-        if (!storeId || storeId.toLowerCase().indexOf('loading') !== -1) return;
+    return null;
+}
 
-        var td = document.createElement('td');
-        td.setAttribute('data-waqt', '1');
-        td.setAttribute('style', 'padding: 12px; text-align: center;');
-        var initial = (waqtStoreQR[storeId] !== false) ? 'QR ON' : 'QR OFF';
-        var bg = (waqtStoreQR[storeId] !== false) ? '#16a34a' : '#e2e8f0';
-        var fg = (waqtStoreQR[storeId] !== false) ? '#fff' : '#64748b';
-        td.innerHTML =
-            '<button data-waqt-store="' + waqtEsc(storeId) + '" onclick="waqtToggle(this)" ' +
-            'style="width: auto; margin: 0; padding: 6px 12px; border-radius: 14px; ' +
-            'font-size: 11px; font-weight: bold; cursor: pointer; background:' + bg + '; ' +
-            'color:' + fg + '; border: 1px solid #cbd5e1;">' + initial + '</button>';
+// ---------- Inject one button per store card ----------
+function waqtInjectButtons() {
+    // Find every button whose text is "Lock" or "PIN" — these mark store cards
+    var allButtons = document.querySelectorAll('button');
+    allButtons.forEach(function (btn) {
+        var txt = (btn.textContent || '').trim().toLowerCase();
+        // We look for the "Lock" button specifically (it's on every store card)
+        if (txt.indexOf('lock') === -1) return;
+        if (btn.getAttribute('data-waqt-anchor')) return;
 
-        if (cells.length >= 2) row.insertBefore(td, cells[cells.length - 1]);
-        else row.appendChild(td);
+        // Walk up to find the card container (rounded border, shadow)
+        var card = btn;
+        while (card && card.parentElement) {
+            var style = card.getAttribute && card.getAttribute('style') || '';
+            if (style.indexOf('border-radius') !== -1 && style.indexOf('box-shadow') !== -1) break;
+            card = card.parentElement;
+        }
+        if (!card || !card.parentElement) return;
+
+        var storeId = waqtGetStoreIdFromCard(card);
+        if (!storeId) return;
+
+        // Skip if this card already has a QR button
+        if (card.querySelector('[data-waqt-store]')) {
+            btn.setAttribute('data-waqt-anchor', '1');
+            return;
+        }
+
+        // Build the QR button matching Lock/PIN button style
+        var qrBtn = document.createElement('button');
+        qrBtn.setAttribute('data-waqt-store', storeId);
+        qrBtn.onclick = function () { waqtToggle(qrBtn); };
+        qrBtn.style.cssText =
+            'width: auto; margin: 0 0 0 4px; padding: 6px 12px; border-radius: 8px; ' +
+            'font-size: 12px; font-weight: bold; cursor: pointer; ' +
+            'background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1;';
+        qrBtn.textContent = '📱 QR ...';   // placeholder until state loads
+
+        // Insert right after the Lock button
+        btn.parentElement.insertBefore(qrBtn, btn.nextSibling);
+        btn.setAttribute('data-waqt-anchor', '1');
+
+        // Load the current state from Firebase
+        firebase.database().ref('stores/' + storeId + '/showQR').once('value')
+            .then(function (snap) {
+                var v = snap.val();
+                if (v === null || v === undefined) v = true;   // default ON
+                waqtStoreQR[storeId] = !!v;
+                waqtUpdateToggleUI(storeId, !!v);
+            })
+            .catch(function () {
+                waqtStoreQR[storeId] = true;
+                waqtUpdateToggleUI(storeId, true);
+            });
     });
 }
 
-// ---------- Load all store QR settings in one read ----------
-function waqtLoadAllSettings() {
-    firebase.database().ref('stores').once('value').then(function (snap) {
-        var stores = snap.val() || {};
-        Object.keys(stores).forEach(function (sid) {
-            var v = stores[sid].showQR;
-            if (v === null || v === undefined) v = true;   // default
-            waqtStoreQR[sid] = !!v;
-            waqtUpdateToggleUI(sid, !!v);
-        });
-    }).catch(function () {});
-}
-
-// ---------- Watch for dashboard ----------
+// ---------- Attach (runs continuously since cards re-render) ----------
 function waqtAttach() {
-    var tbody = waqtEl('super-admin-stores-body');
-    if (!tbody) return;
-    if (tbody.getAttribute('data-waqt-obs') !== 'true') {
-        tbody.setAttribute('data-waqt-obs', 'true');
-        var obs = new MutationObserver(function () { waqtInjectColumn(); });
-        obs.observe(tbody, { childList: true, subtree: true });
-    }
-    waqtInjectColumn();
-    waqtLoadAllSettings();
+    try { waqtInjectButtons(); } catch (e) { /* silent */ }
 }
 
 window.addEventListener('load', function () {
-    setInterval(waqtAttach, 1500);
-    var obs = new MutationObserver(function () { waqtAttach(); });
+    setTimeout(waqtAttach, 1200);
+    setInterval(waqtAttach, 2000);
+    var obs = new MutationObserver(function () {
+        if (window.__waqtSched) return;
+        window.__waqtSched = true;
+        setTimeout(function () {
+            window.__waqtSched = false;
+            waqtAttach();
+        }, 200);
+    });
     if (document.body) obs.observe(document.body, { childList: true, subtree: true });
 });
