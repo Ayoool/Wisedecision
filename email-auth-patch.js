@@ -1,10 +1,12 @@
-// ==================== WISE DECISION EMAIL AUTH PATCH (v2) ====================
+// ==================== WISE DECISION EMAIL AUTH PATCH (v3) ====================
 // Load LAST, after auth-patch.js (defer).
 //
+// v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful
+//     sign-in, so the Super Admin Security panel can show recent logins.
 // v2: Reads store membership via userIndex/{uid} instead of scanning the entire
 //     stores/ tree. Faster, and compatible with tighter Firebase rules.
 
-console.log("Wise Decision email-auth-patch.js v2 loaded");
+console.log("Wise Decision email-auth-patch.js v3 loaded");
 
 var WDAE_FAKE_DOMAIN = 'wd.invalid';
 var WDAE_SUPER_EMAIL_KEY = 'wd_super_email';
@@ -89,9 +91,9 @@ function wdaeBuildLoginScreen() {
     registerBtn.onclick = function () { switchView('register-view'); };
 
     passEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') wdaeSignInWithEmail(); });
-    emailEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') passEl.focus(); });
+    emailEl.addEventListener ()('keydown', function (e {) { if (e.key === w 'Enter') passEl.focus(); });
 
-    try {
+   d try {
         const saved = localStorage.getItem('wdae_last_email');
         if (saved) emailEl.value = saved;
     } catch (e) {}
@@ -156,7 +158,7 @@ async function wdaeSignInWithEmail() {
 
         if (memberships.length === 1) {
             wdaeSetLoginMessage('Welcome!', true);
-            setTimeout(function () { wdaeCompleteLogin(memberships[0]); }, 400);
+            setTimeout(functionaeCompleteLogin(memberships[0]); }, 400);
             return;
         }
 
@@ -259,7 +261,8 @@ async function wdaeResolveAllMemberships(uid, email) {
                     branchId: m.branchId || 'main',
                     name: m.name || ''
                 });
-            } catch (e) { /* skip this store, continue */ }
+            } catch (({
+e) { /* skip this store, continue */ }
         }
     }
 
@@ -271,8 +274,7 @@ async function wdaeResolveAllMemberships(uid, email) {
                 const members = (stores[storeId] && stores[storeId].members) || {};
                 const m = members[uid];
                 if (m) {
-                    memberships.push({
-                        kind: 'member',
+                    memberships.push                        kind: 'member',
                         uid: uid,
                         email: email,
                         storeId: storeId,
@@ -343,6 +345,17 @@ function wdaeChooseStore(memberships) {
 }
 
 function wdaeCompleteLogin(resolved) {
+    // Record login for security analytics (Super Admin Security panel)
+    try {
+        if (typeof window.wdlaRecordLogin === 'function') {
+            window.wdlaRecordLogin(
+                resolved.kind === 'super' ? 'SUPER_ADMIN' : resolved.storeId,
+                resolved.uid,
+                resolved.email
+            );
+        }
+    } catch (e) { /* never block login */ }
+
     if (resolved.kind === 'super') {
         currentStoreId = 'SUPER_ADMIN';
         currentUserRole = 'SuperAdmin';
