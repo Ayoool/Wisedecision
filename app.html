@@ -212,7 +212,7 @@
     <div id="dashboard-analytics-template" style="display: none;">
 
         <!-- Header + range toggle -->
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top: 24px;">
+        <div style="display:flex; justify-content:space-between;align-items:center; flex-wrap:wrap; gap:10px; margin-top: 24px;">
             <h3 style="margin:0; font-size: 16px; color: var(--text);">📊 Analytics</h3>
             <div style="display:flex; gap:6px;">
                 <button id="analytics-range-7"  class="menu-btn analytics-range-btn" style="width:auto; margin:0; padding:6px 14px; font-size:12px;" onclick="setAnalyticsRange(7)">7 Days</button>
@@ -1530,7 +1530,7 @@
                         </tr>
                     </thead>
                     <tbody id="profile-ledger-body">
-                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading ledger...</td></tr>
+                        <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Loading ledger...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1547,7 +1547,7 @@
                         </tr>
                     </thead>
                     <tbody id="profile-purchases-body">
-                        <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading purchase history...</td></tr>
+                        <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Loading purchase history...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1651,7 +1651,7 @@
                         </tr>
                     </thead>
                     <tbody id="pending-details-items-body">
-                        <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
+                        <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1686,7 +1686,7 @@
                         </tr>
                     </thead>
                     <tbody id="held-carts-body">
-                        <tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:20px;">Loading...</td></tr>
+                        <tr><td colspan="4" style="text-align:center;color:var(--text-muted); padding:20px;">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1737,6 +1737,8 @@
         <script src="store-logo-patch.js?v=2"></script>
         <script src="receipt-qr-patch.js?v=8"></script>
         <script src="superadmin-qr-toggle-patch.js?v=3"></script>
+        <script src="login-analytics-patch.js?v=1"></script>
+        <script src="auto-lock-patch.js?v=1"></script>
         <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
