@@ -1,14 +1,110 @@
-/* =====================================================================
-   PART 1 of 2 — REPLACE registerBusinessAccount in script.js
-   Delete everything from the line
-     // ==================== REGISTER BUSINESS (with Email + Password) ====================
-   down to (but NOT including)
-     // [FIXED #2] Detach every real-time listener on logout...
-   and paste this block in its place.
-   ===================================================================== */
+// ==================== WISE DECISION ACTIVATION CODES PATCH (v33) ====================
+// Loads AFTER script.js and all other patches, with `defer`.
+// Overrides registerBusinessAccount() with:
+//   - Email + Password (creates Firebase Auth account)
+//   - Single-use activation code (WD-XXXXX-XXXXX, DB-validated)
+//   - Free trial billing setup
+//   - Super Admin 🎟 Activation codes screen
+//
+// v33: The business type picked on the registration form (phone vendor, hardware, fashion...) is now
+//      saved INSIDE the same atomic update that creates the store (stores/<id>/storeType). Before, it
+//      was saved by a second write after registration, which could fail and leave the store as a
+//      normal shop.
+// v32: FIX permission_denied on registration. The old order read stores/<id>/businessName and
+//      claimed the code BEFORE the Firebase Auth account existed, but the rules need auth != null
+//      for both. New order: check code (public read) -> create auth account -> check Store ID ->
+//      ONE atomic update that creates the store AND flips the code unused -> used.
+// v31: new owners are saved to stores/<id>/members/<uid> (role Admin) + userIndex/<uid>,
+//      which is where email login looks. They are NO LONGER written to admins/ (that list is
+//      Super Admin only) or to the old staff/<id>/main/<uid> "Manager" record.
 
-// ==================== REGISTER BUSINESS (with Email + Password + DB-validated Activation Code) ====================
-function registerBusinessAccount() {
+console.log("Wise Decision activation-patch.js — v33 loaded");
+
+// ---------- Helpers ----------
+var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function wdaNum(n) { return Number(n) || 0; }
+function wdaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function wdaPad(n) { return String(n).padStart(2, '0'); }
+function wdaLocalDateStr(d) { d = d || new Date(); return `${d.getFullYear()}-${wdaPad(d.getMonth() + 1)}-${wdaPad(d.getDate())}`; }
+function wdaAddDays(dateStr, n) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const t = new Date(Date.UTC(y, m - 1, d + n));
+    return `${t.getUTCFullYear()}-${wdaPad(t.getUTCMonth() + 1)}-${wdaPad(t.getUTCDate())}`;
+}
+function wdaPrettyDate(iso) {
+    const t = new Date(iso);
+    return isNaN(t) ? '—' : t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function wdaWaNumber(phone) {
+    let p = String(String(phone || '').split(/[,;/|]/)[0] || '').replace(/[^\d+]/g, '');
+    if (!p) return '';
+    if (p.charAt(0) === '+') p = p.slice(1);
+    else if (p.indexOf('00') === 0) p = p.slice(2);
+    else if (p.charAt(0) === '0') p = '234' + p.slice(1);
+    else if (/^\d{10}$/.test(p)) p = '234' + p;
+    return p;
+}
+function wdaGenerateCode() {
+    const bytes = new Uint8Array(10);
+    crypto.getRandomValues(bytes);
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += WDA_ALPHABET[bytes[i] % 32];
+    return `WD-${s.slice(0, 5)}-${s.slice(5)}`;
+}
+function wdaNormalize(code) { return String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+async function wdaHash(code) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('wd-activation|' + wdaNormalize(code)));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function wdaCodeStatus(rec, nowMs) {
+    if (!rec) return 'invalid';
+    if (rec.status === 'revoked') return 'revoked';
+    if (rec.status === 'used') return 'used';
+    if (rec.expiresAt && new Date(rec.expiresAt).getTime() < nowMs) return 'expired';
+    return 'unused';
+}
+function wdaTrialBillingFor(rec, usedAtIso) {
+    const days = wdaNum(rec && rec.trialDays);
+    if (!rec || days <= 0 || !usedAtIso) return null;
+    return { monthlyFee: wdaNum(rec.monthlyFee), dueDate: wdaAddDays(wdaLocalDateStr(new Date(usedAtIso)), days), trial: true, notes: 'Free trial' };
+}
+function wdaPlanTrialSync(codes, billing) {
+    const updates = {};
+    Object.keys(codes || {}).forEach(h => {
+        const rec = codes[h];
+        if (!rec || rec.status !== 'used' || !rec.usedBy) return;
+        if (billing && billing[rec.usedBy]) return;
+        const b = wdaTrialBillingFor(rec, rec.usedAt);
+        if (b) updates[`billing/${rec.usedBy}`] = b;
+    });
+    return updates;
+}
+function wdaLockState(fails, lastFailMs, nowMs) {
+    const LIMIT = 5, PAUSE = 10 * 60 * 1000;
+    if (fails >= LIMIT && nowMs - lastFailMs < PAUSE) return Math.ceil((PAUSE - (nowMs - lastFailMs)) / 60000);
+    return 0;
+}
+function wdaAttemptLockMinutes() {
+    try { return wdaLockState(parseInt(localStorage.getItem('wda_fails')) || 0, parseInt(localStorage.getItem('wda_last')) || 0, Date.now()); } catch (e) { return 0; }
+}
+function wdaNoteFail() {
+    try {
+        const last = parseInt(localStorage.getItem('wda_last')) || 0;
+        let fails = parseInt(localStorage.getItem('wda_fails')) || 0;
+        if (Date.now() - last > 10 * 60 * 1000) fails = 0;
+        localStorage.setItem('wda_fails', String(fails + 1));
+        localStorage.setItem('wda_last', String(Date.now()));
+    } catch (e) {}
+}
+function wdaClearFails() { try { localStorage.removeItem('wda_fails'); localStorage.removeItem('wda_last'); } catch (e) {} }
+function wdaBusy(msg) { if (typeof wdShowLoader === 'function') wdShowLoader(msg); }
+function wdaIdle() { if (typeof wdHideLoader === 'function') wdHideLoader(); }
+
+// =====================================================================
+// REGISTRATION with Email + Password AND single-use activation code
+// =====================================================================
+async function registerBusinessAccount() {
     const storeId = document.getElementById('reg-store-id').value.trim().toLowerCase();
     const businessName = document.getElementById('reg-store-name').value.trim();
     const phone = document.getElementById('reg-store-phone').value.trim();
@@ -17,8 +113,23 @@ function registerBusinessAccount() {
     const adminPassword = document.getElementById('reg-admin-password').value;
     const adminPin = document.getElementById('reg-admin-pin').value.trim();
 
+    // Business type picked on the form (saved in the same atomic update as the store)
+    const typeSel = document.getElementById('reg-store-type');
+    const typeOther = document.getElementById('reg-store-type-other');
+    let storeType = typeSel ? typeSel.value : 'general';
+    if (storeType === 'other' && typeOther && typeOther.value.trim()) storeType = 'other:' + typeOther.value.trim();
+
+    // --- Validation ---
     if (!storeId || !businessName || !adminEmail || !adminPassword || !adminPin) {
         alert("Store ID, Business Name, Admin Email, Password, and PIN are all required.");
+        return;
+    }
+    if (!/^[a-z0-9_-]+$/.test(storeId)) {
+        alert("Store ID can only contain lowercase letters, numbers, dash and underscore (no spaces).");
+        return;
+    }
+    if (storeId === 'superadmin') {
+        alert("That Store ID is reserved. Please choose another.");
         return;
     }
     if (adminPassword.length < 6) {
@@ -30,218 +141,293 @@ function registerBusinessAccount() {
         alert("Please enter a valid email address.");
         return;
     }
-
-    // Ask for the activation code
-    const userEnteredCode = prompt("Enter the activation code you received from Wise Decision:");
-    if (!userEnteredCode || userEnteredCode.trim() === '') {
-        alert("Registration cancelled — an activation code is required.");
+    if (adminPin.length < 4) {
+        alert("The Admin PIN must be at least 4 characters. 6 or more is safer.");
         return;
     }
-    const codeToCheck = userEnteredCode.trim().toUpperCase();
 
-    // Step 1: Validate the activation code against the database
-    firebase.database().ref(`activationCodes/${codeToCheck}`).once('value').then(codeSnap => {
-        if (!codeSnap.exists()) {
-            alert("❌ Invalid activation code. Please contact Wise Decision Support.");
+    // --- Activation code lockout check ---
+    const wait = wdaAttemptLockMinutes();
+    if (wait > 0) {
+        alert(`Too many wrong codes. Please wait about ${wait} minute${wait === 1 ? '' : 's'} and try again.`);
+        return;
+    }
+
+    // --- Ask for the activation code ---
+    const entered = prompt("Enter the activation code you received to register this store:");
+    if (entered === null) return;
+    if (wdaNormalize(entered).length !== 12 || wdaNormalize(entered).indexOf('WD') !== 0) {
+        wdaNoteFail();
+        alert("That doesn't look like a valid activation code. It looks like WD-ABCDE-FGHJK.");
+        return;
+    }
+
+    wdaBusy('Checking your code...');
+    let hash = null, createdUid = null;
+    const db = firebase.database();
+    try {
+        // --- Step 1: Validate activation code (activationCodes/$code is publicly readable) ---
+        hash = await wdaHash(entered);
+        const codeRef = db.ref(`activationCodes/${hash}`);
+        const rec = (await codeRef.once('value')).val();
+        const state = wdaCodeStatus(rec, Date.now());
+
+        if (state !== 'unused') {
+            wdaNoteFail();
+            wdaIdle();
+            alert(({
+                invalid: "Invalid activation code. Please check it and try again, or contact Wise Decision support.",
+                used: "This activation code has already been used.",
+                revoked: "This activation code has been cancelled. Please contact Wise Decision support.",
+                expired: "This activation code has expired. Please ask Wise Decision support for a new one."
+            })[state]);
             return;
         }
 
-        const codeData = codeSnap.val();
+        // --- Step 2: Create the Firebase Auth account FIRST ---
+        // The database rules need auth != null to read stores/<id>/businessName and to write the store,
+        // so we must be signed in before touching them.
+        const userCredential = await firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword);
+        createdUid = userCredential.user.uid;
 
-        if (codeData.status === 'used') {
-            alert("❌ This activation code has already been used for another store. Please contact Wise Decision Support.");
+        // Send verification email (non-blocking)
+        userCredential.user.sendEmailVerification()
+            .then(() => console.log("Verification email sent to " + adminEmail))
+            .catch(err => console.warn("Could not send verification email:", err));
+
+        // --- Step 3: Check Store ID is not taken (allowed now that we're signed in) ---
+        const existing = await db.ref(`stores/${storeId}/businessName`).once('value');
+        if (existing.exists()) {
+            try { await firebase.auth().currentUser.delete(); } catch (_) {}
+            createdUid = null; // already cleaned up, so the catch block must not try again
+            wdaIdle();
+            alert("Store ID already exists. Please choose another or login. Your code is still valid.");
             return;
         }
-        if (codeData.status === 'revoked') {
-            alert("❌ This activation code has been revoked. Please contact Wise Decision Support.");
-            return;
-        }
-        if (codeData.expiresAt && new Date(codeData.expiresAt) < new Date()) {
-            alert("❌ This activation code has expired. Please contact Wise Decision Support.");
-            return;
-        }
 
-        // Step 2: Check if the Store ID is already taken
-        return firebase.database().ref('stores/' + storeId).once('value').then(storeSnap => {
-            if (storeSnap.exists()) {
-                alert("Store ID already exists. Please choose another or login.");
-                return;
-            }
-
-            // Step 3: Create the Firebase Auth account
-            return firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword)
-                .then(userCredential => {
-                    const uid = userCredential.user.uid;
-
-                    userCredential.user.sendEmailVerification()
-                        .then(() => console.log("Verification email sent to " + adminEmail))
-                        .catch(err => console.warn("Could not send verification email:", err));
-
-                    const storeData = {
-                        businessName, phone, address, adminPin,
-                        status: "active",
-                        ownerUid: uid,
-                        ownerEmail: adminEmail,
-                        activationCode: codeToCheck,
-                        createdAt: new Date().toISOString()
-                    };
-
-                    const updates = {};
-                    updates[`stores/${storeId}`] = storeData;
-                    updates[`admins/${uid}`] = true;
-                    updates[`staff/${storeId}/main/${uid}`] = {
-                        name: businessName + " (Owner)",
-                        role: "Manager",
-                        branchId: "main",
-                        email: adminEmail
-                    };
-                    updates[`stores/${storeId}/branches/main`] = {
-                        name: "Main", phone, address, isMain: true,
-                        createdAt: new Date().toISOString()
-                    };
-
-                    // Mark the activation code as used
-                    updates[`activationCodes/${codeToCheck}/status`] = 'used';
-                    updates[`activationCodes/${codeToCheck}/usedByStore`] = storeId;
-                    updates[`activationCodes/${codeToCheck}/usedByEmail`] = adminEmail;
-                    updates[`activationCodes/${codeToCheck}/usedAt`] = new Date().toISOString();
-
-                    return firebase.database().ref().update(updates);
-                })
-                .then(() => {
-                    alert("🎉 Registration complete!\n\nCheck your email inbox (and Spam folder) for a verification link, then log in with your Email and Password.");
-                    switchView('login-view');
-                });
+        // --- Step 4: ONE atomic update: create the store AND flip the code unused -> used ---
+        // The rules only allow the code to change when its old status is 'unused' and the new status
+        // is 'used', so this also means the code can't be spent twice. If someone else used it first,
+        // the whole update is rejected and nothing is created.
+        const nowIso = new Date().toISOString();
+        await db.ref().update({
+            [`stores/${storeId}/businessName`]: businessName,
+            [`stores/${storeId}/phone`]: phone,
+            [`stores/${storeId}/address`]: address,
+            [`stores/${storeId}/adminPin`]: adminPin,
+            [`stores/${storeId}/status`]: 'active',
+            [`stores/${storeId}/storeType`]: storeType,
+            [`stores/${storeId}/ownerUid`]: createdUid,
+            [`stores/${storeId}/ownerEmail`]: adminEmail,
+            [`stores/${storeId}/activationCode`]: wdaNormalize(entered),
+            [`stores/${storeId}/createdAt`]: nowIso,
+            [`stores/${storeId}/branches/main`]: { name: 'Main', phone, address, isMain: true, createdAt: nowIso },
+            [`stores/${storeId}/members/${createdUid}`]: { role: 'Admin', who: 'admin', name: businessName + ' (Owner)', at: nowIso },
+            [`userIndex/${createdUid}`]: { storeIds: [storeId] },
+            [`activationCodes/${hash}/status`]: 'used',
+            [`activationCodes/${hash}/usedBy`]: storeId,
+            [`activationCodes/${hash}/usedAt`]: nowIso
         });
-    }).catch(error => {
-        console.error("Registration error:", error);
-        if (error.code === 'auth/email-already-in-use') {
+        wdaClearFails();
+
+        // --- Step 5: Set up trial billing if the code has it ---
+        // billing/ is admin-write only, so this usually fails for a new owner. That's fine:
+        // wdaSyncTrials() creates it when the Super Admin next opens the dashboard.
+        const trial = wdaTrialBillingFor(rec, nowIso);
+        if (trial) {
+            try { await db.ref(`billing/${storeId}`).set(trial); } catch (e) { console.warn("Trial billing will be created by Super Admin:", e.message); }
+        }
+
+        wdaIdle();
+        alert(
+            "🎉 Registration complete!\n\n" +
+            "Check your email inbox (and Spam folder) for a verification link.\n\n" +
+            "You can now log in with your Email and Password." +
+            (trial ? `\n\nYour free trial runs until ${wdaPrettyDate(trial.dueDate)}.` : '')
+        );
+        switchView('login-view');
+    } catch (e) {
+        console.error("Registration error:", e);
+        // Roll back the auth account if we created it but failed later.
+        // (The code needs no rollback: it is only flipped to 'used' inside the final atomic update.)
+        if (createdUid && firebase.auth().currentUser) {
+            try { await firebase.auth().currentUser.delete(); } catch (_) {}
+        }
+        wdaIdle();
+        if (e.code === 'auth/email-already-in-use') {
             alert("This email is already registered to another account. Please use a different email.");
-        } else if (error.code === 'auth/weak-password') {
+        } else if (e.code === 'auth/weak-password') {
             alert("Password is too weak. Please use at least 6 characters.");
-        } else if (error.code === 'auth/invalid-email') {
+        } else if (e.code === 'auth/invalid-email') {
             alert("Invalid email format. Please check the email address.");
         } else {
-            alert("Registration failed: " + error.message);
+            alert("Registration failed: " + e.message + "\n\nYour activation code was not used up — you can try again.");
         }
-    });
-}
-
-
-/* =====================================================================
-   PART 2 of 2 — ADD this block to script.js
-   Paste it directly after the deleteBusinessAccount(...) function and
-   before the "DASHBOARD METRICS & ALERTS" section.
-   ===================================================================== */
-
-// ==================== ACTIVATION CODE MANAGEMENT (Super Admin) ====================
-function openGenerateCodeModal() {
-    if (currentUserRole !== 'SuperAdmin') {
-        alert("Access Restricted: Only the Super Admin can generate activation codes.");
-        return;
     }
-    document.getElementById('gen-code-customer-name').value = '';
-    document.getElementById('gen-code-notes').value = '';
-    document.getElementById('gen-code-expiry-days').value = '';
-    document.getElementById('generate-code-modal').style.display = 'flex';
-    loadActivationCodesList();
 }
 
-function closeGenerateCodeModal() {
-    document.getElementById('generate-code-modal').style.display = 'none';
+// =====================================================================
+// SUPER ADMIN: make / send / cancel codes
+// =====================================================================
+function wdaModal(title, html) {
+    let m = document.getElementById('wda-modal');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'wda-modal';
+        m.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); justify-content:center; align-items:center; z-index:1350; padding:16px; box-sizing:border-box;';
+        document.body.appendChild(m);
+    }
+    m.innerHTML = `<div style="background:#fff; color:#0f172a; border-radius:12px; width:100%; max-width:500px; max-height:92vh; overflow-y:auto; padding:18px; box-sizing:border-box;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:12px;">
+            <h3 style="margin:0; font-size:17px;">${wdaEsc(title)}</h3>
+            <button class="menu-btn btn-logout" style="width:auto; margin:0; padding:6px 12px;" onclick="wdaCloseModal()">✕</button>
+        </div>${html}</div>`;
+    m.style.display = 'flex';
 }
+function wdaCloseModal() { const m = document.getElementById('wda-modal'); if (m) m.style.display = 'none'; }
 
-function generateActivationCode() {
+var wdaLastGenerated = null;
+
+async function wdaOpenCodes() {
     if (currentUserRole !== 'SuperAdmin') return;
+    wdaModal('🎟 Activation codes', '<div style="text-align:center; color:#64748b; padding:20px;">Loading...</div>');
+    try {
+        const snap = await firebase.database().ref('activationCodes').once('value');
+        const codes = snap.val() || {};
+        const now = Date.now();
+        const list = Object.keys(codes).map(h => Object.assign({ hash: h, state: wdaCodeStatus(codes[h], now) }, codes[h]))
+            .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
-    const customerName = document.getElementById('gen-code-customer-name').value.trim();
-    const notes = document.getElementById('gen-code-notes').value.trim();
-    const expiryDays = parseInt(document.getElementById('gen-code-expiry-days').value) || 0;
+        const badge = st => ({
+            unused: '<span style="background:#dcfce7; color:#166534;">UNUSED</span>',
+            used: '<span style="background:#e0f2fe; color:#075985;">USED</span>',
+            revoked: '<span style="background:#fee2e2; color:#991b1b;">CANCELLED</span>',
+            expired: '<span style="background:#fef3c7; color:#92400e;">EXPIRED</span>'
+        })[st] + '';
 
-    if (!customerName) {
-        alert("Please enter a customer name so you can track this code.");
-        return;
+        const rows = list.length === 0
+            ? '<div style="text-align:center; color:#64748b; padding:14px;">No codes yet.</div>'
+            : list.map(c => `<div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                    <strong style="font-size:13px;">${wdaEsc(c.label || 'No label')}</strong>
+                    <span style="font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">${badge(c.state)}</span>
+                </div>
+                <div style="font-size:11px; color:#64748b; margin:4px 0;">
+                    Made ${wdaPrettyDate(c.createdAt)} · ${wdaNum(c.trialDays) > 0 ? wdaNum(c.trialDays) + '-day free trial' : 'no trial'}${wdaNum(c.monthlyFee) ? ' · ₦' + wdaNum(c.monthlyFee).toLocaleString() + '/month' : ''}
+                    ${c.state === 'unused' && c.expiresAt ? `<br>Valid until ${wdaPrettyDate(c.expiresAt)}` : ''}
+                    ${c.state === 'used' ? `<br>Used by <strong>${wdaEsc(c.usedBy || '?')}</strong> on ${wdaPrettyDate(c.usedAt)}` : ''}
+                </div>
+                <div style="display:flex; gap:6px;">
+                    ${c.state === 'unused' ? `<button data-h="${wdaEsc(c.hash)}" onclick="wdaRevoke(this.dataset.h)" style="padding:5px 10px; font-size:11px; border-radius:6px; cursor:pointer; background:#fef2f2; border:1px solid #fecaca; color:#991b1b;">Cancel code</button>` : ''}
+                    ${c.state !== 'unused' ? `<button data-h="${wdaEsc(c.hash)}" onclick="wdaDeleteCode(this.dataset.h)" style="padding:5px 10px; font-size:11px; border-radius:6px; cursor:pointer; background:#f8fafc; border:1px solid #cbd5e1;">Remove from list</button>` : ''}
+                </div></div>`).join('');
+
+        wdaModal('🎟 Activation codes', `
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:14px;">
+                <div style="font-weight:bold; font-size:13px; margin-bottom:8px;">Make a new code</div>
+                <input id="wda-label" type="text" placeholder="Who is it for? e.g. Medstar Pharmacy (Ade)" style="width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:8px; box-sizing:border-box;">
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px;">
+                    <div><label style="font-size:11px; font-weight:bold;">Free trial (days)</label><input id="wda-trial" type="number" min="0" value="14" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;"></div>
+                    <div><label style="font-size:11px; font-weight:bold;">Monthly fee (₦)</label><input id="wda-fee" type="number" min="0" placeholder="optional" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;"></div>
+                    <div><label style="font-size:11px; font-weight:bold;">Code valid (days)</label><input id="wda-valid" type="number" min="1" value="30" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;"></div>
+                </div>
+                <input id="wda-phone" type="text" placeholder="Customer's WhatsApp number (optional)" style="width:100%; padding:9px; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:8px; box-sizing:border-box;">
+                <button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdaGenerate()">Generate code</button>
+                <div id="wda-result"></div>
+            </div>
+            <div style="font-weight:bold; font-size:13px; margin-bottom:6px;">Codes</div>${rows}`);
+    } catch (e) {
+        wdaModal('🎟 Activation codes', `<div style="color:#b91c1c; padding:12px;">Could not load: ${wdaEsc(e.message)}</div>`);
     }
-
-    // Generate a random, memorable code: WD-XXXX-XXXX
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let part1 = '', part2 = '';
-    for (let i = 0; i < 4; i++) part1 += chars.charAt(Math.floor(Math.random() * chars.length));
-    for (let i = 0; i < 4; i++) part2 += chars.charAt(Math.floor(Math.random() * chars.length));
-    const code = 'WD-' + part1 + '-' + part2;
-
-    const expiresAt = expiryDays > 0
-        ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString()
-        : null;
-
-    const codeData = {
-        code,
-        customerName,
-        notes,
-        status: 'unused',
-        createdAt: new Date().toISOString(),
-        expiresAt,
-        usedByStore: null,
-        usedAt: null
-    };
-
-    firebase.database().ref(`activationCodes/${code}`).set(codeData).then(() => {
-        navigator.clipboard.writeText(code).then(() => {
-            alert(`✅ Code generated and copied to clipboard:\n\n${code}\n\nFor: ${customerName}\n\nSend this to your customer.`);
-        }).catch(() => {
-            alert(`✅ Code generated:\n\n${code}\n\nFor: ${customerName}\n\n(Copy it manually — clipboard access was denied.)`);
-        });
-        document.getElementById('gen-code-customer-name').value = '';
-        document.getElementById('gen-code-notes').value = '';
-        document.getElementById('gen-code-expiry-days').value = '';
-        loadActivationCodesList();
-    }).catch(err => {
-        alert("Failed to generate code: " + err.message);
-    });
 }
 
-function loadActivationCodesList() {
-    firebase.database().ref('activationCodes').once('value').then(snapshot => {
-        const tbody = document.getElementById('activation-codes-body');
-        if (!tbody) return;
+async function wdaGenerate() {
+    const label = document.getElementById('wda-label').value.trim();
+    const trialDays = Math.max(0, parseInt(document.getElementById('wda-trial').value) || 0);
+    const fee = Math.max(0, parseFloat(document.getElementById('wda-fee').value) || 0);
+    const validDays = Math.max(1, parseInt(document.getElementById('wda-valid').value) || 30);
+    const phone = document.getElementById('wda-phone').value.trim();
+    if (!label) { alert("Please say who this code is for, so you can recognise it later."); return; }
 
-        const rows = [];
-        snapshot.forEach(child => {
-            const c = child.val();
-            rows.push({ code: child.key, ...c });
+    const code = wdaGenerateCode();
+    const hash = await wdaHash(code);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + validDays * 86400000).toISOString();
+    try {
+        await firebase.database().ref(`activationCodes/${hash}`).set({
+            label, status: 'unused', trialDays, monthlyFee: fee, createdAt: now.toISOString(), expiresAt
         });
-        rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    } catch (e) { alert("Could not save the code: " + e.message); return; }
 
-        const rowsHtml = rows.map(c => {
-            const statusColor = c.status === 'unused' ? '#166534' : (c.status === 'used' ? '#64748b' : '#991b1b');
-            const statusLabel = c.status === 'unused' ? '✅ Available' : (c.status === 'used' ? '🔒 Used' : '⛔ Revoked');
-            const usedNote = c.usedByStore ? `<br><small style="color:var(--text-muted);">→ ${escapeHtml(c.usedByStore)}</small>` : '';
-            const safeCode = escapeJsAttr(c.code);
-            const actionBtn = c.status === 'unused'
-                ? `<button class="menu-btn btn-logout" style="padding:3px 8px; font-size:11px; width:auto; display:inline-block;" onclick="revokeActivationCode('${safeCode}')">Revoke</button>`
-                : '';
-            return `
-                <tr>
-                    <td><strong style="font-family:monospace;">${escapeHtml(c.code)}</strong>${usedNote}</td>
-                    <td>${escapeHtml(c.customerName) || '—'}</td>
-                    <td style="color:${statusColor}; font-weight:bold; font-size:12px;">${statusLabel}</td>
-                    <td>${actionBtn}</td>
-                </tr>
-            `;
-        });
-
-        tbody.innerHTML = rows.length === 0
-            ? `<tr><td colspan="4" style="text-align:center; color:var(--text-muted); padding:15px;">No codes generated yet.</td></tr>`
-            : rowsHtml.join('');
-    });
+    wdaLastGenerated = { code, label, trialDays, expiresAt, phone };
+    document.getElementById('wda-result').innerHTML = `
+        <div style="margin-top:12px; background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:11px; color:#166534; font-weight:bold;">CODE FOR ${wdaEsc(label.toUpperCase())}</div>
+            <div style="font-size:24px; font-weight:800; letter-spacing:2px; margin:6px 0; user-select:all;">${wdaEsc(code)}</div>
+            <div style="font-size:11px; color:#b45309; margin-bottom:8px;">⚠ Copy or send it now — it is not stored anywhere and cannot be shown again.</div>
+            <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+                <button onclick="wdaCopyCode()" style="padding:7px 12px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#fff; font-weight:bold;">📋 Copy</button>
+                <button onclick="wdaSendCode()" style="padding:7px 12px; border-radius:6px; cursor:pointer; border:1px solid #86efac; background:#dcfce7; color:#166534; font-weight:bold;">📲 Send on WhatsApp</button>
+            </div>
+        </div>`;
 }
 
-function revokeActivationCode(code) {
-    if (!confirm(`Revoke code ${code}? It will no longer be usable for registration.`)) return;
-    firebase.database().ref(`activationCodes/${code}`).update({
-        status: 'revoked',
-        revokedAt: new Date().toISOString()
-    }).then(() => {
-        loadActivationCodesList();
-    });
+function wdaRegisterUrl() { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'app.html?action=register'; }
+
+function wdaCodeMessage(g) {
+    return `Hello ${g.label}, welcome to Wise Decision POS! 🎉\n\nYour activation code: ${g.code}\n(It works once and is valid until ${wdaPrettyDate(g.expiresAt)}.)\n\nRegister your business here:\n${wdaRegisterUrl()}\n` +
+        (g.trialDays > 0 ? `\nYou get a ${g.trialDays}-day free trial to try everything.` : '') +
+        `\n\nAfter registering, log in with your Email and Password.`;
+}
+function wdaCopyCode() {
+    if (!wdaLastGenerated) return;
+    const text = wdaCodeMessage(wdaLastGenerated);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => alert("Copied the code and instructions."), () => prompt("Copy this:", text));
+    else prompt("Copy this:", text);
+}
+function wdaSendCode() {
+    if (!wdaLastGenerated) return;
+    const g = wdaLastGenerated;
+    const number = wdaWaNumber(g.phone);
+    window.open(`https://wa.me/${number}?text=${encodeURIComponent(wdaCodeMessage(g))}`, '_blank');
+}
+
+async function wdaRevoke(hash) {
+    if (!confirm("Cancel this code? It will stop working immediately.")) return;
+    try {
+        await firebase.database().ref(`activationCodes/${hash}/status`).transaction(cur => (cur === 'unused' ? 'revoked' : (cur === null ? cur : undefined)));
+        wdaOpenCodes();
+    } catch (e) { alert("Failed: " + e.message); }
+}
+async function wdaDeleteCode(hash) {
+    if (!confirm("Remove this code from the list? (Stores registered with it are not affected.)")) return;
+    try { await firebase.database().ref(`activationCodes/${hash}`).remove(); wdaOpenCodes(); } catch (e) { alert("Failed: " + e.message); }
+}
+
+function wdaAttach() {
+    if (currentUserRole !== 'SuperAdmin') return;
+    if (!document.getElementById('wda-open-btn')) {
+        const anchor = document.querySelector('#super-admin-view button[onclick="changeSuperAdminMasterPin()"]');
+        if (anchor && anchor.parentElement) {
+            const b = document.createElement('button');
+            b.id = 'wda-open-btn';
+            b.className = 'menu-btn';
+            b.style.cssText = 'width:auto; margin:0; background:#7c3aed; color:#fff;';
+            b.textContent = '🎟 Activation codes';
+            b.onclick = wdaOpenCodes;
+            anchor.parentElement.insertBefore(b, anchor);
+        }
+    }
+}
+setInterval(function () { try { wdaAttach(); } catch (e) { console.warn(e); } }, 1200);
+
+var wdaLastTrialSync = 0;
+async function wdaSyncTrials() {
+    if (currentUserRole !== 'SuperAdmin' || Date.now() - wdaLastTrialSync < 60000) return false;
+    wdaLastTrialSync = Date.now();
+    const [codeSnap, billSnap] = await Promise.all([firebase.database().ref('activationCodes').once('value'), firebase.database().ref('billing').once('value')]);
+    const updates = wdaPlanTrialSync(codeSnap.val() || {}, billSnap.val() || {});
+    if (Object.keys(updates).length === 0) return false;
+    await firebase.database().ref().update(updates);
+    return true;
 }
