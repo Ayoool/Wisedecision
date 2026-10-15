@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.2) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.3) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.2 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.3 loaded");
 
 // btn      = id(s) of the vertical's sidebar button (first one that exists is used)
 // exclusive = true  -> hide EVERY other sidebar button (except WDV_KEEP_TEXT)
@@ -53,7 +53,8 @@ function wdvEnsureStyle() {
     st.id = 'wdv-style';
     st.textContent =
         'body.wdv-exclusive #dashboard-main-wrapper .sidebar button:not(.wdv-keep),' +
-        'body.wdv-exclusive #dashboard-main-wrapper .sidebar .menu-btn:not(.wdv-keep){display:none !important;}';
+        'body.wdv-exclusive #dashboard-main-wrapper .sidebar .menu-btn:not(.wdv-keep){display:none !important;}' +
+        '.wdv-hide-card{display:none !important;}';
     document.head.appendChild(st);
 }
 
@@ -64,6 +65,7 @@ function wdvSidebar() {
 // Put back every button this patch hid
 function wdvRestoreSidebar() {
     if (document.body) document.body.classList.remove('wdv-exclusive');
+    document.querySelectorAll('.wdv-hide-card').forEach(function (c) { c.classList.remove('wdv-hide-card'); });
     var sidebar = wdvSidebar();
     if (!sidebar) return;
     sidebar.querySelectorAll('.wdv-keep').forEach(function (b) { b.classList.remove('wdv-keep'); });
@@ -186,10 +188,35 @@ function wdvRedirectIfNeeded() {
     try { btn.click(); } catch (e) { /* silent */ }
 }
 
+// Phone vendors don't need the "How do you take payment?" (accountant / till) card
+// that pos-mode-patch.js adds under the phone inventory table.
+var WDV_HIDE_CARD_TEXT = ['How do you take payment'];
+
+function wdvHideSettingCards() {
+    var ws = document.getElementById('workspace-content');
+    var table = document.getElementById('wdv-table-body');
+    if (!ws || !table) return;   // only on the phone inventory screen
+    var walker = document.createTreeWalker(ws, NodeFilter.SHOW_TEXT, null, false);
+    var n;
+    while ((n = walker.nextNode())) {
+        var txt = n.nodeValue || '';
+        if (!WDV_HIDE_CARD_TEXT.some(function (k) { return txt.indexOf(k) !== -1; })) continue;
+        var el = n.parentElement;
+        // climb to the whole card: stop just below the first ancestor that also holds the phone table
+        while (el && el.parentElement && el.parentElement !== ws && !el.parentElement.contains(table)) {
+            el = el.parentElement;
+        }
+        if (el && el !== ws && !el.contains(table) && !el.classList.contains('wdv-hide-card')) {
+            el.classList.add('wdv-hide-card');
+        }
+    }
+}
+
 function wdvTick() {
     try {
         wdvWatchType();
         wdvRearrangeSidebar();
+        if (wdvResolved && wdvResolved.exclusive) { wdvEnsureStyle(); wdvHideSettingCards(); }
         wdvRedirectIfNeeded();
     } catch (e) { console.warn('[vertical-first]', e); }
 }
