@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.10) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.11) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.10 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.11 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -51,9 +51,9 @@ var WDV_MAP = {
     // Inventory and Suppliers are reached from buttons on the Materials Dashboard.
     // To bring back more sidebar buttons, add their text to keep, e.g. 'reports', 'expenses', 'staff'.
     'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers'], redirectOn: ['Store Overview'], restyle: false },
+                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers', 'reports'], redirectOn: ['Store Overview'], restyle: false },
     'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers'], redirectOn: ['Store Overview'], restyle: false }
+                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers', 'reports'], redirectOn: ['Store Overview'], restyle: false }
 };
 
 // Buttons that stay visible for exclusive verticals (lower-case text match)
@@ -132,7 +132,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.10] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.11] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -179,7 +179,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.10] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.11] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
