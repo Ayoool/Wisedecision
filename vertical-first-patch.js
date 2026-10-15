@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.3) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.5) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.3 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.5 loaded");
 
 // btn      = id(s) of the vertical's sidebar button (first one that exists is used)
 // exclusive = true  -> hide EVERY other sidebar button (except WDV_KEEP_TEXT)
@@ -24,12 +24,20 @@ var WDV_MAP = {
     'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true },
     'water':        { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     'drinks':       { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
-    'materials':    { btn: ['wdm-sidebar-btn'],  label: '🏗️ Materials', exclusive: false },
-    'hardware':     { btn: ['wdm-sidebar-btn'],  label: '🏗️ Materials', exclusive: false }
+    // Building materials (materials-patch.js adds these 3 sidebar buttons for the Admin):
+    //   🏗️ Materials Dashboard (main), 🛒 New Sale, 🔨 Damaged / Wastage.
+    // New Sale opens the normal POS screen, so we must NOT redirect away from it (redirectOn).
+    // Inventory and Suppliers are reached from buttons on the Materials Dashboard.
+    // To bring back more sidebar buttons, add their text to keep, e.g. 'reports', 'expenses', 'staff'.
+    'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
+                      keep: ['new sale', 'damaged', 'wastage'], redirectOn: ['Store Overview'], restyle: false },
+    'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
+                      keep: ['new sale', 'damaged', 'wastage'], redirectOn: ['Store Overview'], restyle: false }
 };
 
 // Buttons that stay visible for exclusive verticals (lower-case text match)
 var WDV_KEEP_TEXT = ['logout', 'log out', 'sign out'];
+// Each vertical may add its own extra keepers with a  keep: [...]  list in WDV_MAP
 
 var wdvResolved = null;     // entry from WDV_MAP once we know the store's vertical
 var wdvWatchedStore = null; // store whose storeType we are listening to
@@ -117,15 +125,14 @@ function wdvFindBtn(v) {
 }
 
 // Look at the current screen's <h2> to decide if we're on a generic view
-function wdvOnGenericScreen() {
+function wdvOnGenericScreen(v) {
     var ws = document.getElementById('workspace-content');
     if (!ws) return false;
     var h2 = ws.querySelector('h2');
     if (!h2) return false;
     var t = (h2.textContent || '').trim();
-    if (t.indexOf('Store Overview') !== -1) return true;   // generic dashboard
-    if (t.indexOf('Point of Sale') !== -1) return true;    // generic POS register
-    return false;
+    var titles = (v && v.redirectOn) || ['Store Overview', 'Point of Sale'];
+    return titles.some(function (x) { return t.indexOf(x) !== -1; });
 }
 
 // 'important' so other patches that set display on the buttons can't undo the hiding
@@ -147,11 +154,13 @@ function wdvRearrangeSidebar() {
     // Make sure the vertical's button is visible
     if (btn.style.getPropertyValue('display') === 'none') btn.style.removeProperty('display');
 
-    // Style the vertical button as primary
-    btn.style.background = 'linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%)';
-    btn.style.color = '#fff';
-    btn.style.fontWeight = 'bold';
-    btn.style.border = 'none';
+    // Style the vertical button as primary (unless the vertical has its own look)
+    if (wdvResolved.restyle !== false) {
+        btn.style.background = 'linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%)';
+        btn.style.color = '#fff';
+        btn.style.fontWeight = 'bold';
+        btn.style.border = 'none';
+    }
 
     if (wdvResolved.exclusive) {
         // Vertical button goes to the very top
@@ -162,7 +171,8 @@ function wdvRearrangeSidebar() {
         document.body.classList.add('wdv-exclusive');
         sidebar.querySelectorAll('button, .menu-btn').forEach(function (x) {
             var t = (x.textContent || '').trim().toLowerCase();
-            var keep = (x === btn) || WDV_KEEP_TEXT.some(function (k) { return t.indexOf(k) !== -1; });
+            var keepList = WDV_KEEP_TEXT.concat(wdvResolved.keep || []);
+            var keep = (x === btn) || keepList.some(function (k) { return t.indexOf(k) !== -1; });
             if (keep) x.classList.add('wdv-keep'); else x.classList.remove('wdv-keep');
         });
     } else {
@@ -184,7 +194,7 @@ function wdvRedirectIfNeeded() {
     if (!wdvResolved) return;
     var btn = wdvFindBtn(wdvResolved);
     if (!btn) return;
-    if (!wdvOnGenericScreen()) return;
+    if (!wdvOnGenericScreen(wdvResolved)) return;
     try { btn.click(); } catch (e) { /* silent */ }
 }
 
