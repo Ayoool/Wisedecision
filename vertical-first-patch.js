@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.1) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.1 loaded");
 
 // btn      = id(s) of the vertical's sidebar button (first one that exists is used)
 // exclusive = true  -> hide EVERY other sidebar button (except WDV_KEEP_TEXT)
@@ -54,7 +54,7 @@ function wdvRestoreSidebar() {
     var sidebar = wdvSidebar();
     if (!sidebar) return;
     sidebar.querySelectorAll('[data-wdv-hidden="1"]').forEach(function (b) {
-        b.style.display = '';
+        b.style.removeProperty('display');
         b.removeAttribute('data-wdv-hidden');
     });
 }
@@ -112,8 +112,11 @@ function wdvOnGenericScreen() {
     return false;
 }
 
+// 'important' so other patches that set display on the buttons can't undo the hiding
 function wdvHide(b) {
-    if (b.style.display !== 'none') b.style.display = 'none';
+    if (b.style.getPropertyValue('display') !== 'none' || b.style.getPropertyPriority('display') !== 'important') {
+        b.style.setProperty('display', 'none', 'important');
+    }
     b.setAttribute('data-wdv-hidden', '1');
 }
 
@@ -126,7 +129,7 @@ function wdvRearrangeSidebar() {
     if (!btn) return;   // never hide everything if the vertical's own button is missing
 
     // Make sure the vertical's button is visible
-    if (btn.style.display === 'none') btn.style.display = '';
+    if (btn.style.getPropertyValue('display') === 'none') btn.style.removeProperty('display');
 
     // Style the vertical button as primary
     btn.style.background = 'linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%)';
@@ -178,7 +181,7 @@ function wdvTick() {
 
 // Run on load and keep running — cheap operation
 setTimeout(wdvTick, 1500);
-setInterval(wdvTick, 500);
+setInterval(wdvTick, 250);
 
 // Also react to DOM changes for immediate effect
 var wdvObs = new MutationObserver(function () {
