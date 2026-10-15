@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.11) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.12) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.11 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.12 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -132,7 +132,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.11] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.12] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -179,7 +179,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.11] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.12] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
@@ -263,9 +263,63 @@ function wdvHideSettingCards() {
     }
 }
 
+// ---------------------------------------------------------------------
+// Registration safety net: make sure the business type picked at sign-up really gets saved.
+// The chosen type is remembered in this browser; on the Admin's first login to that store, if the
+// store has no type (or just "general"), it is written to stores/{id}/storeType.
+// ---------------------------------------------------------------------
+var WDV_PENDING_KEY = 'wdv_pending_store_type';
+var WDV_PENDING_MAX_AGE = 2 * 60 * 60 * 1000;   // 2 hours
+var wdvPendingChecked = null;
+
+window.addEventListener('load', function () {
+    if (typeof window.registerBusinessAccount !== 'function' || window.__wdvRegSafetyNet) return;
+    window.__wdvRegSafetyNet = true;
+    var inner = window.registerBusinessAccount;
+    window.registerBusinessAccount = function () {
+        try {
+            var idEl = document.getElementById('reg-store-id');
+            var sel = document.getElementById('reg-store-type');
+            var other = document.getElementById('reg-store-type-other');
+            var sid = idEl ? idEl.value.trim().toLowerCase() : '';
+            var type = sel ? sel.value : '';
+            if (type === 'other' && other && other.value.trim()) type = 'other:' + other.value.trim();
+            if (sid && type) localStorage.setItem(WDV_PENDING_KEY, JSON.stringify({ sid: sid, type: type, at: Date.now() }));
+        } catch (e) { /* never block registration */ }
+        return inner.apply(this, arguments);
+    };
+});
+
+function wdvApplyPendingType() {
+    var sid = (typeof currentStoreId !== 'undefined') ? currentStoreId : null;
+    if (!sid || sid === 'SUPER_ADMIN' || wdvPendingChecked === sid) return;
+    if (typeof currentUserRole === 'undefined' || currentUserRole !== 'Admin') return;
+    var raw = null;
+    try { raw = localStorage.getItem(WDV_PENDING_KEY); } catch (e) { return; }
+    wdvPendingChecked = sid;
+    if (!raw) return;
+    var p = null;
+    try { p = JSON.parse(raw); } catch (e) { p = null; }
+    if (!p || Date.now() - (p.at || 0) > WDV_PENDING_MAX_AGE) { try { localStorage.removeItem(WDV_PENDING_KEY); } catch (e) {} return; }
+    if (p.sid !== sid) return;
+    var ref = firebase.database().ref('stores/' + sid + '/storeType');
+    ref.once('value').then(function (snap) {
+        var cur = String(snap.val() || '').toLowerCase();
+        if ((cur && cur !== 'general') || !p.type || p.type === 'general') {
+            try { localStorage.removeItem(WDV_PENDING_KEY); } catch (e) {}
+            return;
+        }
+        return ref.set(p.type).then(function () {
+            try { localStorage.removeItem(WDV_PENDING_KEY); } catch (e) {}
+            console.log('[vertical-first] saved business type "' + p.type + '" for store ' + sid);
+        });
+    }).catch(function (e) { console.warn('[vertical-first] could not save business type:', e && e.message ? e.message : e); });
+}
+
 function wdvTick() {
     try {
         wdvInstallShim();
+        wdvApplyPendingType();
         wdvWatchType();
         wdvRearrangeSidebar();
         if (wdvResolved && wdvResolved.exclusive) { wdvEnsureStyle(); wdvHideSettingCards(); }
