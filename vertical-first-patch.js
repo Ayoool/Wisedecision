@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.6) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.7) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.6 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.7 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -58,6 +58,7 @@ var wdvResolved = null;     // entry from WDV_MAP once we know the store's verti
 var wdvWatchedStore = null; // store whose storeType we are listening to
 var wdvTypeRef = null;
 var wdvLastCheck = 0;
+var wdvMissingSince = 0, wdvMissingLogged = false;   // for the 'button not found' diagnostic
 
 function wdvMatchVertical(type) {
     if (!type) return null;
@@ -124,7 +125,8 @@ function wdvWatchType() {
         if (v !== wdvResolved) {
             wdvRestoreSidebar();
             wdvResolved = v;
-            if (v) console.log('[vertical-first] store type = ' + type + ' → ' + v.label);
+            wdvMissingSince = 0; wdvMissingLogged = false;
+            if (v) console.log('[vertical-first v3.7] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -164,7 +166,22 @@ function wdvRearrangeSidebar() {
     if (!sidebar) return;
 
     var btn = wdvFindBtn(wdvResolved);
-    if (!btn) return;   // never hide everything if the vertical's own button is missing
+    if (!btn) {
+        // never hide everything if the vertical's own button is missing — but say why, once
+        if (!wdvMissingSince) wdvMissingSince = Date.now();
+        if (!wdvMissingLogged && Date.now() - wdvMissingSince > 4000) {
+            wdvMissingLogged = true;
+            var ids = [];
+            sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
+            console.warn('[vertical-first v3.7] button not found: ' + wdvResolved.btn.join(' / ') +
+                ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
+                ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
+                ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
+                ' | sidebar: ' + ids.join(', '));
+        }
+        return;
+    }
+    wdvMissingSince = 0;
 
     // Make sure the vertical's button is visible
     if (btn.style.getPropertyValue('display') === 'none') btn.style.removeProperty('display');
