@@ -1,4 +1,4 @@
-// ==================== WISE DECISION ACTIVATION CODES PATCH (v31) ====================
+// ==================== WISE DECISION ACTIVATION CODES PATCH (v32) ====================
 // Loads AFTER script.js and all other patches, with `defer`.
 // Overrides registerBusinessAccount() with:
 //   - Email + Password (creates Firebase Auth account)
@@ -6,11 +6,15 @@
 //   - Free trial billing setup
 //   - Super Admin 🎟 Activation codes screen
 //
+// v32: FIX permission_denied on registration. The old order read stores/<id>/businessName and
+//      claimed the code BEFORE the Firebase Auth account existed, but the rules need auth != null
+//      for both. New order: check code (public read) -> create auth account -> check Store ID ->
+//      ONE atomic update that creates the store AND flips the code unused -> used.
 // v31: new owners are saved to stores/<id>/members/<uid> (role Admin) + userIndex/<uid>,
 //      which is where email login looks. They are NO LONGER written to admins/ (that list is
 //      Super Admin only) or to the old staff/<id>/main/<uid> "Manager" record.
 
-console.log("Wise Decision activation-patch.js — v31 loaded");
+console.log("Wise Decision activation-patch.js — v32 loaded");
 
 // ---------- Helpers ----------
 var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -149,10 +153,10 @@ async function registerBusinessAccount() {
     }
 
     wdaBusy('Checking your code...');
-    let hash = null, claimed = false, createdUid = null;
+    let hash = null, createdUid = null;
     const db = firebase.database();
     try {
-        // --- Step 1: Validate activation code ---
+        // --- Step 1: Validate activation code (activationCodes/$code is publicly readable) ---
         hash = await wdaHash(entered);
         const codeRef = db.ref(`activationCodes/${hash}`);
         const rec = (await codeRef.once('value')).val();
@@ -170,24 +174,9 @@ async function registerBusinessAccount() {
             return;
         }
 
-        // --- Step 2: Check Store ID not taken ---
-        const existing = await db.ref(`stores/${storeId}/businessName`).once('value');
-        if (existing.exists()) {
-            wdaIdle();
-            alert("Store ID already exists. Please choose another or login.");
-            return;
-        }
-
-        // --- Step 3: Claim the activation code atomically ---
-        const claim = await codeRef.child('status').transaction(cur => (cur === 'unused' ? 'used' : (cur === null ? cur : undefined)));
-        if (!claim.committed || claim.snapshot.val() !== 'used') {
-            wdaIdle();
-            alert("This activation code was just used by someone else.");
-            return;
-        }
-        claimed = true;
-
-        // --- Step 4: Create Firebase Authentication account ---
+        // --- Step 2: Create the Firebase Auth account FIRST ---
+        // The database rules need auth != null to read stores/<id>/businessName and to write the store,
+        // so we must be signed in before touching them.
         const userCredential = await firebase.auth().createUserWithEmailAndPassword(adminEmail, adminPassword);
         createdUid = userCredential.user.uid;
 
@@ -196,19 +185,20 @@ async function registerBusinessAccount() {
             .then(() => console.log("Verification email sent to " + adminEmail))
             .catch(err => console.warn("Could not send verification email:", err));
 
-        // --- Step 5: Re-check Store ID (in case someone registered while we were creating the auth account) ---
-        const again = await db.ref(`stores/${storeId}/businessName`).once('value');
-        if (again.exists()) {
-            // Roll back both the code and the auth account
-            try { await codeRef.child('status').set('unused'); } catch (_) {}
+        // --- Step 3: Check Store ID is not taken (allowed now that we're signed in) ---
+        const existing = await db.ref(`stores/${storeId}/businessName`).once('value');
+        if (existing.exists()) {
             try { await firebase.auth().currentUser.delete(); } catch (_) {}
-            claimed = false;
+            createdUid = null; // already cleaned up, so the catch block must not try again
             wdaIdle();
             alert("Store ID already exists. Please choose another or login. Your code is still valid.");
             return;
         }
 
-        // --- Step 6: Save store data + mark code as used ---
+        // --- Step 4: ONE atomic update: create the store AND flip the code unused -> used ---
+        // The rules only allow the code to change when its old status is 'unused' and the new status
+        // is 'used', so this also means the code can't be spent twice. If someone else used it first,
+        // the whole update is rejected and nothing is created.
         const nowIso = new Date().toISOString();
         await db.ref().update({
             [`stores/${storeId}/businessName`]: businessName,
@@ -223,13 +213,15 @@ async function registerBusinessAccount() {
             [`stores/${storeId}/branches/main`]: { name: 'Main', phone, address, isMain: true, createdAt: nowIso },
             [`stores/${storeId}/members/${createdUid}`]: { role: 'Admin', who: 'admin', name: businessName + ' (Owner)', at: nowIso },
             [`userIndex/${createdUid}`]: { storeIds: [storeId] },
+            [`activationCodes/${hash}/status`]: 'used',
             [`activationCodes/${hash}/usedBy`]: storeId,
             [`activationCodes/${hash}/usedAt`]: nowIso
         });
-        claimed = false;
         wdaClearFails();
 
-        // --- Step 7: Set up trial billing if the code has it ---
+        // --- Step 5: Set up trial billing if the code has it ---
+        // billing/ is admin-write only, so this usually fails for a new owner. That's fine:
+        // wdaSyncTrials() creates it when the Super Admin next opens the dashboard.
         const trial = wdaTrialBillingFor(rec, nowIso);
         if (trial) {
             try { await db.ref(`billing/${storeId}`).set(trial); } catch (e) { console.warn("Trial billing will be created by Super Admin:", e.message); }
@@ -245,9 +237,8 @@ async function registerBusinessAccount() {
         switchView('login-view');
     } catch (e) {
         console.error("Registration error:", e);
-        // Roll back the code if we claimed it but didn't finish
-        if (claimed && hash) { try { await db.ref(`activationCodes/${hash}/status`).set('unused'); } catch (_) {} }
-        // Roll back the auth account if we created it but failed later
+        // Roll back the auth account if we created it but failed later.
+        // (The code needs no rollback: it is only flipped to 'used' inside the final atomic update.)
         if (createdUid && firebase.auth().currentUser) {
             try { await firebase.auth().currentUser.delete(); } catch (_) {}
         }
