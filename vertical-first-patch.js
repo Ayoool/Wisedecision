@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.7) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.8) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.7 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.8 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -24,8 +24,14 @@ function wdvIsMaterialsTypeNow() {
     var t = String(wdmStoreType).toLowerCase();
     return t === 'hardware' || t === 'materials' || t.indexOf('hardware:') === 0 || t.indexOf('materials:') === 0;
 }
-window.wdmIsMaterialsStore = wdvIsMaterialsTypeNow;
-window.wdpIsMaterialsStore = wdvIsMaterialsTypeNow;
+// Re-applied on every tick: if materials-patch.js loads AFTER this file, its own
+// `function wdmIsMaterialsStore` declaration would otherwise overwrite the shim.
+function wdvInstallShim() {
+    if (window.wdmIsMaterialsStore !== wdvIsMaterialsTypeNow) window.wdmIsMaterialsStore = wdvIsMaterialsTypeNow;
+    if (window.wdpIsMaterialsStore !== wdvIsMaterialsTypeNow) window.wdpIsMaterialsStore = wdvIsMaterialsTypeNow;
+}
+wdvInstallShim();
+window.addEventListener('load', wdvInstallShim);
 
 
 // btn      = id(s) of the vertical's sidebar button (first one that exists is used)
@@ -126,7 +132,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.7] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.8] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -173,7 +179,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.7] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.8] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
@@ -256,6 +262,7 @@ function wdvHideSettingCards() {
 
 function wdvTick() {
     try {
+        wdvInstallShim();
         wdvWatchType();
         wdvRearrangeSidebar();
         if (wdvResolved && wdvResolved.exclusive) { wdvEnsureStyle(); wdvHideSettingCards(); }
