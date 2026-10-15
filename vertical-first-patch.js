@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.1) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.2) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.1 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.2 loaded");
 
 // btn      = id(s) of the vertical's sidebar button (first one that exists is used)
 // exclusive = true  -> hide EVERY other sidebar button (except WDV_KEEP_TEXT)
@@ -45,14 +45,28 @@ function wdvMatchVertical(type) {
     return null;
 }
 
+// CSS rule (with !important) so it still wins when another patch (e.g. staff-sidebar-patch.js,
+// which re-applies the role buttons every second) sets display on the buttons.
+function wdvEnsureStyle() {
+    if (document.getElementById('wdv-style')) return;
+    var st = document.createElement('style');
+    st.id = 'wdv-style';
+    st.textContent =
+        'body.wdv-exclusive #dashboard-main-wrapper .sidebar button:not(.wdv-keep),' +
+        'body.wdv-exclusive #dashboard-main-wrapper .sidebar .menu-btn:not(.wdv-keep){display:none !important;}';
+    document.head.appendChild(st);
+}
+
 function wdvSidebar() {
     return document.querySelector('#dashboard-main-wrapper .sidebar');
 }
 
 // Put back every button this patch hid
 function wdvRestoreSidebar() {
+    if (document.body) document.body.classList.remove('wdv-exclusive');
     var sidebar = wdvSidebar();
     if (!sidebar) return;
+    sidebar.querySelectorAll('.wdv-keep').forEach(function (b) { b.classList.remove('wdv-keep'); });
     sidebar.querySelectorAll('[data-wdv-hidden="1"]').forEach(function (b) {
         b.style.removeProperty('display');
         b.removeAttribute('data-wdv-hidden');
@@ -141,12 +155,13 @@ function wdvRearrangeSidebar() {
         // Vertical button goes to the very top
         if (sidebar.firstElementChild !== btn) sidebar.insertBefore(btn, sidebar.firstChild);
 
-        // Hide everything else (including the generic Dashboard and any duplicate phone button)
-        sidebar.querySelectorAll('button').forEach(function (x) {
-            if (x === btn) return;
+        // Everything except the vertical's button and Logout is hidden by the CSS rule
+        wdvEnsureStyle();
+        document.body.classList.add('wdv-exclusive');
+        sidebar.querySelectorAll('button, .menu-btn').forEach(function (x) {
             var t = (x.textContent || '').trim().toLowerCase();
-            var keep = WDV_KEEP_TEXT.some(function (k) { return t.indexOf(k) !== -1; });
-            if (!keep) wdvHide(x);
+            var keep = (x === btn) || WDV_KEEP_TEXT.some(function (k) { return t.indexOf(k) !== -1; });
+            if (keep) x.classList.add('wdv-keep'); else x.classList.remove('wdv-keep');
         });
     } else {
         // Old behaviour: vertical button under Dashboard, hide only generic POS Sales
