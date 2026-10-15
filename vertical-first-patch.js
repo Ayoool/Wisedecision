@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.8) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.10) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.8 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.10 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -40,9 +40,9 @@ window.addEventListener('load', wdvInstallShim);
 var WDV_MAP = {
     'fashion':      { btn: ['wdf-sidebar-btn'],  label: '👗 Fashion Sales', exclusive: false },
     'boutique':     { btn: ['wdf-sidebar-btn'],  label: '👗 Fashion Sales', exclusive: false },
-    'phone_vendor': { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true },
-    'phone':        { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true },
-    'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true },
+    'phone_vendor': { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches'] },
+    'phone':        { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches'] },
+    'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches'] },
     'water':        { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     'drinks':       { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     // Building materials (materials-patch.js adds these 3 sidebar buttons for the Admin):
@@ -51,9 +51,9 @@ var WDV_MAP = {
     // Inventory and Suppliers are reached from buttons on the Materials Dashboard.
     // To bring back more sidebar buttons, add their text to keep, e.g. 'reports', 'expenses', 'staff'.
     'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage'], redirectOn: ['Store Overview'], restyle: false },
+                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers'], redirectOn: ['Store Overview'], restyle: false },
     'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage'], redirectOn: ['Store Overview'], restyle: false }
+                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers'], redirectOn: ['Store Overview'], restyle: false }
 };
 
 // Buttons that stay visible for exclusive verticals (lower-case text match)
@@ -132,7 +132,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.8] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.10] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -179,7 +179,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.8] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.10] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
@@ -201,8 +201,11 @@ function wdvRearrangeSidebar() {
     }
 
     if (wdvResolved.exclusive) {
-        // Vertical button goes to the very top
-        if (sidebar.firstElementChild !== btn) sidebar.insertBefore(btn, sidebar.firstChild);
+        // Vertical button goes at the top of the BUTTON list (under the store name / branch labels)
+        var firstOther = null;
+        var allBtns = sidebar.querySelectorAll('button');
+        for (var i = 0; i < allBtns.length; i++) { if (allBtns[i] !== btn) { firstOther = allBtns[i]; break; } }
+        if (firstOther && btn.nextElementSibling !== firstOther) firstOther.parentNode.insertBefore(btn, firstOther);
 
         // Everything except the vertical's button and Logout is hidden by the CSS rule
         wdvEnsureStyle();
