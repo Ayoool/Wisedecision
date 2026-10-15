@@ -1,4 +1,4 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.5) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.6) ====================
 // Load LAST — after every other vertical patch.
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -11,7 +11,22 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.5 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.6 loaded");
+
+// ---------------------------------------------------------------------
+// Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
+// materials store when storeType is 'hardware' (or 'hardware:...'). The demo store (and any store
+// typed 'materials') uses 'materials', so their buttons were never created. Both files call
+// these two functions by name, so redefining them here (this file loads last) fixes both.
+// ---------------------------------------------------------------------
+function wdvIsMaterialsTypeNow() {
+    if (typeof wdmStoreType === 'undefined' || !wdmStoreType) return false;
+    var t = String(wdmStoreType).toLowerCase();
+    return t === 'hardware' || t === 'materials' || t.indexOf('hardware:') === 0 || t.indexOf('materials:') === 0;
+}
+window.wdmIsMaterialsStore = wdvIsMaterialsTypeNow;
+window.wdpIsMaterialsStore = wdvIsMaterialsTypeNow;
+
 
 // btn      = id(s) of the vertical's sidebar button (first one that exists is used)
 // exclusive = true  -> hide EVERY other sidebar button (except WDV_KEEP_TEXT)
