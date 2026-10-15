@@ -1,9 +1,10 @@
-// ==================== WISE DECISION PHONE EXTRAS PATCH (v2) ====================
+// ==================== WISE DECISION PHONE EXTRAS PATCH (v3) ====================
 // Load AFTER phone-sale-patch.js (and after staff-sidebar-patch.js if you use it).
 //
 // STAGE 3 — Fixes + part payments + returns + trade-ins + reports + permissions
 //           + warranty lookup + repairs.
 //
+// v3: Staff and Branches buttons stay visible for phone vendors.
 // v2: Phone vendor stores now see ONLY the phone dashboard (every other sidebar
 //     button is hidden, and Phone Sales opens automatically after login).
 //
@@ -21,12 +22,12 @@
 // IMPORTANT: roles are enforced in the UI only. Real enforcement needs the
 // Firebase rules lock (security Phase 3).
 
-console.log("Wise Decision phone-extras-patch.js — v2 loaded");
+console.log("Wise Decision phone-extras-patch.js — v3 loaded");
 
 // Sidebar buttons a phone vendor is allowed to see (lower-case text match).
 // Everything else in the sidebar is hidden for phone vendor stores.
 // Add 'pos sales' here if phone vendors should also sell accessories at the normal POS.
-var WDX_PHONE_KEEP = ['phone sales', 'logout', 'log out', 'sign out'];
+var WDX_PHONE_KEEP = ['phone sales', 'logout', 'log out', 'sign out', 'staff', 'branches'];
 
 // Safety net for the old bulk-add typo (`|| EDIT0`). Please also fix the line
 // in phone-vendor-patch.js: change `|| EDIT0` to `|| 0`.
