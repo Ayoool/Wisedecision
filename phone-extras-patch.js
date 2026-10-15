@@ -1,8 +1,11 @@
-// ==================== WISE DECISION PHONE EXTRAS PATCH (v1) ====================
+// ==================== WISE DECISION PHONE EXTRAS PATCH (v2) ====================
 // Load AFTER phone-sale-patch.js (and after staff-sidebar-patch.js if you use it).
 //
 // STAGE 3 — Fixes + part payments + returns + trade-ins + reports + permissions
 //           + warranty lookup + repairs.
+//
+// v2: Phone vendor stores now see ONLY the phone dashboard (every other sidebar
+//     button is hidden, and Phone Sales opens automatically after login).
 //
 // Fixes (without touching Stage 1 / Stage 2 files):
 //   • Profit cards now read the real sale data (they were always ₦0)
@@ -18,11 +21,12 @@
 // IMPORTANT: roles are enforced in the UI only. Real enforcement needs the
 // Firebase rules lock (security Phase 3).
 
-console.log("Wise Decision phone-extras-patch.js — v1 loaded");
+console.log("Wise Decision phone-extras-patch.js — v2 loaded");
 
-// Set to true if phone vendors should NOT see the normal POS Sales / Inventory
-// buttons. Leave false so they can sell accessories (chargers, cases) there.
-var WDX_HIDE_GROCERY_FOR_PHONE_VENDORS = false;
+// Sidebar buttons a phone vendor is allowed to see (lower-case text match).
+// Everything else in the sidebar is hidden for phone vendor stores.
+// Add 'pos sales' here if phone vendors should also sell accessories at the normal POS.
+var WDX_PHONE_KEEP = ['phone sales', 'logout', 'log out', 'sign out'];
 
 // Safety net for the old bulk-add typo (`|| EDIT0`). Please also fix the line
 // in phone-vendor-patch.js: change `|| EDIT0` to `|| 0`.
@@ -218,45 +222,51 @@ window.wdsConfirmAdjustStock = function () {
 };
 
 // =====================================================================
-// SIDEBAR — every role gets the Phone Sales button in a phone-vendor store
+// SIDEBAR — phone vendor stores see ONLY the phone dashboard
 // =====================================================================
+var wdxPhoneOpenedFor = null;
+
 window.wdvApplySidebar = function () {
     var side = document.querySelector('#dashboard-main-wrapper .sidebar');
     if (!side) return;
 
-    var posBtn = null, invBtn = null;
-    side.querySelectorAll('button').forEach(function (b) {
-        var t = (b.textContent || '').trim();
-        if (t.indexOf('POS Sales') !== -1) posBtn = b;
-        if (t.indexOf('Inventory') !== -1 && t.indexOf('Phone') === -1) invBtn = b;
-    });
-
-    var phoneBtn = wdxEl('wdv-sidebar-phone-btn');
     var inStore = typeof currentStoreId !== 'undefined' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
-    var isPhoneVendor = (typeof wdvGetDashboardForStore === 'function') && wdvGetDashboardForStore() === 'phone_vendor';
+    var isPhoneVendor = inStore && typeof wdvGetDashboardForStore === 'function' && wdvGetDashboardForStore() === 'phone_vendor';
+    var phoneBtn = wdxEl('wdv-sidebar-phone-btn');
 
-    if (isPhoneVendor && inStore) {
-        if (WDX_HIDE_GROCERY_FOR_PHONE_VENDORS) {
-            if (posBtn) posBtn.style.display = 'none';
-            if (invBtn) invBtn.style.display = 'none';
-        }
+    if (isPhoneVendor) {
+        // 1. Add the Phone Sales button at the top
         if (!phoneBtn) {
-            var b = document.createElement('button');
-            b.id = 'wdv-sidebar-phone-btn';
-            b.className = 'menu-btn btn-phone';
-            b.textContent = '📱 Phone Sales';
-            b.onclick = function () { wdvShowInventory(); };
-            var dashBtn = null;
-            side.querySelectorAll('button').forEach(function (x) {
-                if ((x.textContent || '').indexOf('Dashboard') !== -1 && !dashBtn) dashBtn = x;
-            });
-            if (dashBtn && dashBtn.nextSibling) side.insertBefore(b, dashBtn.nextSibling);
-            else side.appendChild(b);
+            phoneBtn = document.createElement('button');
+            phoneBtn.id = 'wdv-sidebar-phone-btn';
+            phoneBtn.className = 'menu-btn btn-phone';
+            phoneBtn.textContent = '📱 Phone Sales';
+            phoneBtn.onclick = function () { wdvShowInventory(); };
+            side.insertBefore(phoneBtn, side.firstChild);
+        }
+        // 2. Hide everything else
+        side.querySelectorAll('button').forEach(function (b) {
+            if (b === phoneBtn) return;
+            var t = (b.textContent || '').trim().toLowerCase();
+            var keep = WDX_PHONE_KEEP.some(function (k) { return t.indexOf(k) !== -1; });
+            if (!keep) {
+                if (b.style.display !== 'none') b.style.display = 'none';
+                b.setAttribute('data-wdx-hidden', '1');
+            }
+        });
+        // 3. Land on the phone screen instead of the grocery dashboard
+        if (wdxPhoneOpenedFor !== currentStoreId && wdxEl('workspace-content')) {
+            wdxPhoneOpenedFor = currentStoreId;
+            try { wdvShowInventory(); } catch (e) {}
         }
     } else {
-        if (posBtn && posBtn.style.display === 'none') posBtn.style.display = '';
-        if (invBtn && invBtn.style.display === 'none') invBtn.style.display = '';
+        // Not a phone vendor: restore anything we hid
+        side.querySelectorAll('button[data-wdx-hidden="1"]').forEach(function (b) {
+            b.style.display = '';
+            b.removeAttribute('data-wdx-hidden');
+        });
         if (phoneBtn) phoneBtn.remove();
+        wdxPhoneOpenedFor = null;
     }
 };
 
