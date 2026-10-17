@@ -30,9 +30,13 @@
 // v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
 //   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
 //
+// v4.3 FIX: the login link is now a floating pill on <body> (the login card is rebuilt by email-auth-patch.js, which
+//   wiped anything placed inside it); each part of wdpAttach() is guarded on its own; a 2-second safety re-check;
+//   and a floating "Subscription" button appears if the sidebar one is missing for 3+ seconds.
+//
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.2 loaded");
+console.log("Wise Decision payments-patch.js — v4.3 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -607,41 +611,87 @@ window.wdpAttachSidebar = function () {
 // =====================================================================
 // MAIN ATTACH
 // =====================================================================
-function wdpAttach() {
-    // Super Admin: toolbar button + live listener
-    if (currentUserRole === 'SuperAdmin') {
-        wdpStartListener();
-        const bar = document.getElementById('wds-extra-toolbar');
-        if (bar && !document.getElementById('wdp-btn-pending')) {
-            const b = document.createElement('button');
-            b.id = 'wdp-btn-pending';
-            b.className = 'menu-btn';
-            b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
-            b.onclick = wdpOpenPending;
-            bar.appendChild(b);
-            wdpUpdateBadge();
-        }
-    }
+function wdpIsStoreAdmin() {
+    return currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
+}
 
-    // Store Admin: sidebar button via the shared hook
-    if (document.querySelector('#dashboard-main-wrapper .sidebar')) wdpAttachSidebar();
+// Login link: a floating pill that lives on <body>, so the login card being rebuilt by email-auth-patch.js
+// (it replaces the whole card on load, on "Back to sign in", etc.) can never wipe it.
+function wdpPlaceLoginLink() {
+    const wrap = document.getElementById('wdp-login-float');
+    if (!wrap) return;
+    const regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
+    if (!regBtn) { wrap.style.display = 'none'; return; }
+    const card = regBtn.closest('.auth-card') || regBtn.parentElement;
+    const r = card.getBoundingClientRect();
+    const top = Math.max(8, Math.min(r.bottom + 12, window.innerHeight - 110));
+    wrap.style.top = top + 'px';
+    wrap.style.display = 'block';
+}
+
+// Sidebar fallback: if the sidebar button is not on screen for 3+ seconds (other patches keep rebuilding the
+// sidebar), show a small floating "Subscription" button instead, so the Admin can always reach it.
+var wdpSideMissingSince = 0;
+function wdpUpdateFloatBtn() {
+    let chip = document.getElementById('wdp-float-btn');
+    const wrap = document.getElementById('dashboard-main-wrapper');
+    const dashShown = !!(wrap && wrap.classList.contains('active') && wdpIsShown(wrap));
+    const btn = document.getElementById('wdp-sidebar-btn');
+    const sideOk = !!(btn && wdpIsShown(btn));
+    if (!wdpIsStoreAdmin() || !dashShown || sideOk) {
+        wdpSideMissingSince = 0;
+        if (chip) chip.style.display = 'none';
+        return;
+    }
+    if (!wdpSideMissingSince) wdpSideMissingSince = Date.now();
+    if (Date.now() - wdpSideMissingSince < 3000) return;
+    if (!chip) {
+        chip = document.createElement('button');
+        chip.id = 'wdp-float-btn';
+        chip.textContent = '💳 Subscription';
+        chip.style.cssText = 'position:fixed; right:14px; bottom:calc(env(safe-area-inset-bottom, 0px) + 90px); z-index:60; padding:10px 14px; border:none; border-radius:999px; background:#0284c7; color:#fff; font-size:13px; font-weight:700; box-shadow:0 4px 14px rgba(15,23,42,0.3); cursor:pointer;';
+        chip.onclick = function () { wdpOpenRenew(currentStoreId); };
+        document.body.appendChild(chip);
+    }
+    chip.style.display = 'block';
+}
+
+function wdpAttach() {
+    // Each part is guarded on its own, so one failing can never stop the others.
+
+    // Super Admin: toolbar button + live listener
+    try {
+        if (currentUserRole === 'SuperAdmin') {
+            wdpStartListener();
+            const bar = document.getElementById('wds-extra-toolbar');
+            if (bar && !document.getElementById('wdp-btn-pending')) {
+                const b = document.createElement('button');
+                b.id = 'wdp-btn-pending';
+                b.className = 'menu-btn';
+                b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
+                b.onclick = wdpOpenPending;
+                bar.appendChild(b);
+                wdpUpdateBadge();
+            }
+        }
+    } catch (e) { console.warn(e); }
+
+    // Store Admin: sidebar button via the shared hook, plus the floating fallback
+    try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
+    try { wdpUpdateFloatBtn(); } catch (e) { console.warn(e); }
 
     // Login screen link (so a locked store can still pay)
-    // Anchored right under the VISIBLE "Register New Business" button. Other patches rebuild or copy the login
-    // card, so this re-checks every time and replaces a stale copy left behind in a hidden card.
-    var regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
-    var oldWraps = document.querySelectorAll('#wdp-login-wrap');
-    if (!(regBtn && oldWraps.length === 1 && regBtn.nextElementSibling === oldWraps[0])) {
-        oldWraps.forEach(function (w) { w.remove(); });
-        if (regBtn) {
-            var wrapDiv = document.createElement('div');
-            wrapDiv.id = 'wdp-login-wrap';
-            wrapDiv.style.cssText = 'text-align:center; margin-top:14px;';
-            wrapDiv.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
-            wrapDiv.firstChild.onclick = function () { wdpOpenRenew(''); };
-            regBtn.insertAdjacentElement('afterend', wrapDiv);
+    try {
+        if (!document.getElementById('wdp-login-float')) {
+            const w = document.createElement('div');
+            w.id = 'wdp-login-float';
+            w.style.cssText = 'position:fixed; left:0; right:0; top:0; z-index:50; text-align:center; pointer-events:none; display:none;';
+            w.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="pointer-events:auto; display:inline-block; padding:8px 16px; border-radius:999px; background:rgba(255,255,255,0.94); box-shadow:0 4px 14px rgba(15,23,42,0.18); font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
+            w.firstChild.onclick = function () { wdpOpenRenew(''); };
+            document.body.appendChild(w);
         }
-    }
+        wdpPlaceLoginLink();
+    } catch (e) { console.warn(e); }
 
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
@@ -669,4 +719,12 @@ function wdpAttach() {
             wdpObserver.observe(document.body, { childList: true, subtree: true });
         });
     }
+})();
+
+// Safety net: re-check every 2 seconds (idempotent and cheap) and when the screen is resized/scrolled, in case a
+// patch changes the page in a way the observer does not see.
+(function () {
+    setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 2000);
+    window.addEventListener('resize', function () { try { wdpPlaceLoginLink(); } catch (e) {} });
+    window.addEventListener('scroll', function () { try { wdpPlaceLoginLink(); } catch (e) {} }, true);
 })();
