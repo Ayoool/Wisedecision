@@ -24,9 +24,12 @@
 //       if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
 //     immediately after they rebuild the sidebar, to eliminate the race entirely.
 //
+// v4.1 FIX (login link): the login screen no longer uses .auth-card / "login to store", so the
+//   "Renew or pay subscription" link is now anchored under the "Register New Business" button.
+//
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4 loaded");
+console.log("Wise Decision payments-patch.js — v4.1 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -606,31 +609,20 @@ function wdpAttach() {
     if (document.querySelector('#dashboard-main-wrapper .sidebar')) wdpAttachSidebar();
 
     // Login screen link (so a locked store can still pay)
+    // Anchored under the "Register New Business" button, so it does not depend on any card class name.
     if (!document.getElementById('wdp-login-link')) {
-        var loginCard = document.querySelector('#login-view .auth-card') ||
-                        document.querySelector('.auth-card') ||
-                        document.querySelector('#login-view .login-card') ||
-                        document.querySelector('.login-card') ||
-                        document.querySelector('#login-view .card') ||
-                        document.querySelector('#login-view form');
-
-        if (!loginCard) {
-            var btns = document.querySelectorAll('button, input[type="submit"]');
-            for (var i = 0; i < btns.length; i++) {
-                var t = (btns[i].textContent || btns[i].value || '').trim().toLowerCase();
-                if (t.indexOf('login to store') !== -1) {
-                    loginCard = btns[i].closest('.auth-card, .login-card, .card, form, div');
-                    if (loginCard) break;
-                }
-            }
+        var anchorBtn = null;
+        var btns = document.querySelectorAll('button, input[type="submit"]');
+        for (var i = 0; i < btns.length; i++) {
+            var t = (btns[i].textContent || btns[i].value || '').trim().toLowerCase();
+            if (t.indexOf('register new business') !== -1) { anchorBtn = btns[i]; break; }
         }
-
-        if (loginCard) {
+        if (anchorBtn && anchorBtn.offsetParent !== null) {
             var wrapDiv = document.createElement('div');
-            wrapDiv.style.cssText = 'text-align:center; margin-top:10px;';
+            wrapDiv.style.cssText = 'text-align:center; margin-top:14px;';
             wrapDiv.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
             wrapDiv.firstChild.onclick = function () { wdpOpenRenew(''); };
-            loginCard.appendChild(wrapDiv);
+            anchorBtn.insertAdjacentElement('afterend', wrapDiv);
         }
     }
 
