@@ -27,9 +27,12 @@
 // v4.1 FIX (login link): the login screen no longer uses .auth-card / "login to store", so the
 //   "Renew or pay subscription" link is now anchored under the "Register New Business" button.
 //
+// v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
+//   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
+//
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.1 loaded");
+console.log("Wise Decision payments-patch.js — v4.2 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -567,23 +570,38 @@ async function wdpEnsureBanner() {
 // Other patches should add, right after their sidebar rebuild:
 //     if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
 // =====================================================================
+function wdpIsShown(el) { return !!(el && el.getClientRects().length > 0); }
+function wdpFindShownButton(root, test) {
+    const btns = root.querySelectorAll('button');
+    for (let i = 0; i < btns.length; i++) {
+        const t = (btns[i].textContent || '').trim().toLowerCase();
+        if (test(t) && wdpIsShown(btns[i])) return btns[i];
+    }
+    return null;
+}
+
 window.wdpAttachSidebar = function () {
-    const side = document.querySelector('#dashboard-main-wrapper .sidebar');
+    const wrap = document.getElementById('dashboard-main-wrapper');
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
-    if (!side || !isAdmin) return;
+    const old = document.querySelectorAll('#wdp-sidebar-btn');
+    if (!wrap || !isAdmin) { old.forEach(function (b) { b.remove(); }); return; }
 
-    // If the button already exists, DO NOTHING — this is the flicker fix.
-    if (document.getElementById('wdp-sidebar-btn')) return;
+    // The VISIBLE Logout button marks the sidebar the person is actually looking at
+    // (other patches rebuild/copy the sidebar, so ".sidebar" alone can point at a hidden one).
+    const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
+    if (!logout) return;
 
+    // Already one copy, right before Logout: do nothing (flicker fix)
+    if (old.length === 1 && logout.previousElementSibling === old[0]) return;
+
+    // Otherwise drop any stale copy (e.g. left in a hidden sidebar) and insert a fresh one
+    old.forEach(function (b) { b.remove(); });
     const sb = document.createElement('button');
     sb.id = 'wdp-sidebar-btn';
     sb.className = 'menu-btn btn-subscription';   // stable class, no CSS transition
     sb.textContent = '💳 Subscription';
     sb.onclick = function () { wdpOpenRenew(currentStoreId); };
-
-    const logout = side.querySelector('.btn-logout');
-    if (logout) side.insertBefore(sb, logout);
-    else side.appendChild(sb);
+    logout.parentNode.insertBefore(sb, logout);
 };
 
 // =====================================================================
@@ -609,20 +627,19 @@ function wdpAttach() {
     if (document.querySelector('#dashboard-main-wrapper .sidebar')) wdpAttachSidebar();
 
     // Login screen link (so a locked store can still pay)
-    // Anchored under the "Register New Business" button, so it does not depend on any card class name.
-    if (!document.getElementById('wdp-login-link')) {
-        var anchorBtn = null;
-        var btns = document.querySelectorAll('button, input[type="submit"]');
-        for (var i = 0; i < btns.length; i++) {
-            var t = (btns[i].textContent || btns[i].value || '').trim().toLowerCase();
-            if (t.indexOf('register new business') !== -1) { anchorBtn = btns[i]; break; }
-        }
-        if (anchorBtn && anchorBtn.offsetParent !== null) {
+    // Anchored right under the VISIBLE "Register New Business" button. Other patches rebuild or copy the login
+    // card, so this re-checks every time and replaces a stale copy left behind in a hidden card.
+    var regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
+    var oldWraps = document.querySelectorAll('#wdp-login-wrap');
+    if (!(regBtn && oldWraps.length === 1 && regBtn.nextElementSibling === oldWraps[0])) {
+        oldWraps.forEach(function (w) { w.remove(); });
+        if (regBtn) {
             var wrapDiv = document.createElement('div');
+            wrapDiv.id = 'wdp-login-wrap';
             wrapDiv.style.cssText = 'text-align:center; margin-top:14px;';
             wrapDiv.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
             wrapDiv.firstChild.onclick = function () { wdpOpenRenew(''); };
-            anchorBtn.insertAdjacentElement('afterend', wrapDiv);
+            regBtn.insertAdjacentElement('afterend', wrapDiv);
         }
     }
 
