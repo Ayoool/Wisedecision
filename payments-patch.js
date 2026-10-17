@@ -30,13 +30,14 @@
 // v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
 //   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
 //
-// v4.3 FIX: the login link is now a floating pill on <body> (the login card is rebuilt by email-auth-patch.js, which
-//   wiped anything placed inside it); each part of wdpAttach() is guarded on its own; a 2-second safety re-check;
-//   and a floating "Subscription" button appears if the sidebar one is missing for 3+ seconds.
+// v4.5: NOTHING FLOATS. The login link sits inside the login card again (re-inserted after every rebuild of the card),
+//   and the sidebar button is forced visible with a CSS rule so adjustSidebarForRole cannot hide it.
+// v4.4 FIX: the Subscription screen reads each database node separately (one blocked node no longer breaks it),
+//   falls back to the default bank details, and shows the real reason when loading fails.
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.3 loaded");
+console.log("Wise Decision payments-patch.js — v4.5 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -149,25 +150,56 @@ function wdpAskStoreId(message) {
 
 async function wdpLoadStore(id) {
     const db = firebase.database();
-    const t = function (p) { return wdpTimeout(p, 15000); };
-    const res = await Promise.all([
-        t(db.ref('stores/' + id + '/businessName').once('value')),
-        t(db.ref('billing/' + id).once('value')),
-        t(db.ref('billingSettings').once('value')),
-        t(db.ref('paymentRequests/' + id).once('value'))
+    // Each read is separate, so one blocked/slow node cannot break the whole screen.
+    const safe = function (label, ref) {
+        return wdpTimeout(ref.once('value'), 15000).then(
+            function (snap) { return { ok: true, val: snap.val() }; },
+            function (e) { return { ok: false, label: label, err: String((e && (e.code || e.message)) || 'error') }; });
+    };
+    const r = await Promise.all([
+        safe('store name', db.ref('stores/' + id + '/businessName')),
+        safe('billing', db.ref('billing/' + id)),
+        safe('settings', db.ref('billingSettings')),
+        safe('payment history', db.ref('paymentRequests/' + id))
     ]);
-    const settings = Object.assign(typeof wdsDefaults === 'function' ? wdsDefaults() : {}, res[2].val() || {});
-    return { id: id, name: res[0].val() || '', billing: res[1].val() || null, settings: settings, plans: settings.plans || {}, requests: res[3].val() || {} };
+    const failed = r.filter(function (x) { return !x.ok; });
+    if (failed.length === r.length) {
+        const err = new Error('all reads failed');
+        err.details = failed.map(function (f) { return f.label + ': ' + f.err; }).join('; ');
+        throw err;
+    }
+    const settings = Object.assign(typeof wdsDefaults === 'function' ? wdsDefaults() : {}, (r[2].ok && r[2].val) || {});
+    // If the name could not be read (blocked), carry on with the ID the person typed; null means "no such store".
+    const name = r[0].ok ? (r[0].val || '') : id;
+    return {
+        id: id, name: name,
+        billing: (r[1].ok && r[1].val) || null,
+        settings: settings, plans: settings.plans || {},
+        requests: (r[3].ok && r[3].val) || {},
+        failed: failed.map(function (f) { return f.label; })
+    };
+}
+
+var wdpLastId = '';
+function wdpFailNote(c) {
+    if (!c || !c.failed || !c.failed.length) return '';
+    return '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">Some details could not be loaded (' + wdpEsc(c.failed.join(', ')) + '). You can still pay and send your proof.</div>';
 }
 
 async function wdpOpenRenew(presetId) {
     const id = String(presetId || '').trim().toLowerCase();
     if (!id) { wdpAskStoreId(''); return; }
+    wdpLastId = id;
     wdpBanner.at = 0;   // refresh the reminder banner after this
     wdpModal('💳 Subscription', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
     let data;
     try { data = await wdpLoadStore(id); }
-    catch (e) { wdpModal('💳 Subscription', '<div style="color:#b91c1c; padding:12px;">Could not load. Please check your internet connection and try again.</div>'); return; }
+    catch (e) {
+        const why = e && e.details ? e.details : (e && e.message) || 'unknown';
+        wdpModal('💳 Subscription', '<div style="color:#b91c1c; padding:12px;">Could not load. Please check your internet connection and try again.<div style="font-size:11px; color:#64748b; margin-top:8px;">Details: ' + wdpEsc(why) + '</div></div>' +
+            '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdpOpenRenew(wdpLastId)">Try again</button>');
+        return;
+    }
     if (!data.name) { wdpAskStoreId('We could not find a store with the ID "' + id + '". Please check the spelling.'); return; }
     wdpCtx = data;
     wdpRenderRenew();
@@ -236,7 +268,7 @@ function wdpRenderRenew() {
     wdpModal('💳 Subscription — ' + c.name,
         '<div style="margin-bottom:12px;"><div style="font-size:12px; color:#64748b;">Store ID: ' + wdpEsc(c.id) + (currentPlan ? ' · Plan: <strong>' + wdpEsc(currentPlan.name) + '</strong>' : '') + '</div>' +
         '<div style="font-size:15px; font-weight:bold; color:' + statusColor + ';">' + statusText + '</div></div>' +
-        bank + pendingNote + form + histHtml +
+        wdpFailNote(c) + bank + pendingNote + form + histHtml +
         '<div style="text-align:center; margin-top:12px;"><a href="https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent('Hello, I need help with my Wise Decision subscription. Store ID: ' + c.id) + '" target="_blank" rel="noopener" style="font-size:12px; color:#166534; font-weight:bold;">💬 Need help? Chat with support</a></div>');
     wdpRecalc();
 }
@@ -611,49 +643,40 @@ window.wdpAttachSidebar = function () {
 // =====================================================================
 // MAIN ATTACH
 // =====================================================================
-function wdpIsStoreAdmin() {
-    return currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
-}
+// Keep the sidebar button visible even if another patch (adjustSidebarForRole) tries to hide buttons it does not know.
+(function () {
+    const st = document.createElement('style');
+    st.textContent = '#wdp-sidebar-btn { display:flex !important; visibility:visible !important; opacity:1 !important; }';
+    (document.head || document.documentElement).appendChild(st);
+})();
 
-// Login link: a floating pill that lives on <body>, so the login card being rebuilt by email-auth-patch.js
-// (it replaces the whole card on load, on "Back to sign in", etc.) can never wipe it.
-function wdpPlaceLoginLink() {
-    const wrap = document.getElementById('wdp-login-float');
-    if (!wrap) return;
+// Login link: sits inside the login card, right under "Register New Business". The card is rebuilt by
+// email-auth-patch.js, so it is re-inserted after every rebuild (see wdpHookLoginBuild) and on every re-check.
+function wdpInsertLoginLink() {
     const regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
-    if (!regBtn) { wrap.style.display = 'none'; return; }
-    const card = regBtn.closest('.auth-card') || regBtn.parentElement;
-    const r = card.getBoundingClientRect();
-    const top = Math.max(8, Math.min(r.bottom + 12, window.innerHeight - 110));
-    wrap.style.top = top + 'px';
-    wrap.style.display = 'block';
+    const old = document.querySelectorAll('#wdp-login-wrap');
+    if (regBtn && old.length === 1 && regBtn.nextElementSibling === old[0]) return;   // already in place
+    old.forEach(function (w) { w.remove(); });
+    if (!regBtn) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'wdp-login-wrap';
+    wrap.style.cssText = 'text-align:center; margin-top:14px;';
+    wrap.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
+    wrap.firstChild.onclick = function () { wdpOpenRenew(''); };
+    regBtn.insertAdjacentElement('afterend', wrap);
 }
 
-// Sidebar fallback: if the sidebar button is not on screen for 3+ seconds (other patches keep rebuilding the
-// sidebar), show a small floating "Subscription" button instead, so the Admin can always reach it.
-var wdpSideMissingSince = 0;
-function wdpUpdateFloatBtn() {
-    let chip = document.getElementById('wdp-float-btn');
-    const wrap = document.getElementById('dashboard-main-wrapper');
-    const dashShown = !!(wrap && wrap.classList.contains('active') && wdpIsShown(wrap));
-    const btn = document.getElementById('wdp-sidebar-btn');
-    const sideOk = !!(btn && wdpIsShown(btn));
-    if (!wdpIsStoreAdmin() || !dashShown || sideOk) {
-        wdpSideMissingSince = 0;
-        if (chip) chip.style.display = 'none';
-        return;
-    }
-    if (!wdpSideMissingSince) wdpSideMissingSince = Date.now();
-    if (Date.now() - wdpSideMissingSince < 3000) return;
-    if (!chip) {
-        chip = document.createElement('button');
-        chip.id = 'wdp-float-btn';
-        chip.textContent = '💳 Subscription';
-        chip.style.cssText = 'position:fixed; right:14px; bottom:calc(env(safe-area-inset-bottom, 0px) + 90px); z-index:60; padding:10px 14px; border:none; border-radius:999px; background:#0284c7; color:#fff; font-size:13px; font-weight:700; box-shadow:0 4px 14px rgba(15,23,42,0.3); cursor:pointer;';
-        chip.onclick = function () { wdpOpenRenew(currentStoreId); };
-        document.body.appendChild(chip);
-    }
-    chip.style.display = 'block';
+// email-auth-patch.js loads after this file, so hook its card builder as soon as it exists.
+function wdpHookLoginBuild() {
+    const prev = window.wdaeBuildLoginScreen;
+    if (typeof prev !== 'function' || prev.__wdp) return;
+    const hooked = function () {
+        const r = prev.apply(this, arguments);
+        try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
+        return r;
+    };
+    hooked.__wdp = true;
+    window.wdaeBuildLoginScreen = hooked;
 }
 
 function wdpAttach() {
@@ -676,22 +699,12 @@ function wdpAttach() {
         }
     } catch (e) { console.warn(e); }
 
-    // Store Admin: sidebar button via the shared hook, plus the floating fallback
+    // Store Admin: sidebar button via the shared hook
     try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
-    try { wdpUpdateFloatBtn(); } catch (e) { console.warn(e); }
 
     // Login screen link (so a locked store can still pay)
-    try {
-        if (!document.getElementById('wdp-login-float')) {
-            const w = document.createElement('div');
-            w.id = 'wdp-login-float';
-            w.style.cssText = 'position:fixed; left:0; right:0; top:0; z-index:50; text-align:center; pointer-events:none; display:none;';
-            w.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="pointer-events:auto; display:inline-block; padding:8px 16px; border-radius:999px; background:rgba(255,255,255,0.94); box-shadow:0 4px 14px rgba(15,23,42,0.18); font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
-            w.firstChild.onclick = function () { wdpOpenRenew(''); };
-            document.body.appendChild(w);
-        }
-        wdpPlaceLoginLink();
-    } catch (e) { console.warn(e); }
+    try { wdpHookLoginBuild(); } catch (e) { console.warn(e); }
+    try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
 
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
@@ -721,10 +734,8 @@ function wdpAttach() {
     }
 })();
 
-// Safety net: re-check every 2 seconds (idempotent and cheap) and when the screen is resized/scrolled, in case a
-// patch changes the page in a way the observer does not see.
+// Safety net: re-check every 2 seconds (idempotent and cheap), in case a patch changes the page in a way the
+// observer does not see.
 (function () {
     setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 2000);
-    window.addEventListener('resize', function () { try { wdpPlaceLoginLink(); } catch (e) {} });
-    window.addEventListener('scroll', function () { try { wdpPlaceLoginLink(); } catch (e) {} }, true);
 })();
