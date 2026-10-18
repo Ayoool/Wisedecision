@@ -1,10 +1,12 @@
-// ==================== WISE DECISION EMAIL AUTH PATCH (v3) ====================
+// ==================== WISE DECISION EMAIL AUTH PATCH (v4) ====================
 // Load LAST, after auth-patch.js (defer).
 //
+// v4: Removed the "First time? Set up email login" button from the login screen (every store is on email login now,
+//     and the database no longer lets signed-out visitors read the PINs it needed).
 // v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful sign-in.
 // v2: Reads store membership via userIndex/{uid} instead of scanning the entire stores/ tree.
 
-console.log("Wise Decision email-auth-patch.js v3 loaded");
+console.log("Wise Decision email-auth-patch.js v4 loaded");
 
 var WDAE_FAKE_DOMAIN = 'wd.invalid';
 var WDAE_SUPER_EMAIL_KEY = 'wd_super_email';
@@ -70,8 +72,6 @@ function wdaeBuildLoginScreen() {
 
         '<div style="text-align:center; margin:16px 0 8px 0; color:#94a3b8; font-size:11px;">─── or ───</div>' +
 
-        '<button class="menu-btn btn-secondary" id="wdae-setup-btn" style="font-size:12px;">First time? Set up email login</button>' +
-
         '<button class="menu-btn btn-secondary" id="wdae-register-btn" style="margin-top:10px; font-size:12px;">Register New Business</button>' +
 
         '<div id="wdae-login-msg" style="display:none; margin-top:12px; padding:10px; border-radius:8px; font-size:12px; text-align:center;"></div>';
@@ -80,12 +80,10 @@ function wdaeBuildLoginScreen() {
     const passEl = document.getElementById('wdae-password');
     const signinBtn = document.getElementById('wdae-signin-btn');
     const forgotLink = document.getElementById('wdae-forgot-link');
-    const setupBtn = document.getElementById('wdae-setup-btn');
     const registerBtn = document.getElementById('wdae-register-btn');
 
     signinBtn.onclick = wdaeSignInWithEmail;
     forgotLink.onclick = wdaeForgotPassword;
-    setupBtn.onclick = function () { wdaeOpenBindModal(); };
     registerBtn.onclick = function () { switchView('register-view'); };
 
     passEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') wdaeSignInWithEmail(); });
@@ -136,7 +134,7 @@ async function wdaeSignInWithEmail() {
 
         if (memberships.length === 0) {
             await firebase.auth().signOut();
-            wdaeSetLoginMessage('This account is not linked to a store yet. Ask your store owner to add you, or use "Set up email login".', false);
+            wdaeSetLoginMessage('This account is not linked to a store yet. Ask your store owner to add you.', false);
             return;
         }
 
@@ -421,6 +419,7 @@ async function wdaeForgotPassword() {
 
 // =====================================================================
 // FIRST-TIME EMAIL BINDING
+// (No longer reachable from the login screen — kept in case it is needed again.)
 // =====================================================================
 function wdaeOpenBindModal(prefillStoreId) {
     let m = document.getElementById('wdae-bind-modal');
