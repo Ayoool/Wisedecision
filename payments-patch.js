@@ -30,6 +30,8 @@
 // v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
 //   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
 //
+// v4.9: the Super Admin "Pending payments" button now goes in the dark header, before "Logout / Exit" (a button that is
+//   written in app.html, so it is always there). ?wdpdebug=1 also reports on the Super Admin screen.
 // v4.8: the Super Admin "Pending payments" button is placed next to the visible "Billing settings" / "Load usage" button.
 // v4.7: the sidebar button can be written straight into app.html (data-static="1"); adjustSidebarForRole then shows it
 //   for the Admin and hides it for other roles. The old JS insertion stays as a fallback. Open the app with ?wdpdebug=1
@@ -42,7 +44,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.8 loaded");
+console.log("Wise Decision payments-patch.js — v4.9 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -689,19 +691,27 @@ function wdpHookLoginBuild() {
     window.wdaeBuildLoginScreen = hooked;
 }
 
-// Super Admin "Pending payments" button. It is placed right next to a visible toolbar button ("Billing settings" or
-// "Load usage") instead of looking for one fixed toolbar id, because other patches build that toolbar.
+// Super Admin "Pending payments" button. It goes in the dark header, right before "Logout / Exit" (a button written in
+// app.html, so it is always there), and falls back to sitting next to "Billing settings" / "Load usage". It does not
+// depend on any toolbar id, because other patches build the toolbars.
+function wdpPendingAnchor(view) {
+    const exit = wdpFindShownButton(view, function (t) { return t.indexOf('logout / exit') !== -1; });
+    if (exit) return { el: exit, where: 'beforebegin' };
+    const other = wdpFindShownButton(view, function (t) { return t.indexOf('billing settings') !== -1; }) ||
+                  wdpFindShownButton(view, function (t) { return t.indexOf('load usage') !== -1; });
+    return other ? { el: other, where: 'afterend' } : null;
+}
+
 function wdpAttachPendingButton() {
     const view = document.getElementById('super-admin-view');
     const old = document.querySelectorAll('#wdp-btn-pending');
     if (currentUserRole !== 'SuperAdmin' || !view) { old.forEach(function (b) { b.remove(); }); return; }
 
-    const anchor = wdpFindShownButton(view, function (t) { return t.indexOf('billing settings') !== -1; }) ||
-                   wdpFindShownButton(view, function (t) { return t.indexOf('load usage') !== -1; });
+    const anchor = wdpPendingAnchor(view);
     if (!anchor) return;
 
-    // Already one copy in the same toolbar: just refresh its label and count
-    if (old.length === 1 && old[0].parentNode === anchor.parentNode) { wdpUpdateBadge(); return; }
+    // Already one copy in the same row: just refresh its label and count
+    if (old.length === 1 && old[0].parentNode === anchor.el.parentNode) { wdpUpdateBadge(); return; }
 
     old.forEach(function (b) { b.remove(); });
     const b = document.createElement('button');
@@ -709,7 +719,7 @@ function wdpAttachPendingButton() {
     b.className = 'menu-btn';
     b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
     b.onclick = wdpOpenPending;
-    anchor.insertAdjacentElement('afterend', b);
+    anchor.el.insertAdjacentElement(anchor.where, b);
     wdpUpdateBadge();
 }
 
@@ -718,6 +728,20 @@ function wdpAttachPendingButton() {
 var wdpDebugDone = false;
 function wdpDebugReport() {
     if (wdpDebugDone || !/[?&]wdpdebug=1/.test(location.search)) return;
+    const sv = document.getElementById('super-admin-view');
+    if (currentUserRole === 'SuperAdmin' && sv && sv.classList.contains('active')) {
+        wdpDebugDone = true;
+        setTimeout(function () {
+            const pb = document.getElementById('wdp-btn-pending');
+            const an = wdpPendingAnchor(sv);
+            alert('Pending payments button check (payments-patch v4.9)\n' +
+                'role: ' + currentUserRole +
+                '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
+                '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
+                (pb ? '\nlabel: ' + pb.textContent : ''));
+        }, 3000);
+        return;
+    }
     const wrap = document.getElementById('dashboard-main-wrapper');
     if (!wrap || !wrap.classList.contains('active') || !currentStoreId) return;
     wdpDebugDone = true;
