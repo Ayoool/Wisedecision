@@ -30,6 +30,10 @@
 // v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
 //   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
 //
+// v4.7: the sidebar button can be written straight into app.html (data-static="1"); adjustSidebarForRole then shows it
+//   for the Admin and hides it for other roles. The old JS insertion stays as a fallback. Open the app with ?wdpdebug=1
+//   for an on-screen report if the button is missing.
+// v4.6: the Subscription screen reads the billing record field by field (so the rules can keep payment history private).
 // v4.5: NOTHING FLOATS. The login link sits inside the login card again (re-inserted after every rebuild of the card),
 //   and the sidebar button is forced visible with a CSS rule so adjustSidebarForRole cannot hide it.
 // v4.4 FIX: the Subscription screen reads each database node separately (one blocked node no longer breaks it),
@@ -37,7 +41,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.5 loaded");
+console.log("Wise Decision payments-patch.js — v4.7 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -151,16 +155,25 @@ function wdpAskStoreId(message) {
 async function wdpLoadStore(id) {
     const db = firebase.database();
     // Each read is separate, so one blocked/slow node cannot break the whole screen.
-    const safe = function (label, ref) {
-        return wdpTimeout(ref.once('value'), 15000).then(
-            function (snap) { return { ok: true, val: snap.val() }; },
+    // The billing record is read field by field (due date, trial, plan, fee) so the database rules can keep the
+    // payment history inside it private.
+    const read = function (path) { return db.ref(path).once('value').then(function (snap) { return snap.val(); }); };
+    const safe = function (label, promise) {
+        return wdpTimeout(promise, 15000).then(
+            function (val) { return { ok: true, val: val }; },
             function (e) { return { ok: false, label: label, err: String((e && (e.code || e.message)) || 'error') }; });
     };
+    const billingFields = ['dueDate', 'trial', 'plan', 'monthlyFee'];
     const r = await Promise.all([
-        safe('store name', db.ref('stores/' + id + '/businessName')),
-        safe('billing', db.ref('billing/' + id)),
-        safe('settings', db.ref('billingSettings')),
-        safe('payment history', db.ref('paymentRequests/' + id))
+        safe('store name', read('stores/' + id + '/businessName')),
+        safe('billing', Promise.all(billingFields.map(function (k) { return read('billing/' + id + '/' + k); })).then(function (v) {
+            if (v.every(function (x) { return x == null; })) return null;
+            const b = {};
+            billingFields.forEach(function (k, i) { if (v[i] != null) b[k] = v[i]; });
+            return b;
+        })),
+        safe('settings', read('billingSettings')),
+        safe('payment history', read('paymentRequests/' + id))
     ]);
     const failed = r.filter(function (x) { return !x.ok; });
     if (failed.length === r.length) {
@@ -620,6 +633,9 @@ window.wdpAttachSidebar = function () {
     const wrap = document.getElementById('dashboard-main-wrapper');
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
     const old = document.querySelectorAll('#wdp-sidebar-btn');
+    // A button written straight into app.html (data-static="1") is handled by adjustSidebarForRole: shown for the
+    // Admin, hidden for other roles. Nothing to insert or remove then.
+    if (old.length === 1 && old[0].dataset.static === '1') return;
     if (!wrap || !isAdmin) { old.forEach(function (b) { b.remove(); }); return; }
 
     // The VISIBLE Logout button marks the sidebar the person is actually looking at
@@ -643,13 +659,6 @@ window.wdpAttachSidebar = function () {
 // =====================================================================
 // MAIN ATTACH
 // =====================================================================
-// Keep the sidebar button visible even if another patch (adjustSidebarForRole) tries to hide buttons it does not know.
-(function () {
-    const st = document.createElement('style');
-    st.textContent = '#wdp-sidebar-btn { display:flex !important; visibility:visible !important; opacity:1 !important; }';
-    (document.head || document.documentElement).appendChild(st);
-})();
-
 // Login link: sits inside the login card, right under "Register New Business". The card is rebuilt by
 // email-auth-patch.js, so it is re-inserted after every rebuild (see wdpHookLoginBuild) and on every re-check.
 function wdpInsertLoginLink() {
@@ -679,6 +688,27 @@ function wdpHookLoginBuild() {
     window.wdaeBuildLoginScreen = hooked;
 }
 
+// Opt-in diagnostic: open the app with ?wdpdebug=1 and, after signing in, an alert reports why the sidebar button is or
+// is not showing (there is no console on a phone).
+var wdpDebugDone = false;
+function wdpDebugReport() {
+    if (wdpDebugDone || !/[?&]wdpdebug=1/.test(location.search)) return;
+    const wrap = document.getElementById('dashboard-main-wrapper');
+    if (!wrap || !wrap.classList.contains('active') || !currentStoreId) return;
+    wdpDebugDone = true;
+    setTimeout(function () {
+        const b = document.getElementById('wdp-sidebar-btn');
+        const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
+        alert('Subscription button check\n' +
+            'role: ' + currentUserRole + '\nstore: ' + currentStoreId +
+            '\nbutton exists: ' + !!b + '\nbutton shown: ' + wdpIsShown(b) +
+            (b ? '\ndisplay: ' + getComputedStyle(b).display : '') +
+            '\nlogout button found: ' + !!logout +
+            '\nsidebars on page: ' + document.querySelectorAll('.sidebar').length +
+            '\nbuttons in sidebar: ' + document.querySelectorAll('.sidebar button').length);
+    }, 3000);
+}
+
 function wdpAttach() {
     // Each part is guarded on its own, so one failing can never stop the others.
 
@@ -701,6 +731,7 @@ function wdpAttach() {
 
     // Store Admin: sidebar button via the shared hook
     try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
+    try { wdpDebugReport(); } catch (e) { console.warn(e); }
 
     // Login screen link (so a locked store can still pay)
     try { wdpHookLoginBuild(); } catch (e) { console.warn(e); }
