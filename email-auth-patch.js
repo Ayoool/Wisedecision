@@ -1,12 +1,13 @@
-// ==================== WISE DECISION EMAIL AUTH PATCH (v4) ====================
+// ==================== WISE DECISION EMAIL AUTH PATCH (v5) ====================
 // Load LAST, after auth-patch.js (defer).
 //
+// v5: A suspended (locked) store can no longer sign in; it is told to use "Renew or pay subscription" instead.
 // v4: Removed the "First time? Set up email login" button from the login screen (every store is on email login now,
 //     and the database no longer lets signed-out visitors read the PINs it needed).
 // v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful sign-in.
 // v2: Reads store membership via userIndex/{uid} instead of scanning the entire stores/ tree.
 
-console.log("Wise Decision email-auth-patch.js v4 loaded");
+console.log("Wise Decision email-auth-patch.js v5 loaded");
 
 var WDAE_FAKE_DOMAIN = 'wd.invalid';
 var WDAE_SUPER_EMAIL_KEY = 'wd_super_email';
@@ -340,7 +341,20 @@ function wdaeChooseStore(memberships) {
     };
 }
 
-function wdaeCompleteLogin(resolved) {
+async function wdaeCompleteLogin(resolved) {
+    // A suspended (locked) store may not sign in. Turn it away with a pointer to the "Renew or pay subscription" link.
+    // The Super Admin is never blocked. If the status cannot be read, do not block the sign-in.
+    if (resolved.kind !== 'super') {
+        try {
+            const statusSnap = await firebase.database().ref('stores/' + resolved.storeId + '/status').once('value');
+            if (statusSnap.val() === 'suspended') {
+                try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
+                wdaeSetLoginMessage('This store is locked because its subscription is overdue. Tap "Renew or pay subscription" on this screen to pay and restore access.', false);
+                return;
+            }
+        } catch (e) { /* could not read the status: let the sign-in continue */ }
+    }
+
     // Record login for security analytics (Super Admin Security panel)
     try {
         if (typeof window.wdlaRecordLogin === 'function') {
