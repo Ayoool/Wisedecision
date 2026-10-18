@@ -30,6 +30,7 @@
 // v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
 //   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
 //
+// v4.8: the Super Admin "Pending payments" button is placed next to the visible "Billing settings" / "Load usage" button.
 // v4.7: the sidebar button can be written straight into app.html (data-static="1"); adjustSidebarForRole then shows it
 //   for the Admin and hides it for other roles. The old JS insertion stays as a fallback. Open the app with ?wdpdebug=1
 //   for an on-screen report if the button is missing.
@@ -41,7 +42,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.7 loaded");
+console.log("Wise Decision payments-patch.js — v4.8 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -688,6 +689,30 @@ function wdpHookLoginBuild() {
     window.wdaeBuildLoginScreen = hooked;
 }
 
+// Super Admin "Pending payments" button. It is placed right next to a visible toolbar button ("Billing settings" or
+// "Load usage") instead of looking for one fixed toolbar id, because other patches build that toolbar.
+function wdpAttachPendingButton() {
+    const view = document.getElementById('super-admin-view');
+    const old = document.querySelectorAll('#wdp-btn-pending');
+    if (currentUserRole !== 'SuperAdmin' || !view) { old.forEach(function (b) { b.remove(); }); return; }
+
+    const anchor = wdpFindShownButton(view, function (t) { return t.indexOf('billing settings') !== -1; }) ||
+                   wdpFindShownButton(view, function (t) { return t.indexOf('load usage') !== -1; });
+    if (!anchor) return;
+
+    // Already one copy in the same toolbar: just refresh its label and count
+    if (old.length === 1 && old[0].parentNode === anchor.parentNode) { wdpUpdateBadge(); return; }
+
+    old.forEach(function (b) { b.remove(); });
+    const b = document.createElement('button');
+    b.id = 'wdp-btn-pending';
+    b.className = 'menu-btn';
+    b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
+    b.onclick = wdpOpenPending;
+    anchor.insertAdjacentElement('afterend', b);
+    wdpUpdateBadge();
+}
+
 // Opt-in diagnostic: open the app with ?wdpdebug=1 and, after signing in, an alert reports why the sidebar button is or
 // is not showing (there is no console on a phone).
 var wdpDebugDone = false;
@@ -712,21 +737,10 @@ function wdpDebugReport() {
 function wdpAttach() {
     // Each part is guarded on its own, so one failing can never stop the others.
 
-    // Super Admin: toolbar button + live listener
+    // Super Admin: live listener + the "Pending payments" button
     try {
-        if (currentUserRole === 'SuperAdmin') {
-            wdpStartListener();
-            const bar = document.getElementById('wds-extra-toolbar');
-            if (bar && !document.getElementById('wdp-btn-pending')) {
-                const b = document.createElement('button');
-                b.id = 'wdp-btn-pending';
-                b.className = 'menu-btn';
-                b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
-                b.onclick = wdpOpenPending;
-                bar.appendChild(b);
-                wdpUpdateBadge();
-            }
-        }
+        if (currentUserRole === 'SuperAdmin') wdpStartListener();
+        wdpAttachPendingButton();
     } catch (e) { console.warn(e); }
 
     // Store Admin: sidebar button via the shared hook
