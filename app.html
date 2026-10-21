@@ -131,10 +131,6 @@
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
                         <button class="menu-btn" style="width: auto; margin: 0; background: #7c3aed; color: #fff;" onclick="wdaOpenCodes()">🎟 Activation codes</button>
                         <button class="menu-btn btn-action-primary" style="width: auto; margin: 0;" onclick="changeSuperAdminMasterPin()">🔑 Change Master PIN</button>
-                        
-                        <!-- ADDED PENDING PAYMENTS BUTTON HERE -->
-                        <button id="wdp-btn-pending" data-static="1" class="menu-btn" style="width: auto; margin: 0; font-weight: bold; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e;" onclick="wdpOpenPending()">💳 Pending payments</button>
-
                         <button class="menu-btn btn-logout" style="width: auto; margin: 0;" onclick="switchView('login-view')">Logout / Exit</button>
                     </div>
                 </div>
@@ -1747,9 +1743,6 @@
         <script src="vertical-first-patch.js?v=15"></script>
         <script src="cart-unit-toggle-patch.js?v=1" defer></script>
         
-        <!-- ADDED: Logout Patch -->
-        <script src="logout-patch.js?v=1" defer></script>
-
         <script>
     window.addEventListener('load', function () {
       currentSaleUnit = 'Piece';
