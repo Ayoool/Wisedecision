@@ -8,8 +8,10 @@
 //                     every store card, plus filters: never added products / never sold / no sale in 7+ days.
 //   3. Announcements – send a message to all stores (or chosen ones); it pops up when their staff log
 //                     in, with an expiry date, and you can see which stores have read it.
+//
+// v33 FIX: the toolbar helper mk() never set the button label, so "📣 Announcements" showed as a blank button.
 
-console.log("Wise Decision superadmin-tools-patch.js — v32 loaded");
+console.log("Wise Decision superadmin-tools-patch.js — v33 loaded");
 
 var WDT_BIN_DAYS = 30;
 var wdtUsage = {};              // storeId -> usage numbers (filled by "Load usage")
@@ -505,6 +507,7 @@ function wdtUpdateToolbar() {
             b.className = 'menu-btn';
             b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; background:#f1f5f9; border:1px solid #cbd5e1;' + (style || '');
             b.onclick = fn;
+            if (label) b.textContent = label;   // v33 fix: set the label when the button is first created
             bar.appendChild(b);
         }
         return b;
