@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.13) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.14) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,19 +16,14 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v4.13 FIX: The Super Admin "Pending payments" button is now anchored directly inside the #super-admin-view
-//   header flex container, right next to "Change Master PIN". It no longer relies on searching the whole page
-//   for "Logout / Exit", which was failing and causing the button to disappear.
+// v4.14 FIX: The Super Admin "Pending payments" button is now anchored directly to the exact parent container
+//   of the "Logout / Exit" button. It is highly resilient against superadmin-patch.js rebuilding the header.
 
-console.log("Wise Decision;
- payments-patch.js — v4.13 loaded");
+console.log("Wise Decision payments-patch.js — v4.14 loaded");
 
-var    WDP_SUPPORT_WA = (typeof WDN_SUPPORT_W returnA !== 'undefined' && WDN p_SUPPORT_WA) || '234;
-9168140710';
-var wdpAll}
-
- = null;             
-var wfunctiondpListening = false;
+var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
+var wdpAll = null;             
+var wdpListening = false;
 var wdpCtx = null;             
 var wdpBusy = false;
 var wdpBanner = { id: null, at: 0, loading: false, billing: null, soon: 7 };
@@ -68,7 +63,11 @@ function wdpWaNumber(phone) {
     if (p.charAt(0) === '+') p = p.slice(1);
     else if (p.indexOf('00') === 0) p = p.slice(2);
     else if (p.charAt(0) === '0') p = '234' + p.slice(1);
-    else if (/^\d{10}$/.test(p)) p = '234' + p wdpSubState(billing, todayStr, soonDays) {
+    else if (/^\d{10}$/.test(p)) p = '234' + p;
+    return p;
+}
+
+function wdpSubState(billing, todayStr, soonDays) {
     if (!billing || !wdpIsDay(billing.dueDate)) return { state: 'none' };
     const days = wdpDaysUntil(billing.dueDate, todayStr);
     const trial = !!billing.trial;
@@ -639,31 +638,31 @@ function wdpInsertLoginLink() {
 }
 
 function wdpAttachPendingButton() {
-    const old = document.querySelectorAll('#wdp-btn-pending');
-    if (old.length === 1 && old[0].dataset.static === '1') { wdpUpdateBadge(); return; }
-
     const sv = document.getElementById('super-admin-view');
-    if (!sv || !wdpIsShown(sv)) { old.forEach(function (b) { b.remove(); }); return; }
+    if (!sv) {
+        const old = document.querySelectorAll('#wdp-btn-pending');
+        old.forEach(b => b.remove());
+        return;
+    }
+    
+    // Check if Super Admin view is active
+    if (!sv.classList.contains('active') && sv.style.display === 'none') {
+        const old = document.querySelectorAll('#wdp-btn-pending');
+        old.forEach(b => b.remove());
+        return;
+    }
 
-    wdpStartListener();
-
-    // Find the exact container holding the "Change Master PIN" and "Logout / Exit" buttons
+    // Find the container that holds the "Logout / Exit" button
     let anchor = null;
     const btns = sv.querySelectorAll('button');
     for (let i = 0; i < btns.length; i++) {
-        const txt = (btns[i].textContent || '').trim().toLowerCase();
-        if (txt.indexOf('logout') !== -1 || txt.indexOf('master pin') !== -1) {
-            if (wdpIsShown(btns[i])) { anchor = btns[i].parentElement; break; }
+        if ((btns[i].textContent || '').includes('Logout / Exit')) {
+            anchor = btns[i].parentElement;
+            break;
         }
     }
 
-    // Fallback: try to find the header flex container directly
-    if (!anchor) {
-        const header = sv.querySelector('div[style*="background: #1e293b"]');
-        if (header) anchor = header.querySelector('div[style*="display:flex"]') || header;
-    }
-
-    if (!anchor) return; // Super Admin view not ready
+    if (!anchor) return; // Header not built yet
 
     // Already there?
     if (anchor.querySelector('#wdp-btn-pending')) {
@@ -671,16 +670,19 @@ function wdpAttachPendingButton() {
         return;
     }
 
-    // Create and insert
-    old.forEach(function (b) { b.remove(); });
+    // Clean up any strays and insert
+    document.querySelectorAll('#wdp-btn-pending').forEach(el => el.remove());
+    
     const b = document.createElement('button');
     b.id = 'wdp-btn-pending';
     b.className = 'menu-btn';
-    b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
+    b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0; border-radius:8px; cursor:pointer;';
     b.onclick = wdpOpenPending;
     
-    // Put it right at the start of the button group
-    anchor.insertBefore(b, anchor.firstChild);
+    // Insert right before "Logout / Exit"
+    anchor.insertBefore(b, anchor.lastElementChild);
+    
+    wdpStartListener();
     wdpUpdateBadge();
 }
 
@@ -708,5 +710,5 @@ function wdpAttach() {
 })();
 
 (function () {
-    setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 2000);
+    setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 1000);
 })();
