@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.12) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,6 +16,8 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v4.12 FIX: the Pending payments button now anchors straight to the visible "Logout / Exit" button and no longer
+//   depends on #super-admin-view having the "active" class. wdpOpenPending no longer exits early for the same reason.
 // v4 FIXES (sidebar shake):
 //   * New global hook wdpAttachSidebar() — insert-only, idempotent, no reflows.
 //   * setInterval() replaced with MutationObserver — only reacts when sidebar actually changes.
@@ -48,7 +50,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.11 loaded");
+console.log("Wise Decision payments-patch.js — v4.12 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -378,8 +380,6 @@ function wdpUpdateBadge() {
 }
 
 function wdpOpenPending() {
-    const sv0 = document.getElementById('super-admin-view');
-    if (!(sv0 && sv0.classList.contains('active'))) return;
     const all = wdpFlatten(wdpAll);
     const pending = all.filter(function (r) { return r.status === 'pending'; });
     const decided = all.filter(function (r) { return r.status !== 'pending'; }).slice(-10).reverse();
@@ -696,9 +696,9 @@ function wdpHookLoginBuild() {
     window.wdaeBuildLoginScreen = hooked;
 }
 
-// Super Admin "Pending payments" button. It goes in the dark header, right before "Logout / Exit" (a button written in
-// app.html, so it is always there), and falls back to sitting next to "Billing settings" / "Load usage". It does not
-// depend on any toolbar id, because other patches build the toolbars.
+// Super Admin "Pending payments" button (v4.12). It anchors to the VISIBLE "Logout / Exit" button in the dark header
+// (a button written in app.html, so it is always there on the Super Admin screen) and does not depend on
+// #super-admin-view having an "active" class. On store screens "Logout / Exit" is not shown, so the button is removed.
 function wdpPendingAnchor(view) {
     const exit = wdpFindShownButton(view, function (t) { return t.indexOf('logout / exit') !== -1; });
     if (exit) return { el: exit, where: 'beforebegin' };
@@ -708,18 +708,17 @@ function wdpPendingAnchor(view) {
 }
 
 function wdpAttachPendingButton() {
-    const view = document.getElementById('super-admin-view');
     const old = document.querySelectorAll('#wdp-btn-pending');
     // A button written straight into app.html (data-static="1") only needs its label and count kept up to date.
     if (old.length === 1 && old[0].dataset.static === '1') { wdpUpdateBadge(); return; }
-    const onSuperScreen = !!(view && view.classList.contains('active') && wdpIsShown(view));
-    if (!onSuperScreen) { old.forEach(function (b) { b.remove(); }); return; }
 
-    const anchor = wdpPendingAnchor(view);
-    if (!anchor) return;
+    const exit = wdpFindShownButton(document, function (t) { return t.indexOf('logout / exit') !== -1; });
+    if (!exit) { old.forEach(function (b) { b.remove(); }); return; }
 
-    // Already one copy in the same row: just refresh its label and count
-    if (old.length === 1 && old[0].parentNode === anchor.el.parentNode) { wdpUpdateBadge(); return; }
+    wdpStartListener();
+
+    // Already one copy, right before Logout / Exit: just refresh its label and count
+    if (old.length === 1 && old[0].nextElementSibling === exit) { wdpUpdateBadge(); return; }
 
     old.forEach(function (b) { b.remove(); });
     const b = document.createElement('button');
@@ -727,7 +726,7 @@ function wdpAttachPendingButton() {
     b.className = 'menu-btn';
     b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
     b.onclick = wdpOpenPending;
-    anchor.el.insertAdjacentElement(anchor.where, b);
+    exit.insertAdjacentElement('beforebegin', b);
     wdpUpdateBadge();
 }
 
@@ -742,7 +741,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.10)\n' +
+            alert('Pending payments button check (payments-patch v4.12)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
@@ -770,11 +769,7 @@ function wdpAttach() {
     // Each part is guarded on its own, so one failing can never stop the others.
 
     // Super Admin: live listener + the "Pending payments" button
-    try {
-        const sv = document.getElementById('super-admin-view');
-        if (sv && sv.classList.contains('active')) wdpStartListener();
-        wdpAttachPendingButton();
-    } catch (e) { console.warn(e); }
+    try { wdpAttachPendingButton(); } catch (e) { console.warn(e); }
 
     // Store Admin: sidebar button via the shared hook
     try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
