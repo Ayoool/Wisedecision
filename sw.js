@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v57';
+const CACHE = 'wd-shell-v59';
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -68,7 +68,7 @@ async function networkFirst(request) {
     try {
         const response = await Promise.race([
             fetch(request),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
         ]);
         if (response && response.ok) cache.put(request, response.clone());
         return response;
