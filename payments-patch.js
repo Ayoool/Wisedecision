@@ -30,6 +30,10 @@
 // v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
 //   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
 //
+// v4.11: the Pending payments button can be written straight into app.html (data-static="1"); this file then only keeps
+//   its label and count up to date.
+// v4.10: the Pending payments button no longer depends on the currentUserRole value; it appears whenever the Super Admin
+//   screen is on screen.
 // v4.9: the Super Admin "Pending payments" button now goes in the dark header, before "Logout / Exit" (a button that is
 //   written in app.html, so it is always there). ?wdpdebug=1 also reports on the Super Admin screen.
 // v4.8: the Super Admin "Pending payments" button is placed next to the visible "Billing settings" / "Load usage" button.
@@ -44,7 +48,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.9 loaded");
+console.log("Wise Decision payments-patch.js — v4.11 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -374,7 +378,8 @@ function wdpUpdateBadge() {
 }
 
 function wdpOpenPending() {
-    if (currentUserRole !== 'SuperAdmin') return;
+    const sv0 = document.getElementById('super-admin-view');
+    if (!(sv0 && sv0.classList.contains('active'))) return;
     const all = wdpFlatten(wdpAll);
     const pending = all.filter(function (r) { return r.status === 'pending'; });
     const decided = all.filter(function (r) { return r.status !== 'pending'; }).slice(-10).reverse();
@@ -705,7 +710,10 @@ function wdpPendingAnchor(view) {
 function wdpAttachPendingButton() {
     const view = document.getElementById('super-admin-view');
     const old = document.querySelectorAll('#wdp-btn-pending');
-    if (currentUserRole !== 'SuperAdmin' || !view) { old.forEach(function (b) { b.remove(); }); return; }
+    // A button written straight into app.html (data-static="1") only needs its label and count kept up to date.
+    if (old.length === 1 && old[0].dataset.static === '1') { wdpUpdateBadge(); return; }
+    const onSuperScreen = !!(view && view.classList.contains('active') && wdpIsShown(view));
+    if (!onSuperScreen) { old.forEach(function (b) { b.remove(); }); return; }
 
     const anchor = wdpPendingAnchor(view);
     if (!anchor) return;
@@ -729,12 +737,12 @@ var wdpDebugDone = false;
 function wdpDebugReport() {
     if (wdpDebugDone || !/[?&]wdpdebug=1/.test(location.search)) return;
     const sv = document.getElementById('super-admin-view');
-    if (currentUserRole === 'SuperAdmin' && sv && sv.classList.contains('active')) {
+    if (sv && sv.classList.contains('active')) {
         wdpDebugDone = true;
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.9)\n' +
+            alert('Pending payments button check (payments-patch v4.10)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
@@ -763,7 +771,8 @@ function wdpAttach() {
 
     // Super Admin: live listener + the "Pending payments" button
     try {
-        if (currentUserRole === 'SuperAdmin') wdpStartListener();
+        const sv = document.getElementById('super-admin-view');
+        if (sv && sv.classList.contains('active')) wdpStartListener();
         wdpAttachPendingButton();
     } catch (e) { console.warn(e); }
 
