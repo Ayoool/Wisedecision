@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.14) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.15) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,10 +16,11 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v4.14 FIX: The Super Admin "Pending payments" button is now anchored directly to the exact parent container
-//   of the "Logout / Exit" button. It is highly resilient against superadmin-patch.js rebuilding the header.
+// v4.15 FIXES: 
+//   * Supports Email/Password login (asks for Email OR Store ID in the renew modal).
+//   * Super Admin Pending payments button now anchors directly to the header flex container.
 
-console.log("Wise Decision payments-patch.js — v4.14 loaded");
+console.log("Wise Decision payments-patch.js — v4.15 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             
@@ -126,7 +127,7 @@ function wdpField(id, label, type, value, extra) {
 function wdpAskStoreId(message) {
     wdpModal('💳 Renew or pay subscription',
         (message ? '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">' + wdpEsc(message) + '</div>' : '') +
-        wdpField('wdp-sid', 'Your Store ID', 'text', '', 'placeholder="e.g. oreoloyun" autocapitalize="none"') +
+        wdpField('wdp-sid', 'Your Store ID or Email', 'text', '', 'placeholder="e.g. medstar or admin@email.com" autocapitalize="none"') +
         '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdpOpenRenew(document.getElementById(\'wdp-sid\').value)">Continue</button>');
 }
 
@@ -174,8 +175,39 @@ function wdpFailNote(c) {
 }
 
 async function wdpOpenRenew(presetId) {
-    const id = String(presetId || '').trim().toLowerCase();
+    let id = String(presetId || '').trim().toLowerCase();
     if (!id) { wdpAskStoreId(''); return; }
+    
+    wdpModal('💳 Subscription', '<div style="text-align:center; color:#64748b; padding:24px;">Looking up your store...</div>');
+    
+    // If they entered an email instead of a Store ID
+    if (id.includes('@')) {
+        try {
+            const db = firebase.database();
+            const snap = await db.ref('stores').once('value');
+            const stores = snap.val() || {};
+            let foundId = null;
+            for (const sid in stores) {
+                const s = stores[sid] || {};
+                if ((s.email || '').toLowerCase() === id || 
+                    (s.adminEmail || '').toLowerCase() === id || 
+                    (s.contactEmail || '').toLowerCase() === id) {
+                    foundId = sid; break;
+                }
+            }
+            if (foundId) {
+                id = foundId; // Found it!
+            } else {
+                wdpAskStoreId('No store found with that email. Please enter your Store ID instead.');
+                return;
+            }
+        } catch (e) {
+            console.warn('Email lookup failed', e);
+            wdpAskStoreId('Could not look up email. Please enter your Store ID.');
+            return;
+        }
+    }
+    
     wdpLastId = id;
     wdpBanner.at = 0;
     wdpModal('💳 Subscription', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
@@ -187,7 +219,7 @@ async function wdpOpenRenew(presetId) {
             '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdpOpenRenew(wdpLastId)">Try again</button>');
         return;
     }
-    if (!data.name) { wdpAskStoreId('We could not find a store with the ID "' + id + '". Please check the spelling.'); return; }
+    if (!data.name) { wdpAskStoreId('We could not find a store with the ID or email "' + id + '". Please check the spelling.'); return; }
     wdpCtx = data;
     wdpRenderRenew();
 }
@@ -621,11 +653,19 @@ window.wdpAttachSidebar = function () {
 // MAIN ATTACH
 // =====================================================================
 function wdpInsertLoginLink() {
-    const regBtn = document.querySelector('button[onclick*="register-view"]');
-    const old = document.querySelectorAll('#wdp-login-wrap');
+    // Find "Register" or "Login" button
+    const btns = document.querySelectorAll('button');
+    let anchorBtn = null;
+    for (let i = 0; i < btns.length; i++) {
+        const t = (btns[i].textContent || '').toLowerCase().trim();
+        if (t.includes('register new business') || t.includes('sign up') || t === 'login' || t.includes('login to')) {
+            if (wdpIsShown(btns[i])) { anchorBtn = btns[i]; break; }
+        }
+    }
     
-    if (!regBtn || !wdpIsShown(regBtn)) { old.forEach(function (w) { w.remove(); }); return; }
-    if (old.length === 1 && regBtn.nextElementSibling === old[0]) return;
+    const old = document.querySelectorAll('#wdp-login-wrap');
+    if (!anchorBtn) { old.forEach(function (w) { w.remove(); }); return; }
+    if (old.length === 1 && anchorBtn.nextElementSibling === old[0]) return;
     
     old.forEach(function (w) { w.remove(); });
     
@@ -634,53 +674,40 @@ function wdpInsertLoginLink() {
     wrap.style.cssText = 'text-align:center; margin-top:14px;';
     wrap.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
     wrap.firstChild.onclick = function () { wdpOpenRenew(''); };
-    regBtn.insertAdjacentElement('afterend', wrap);
+    anchorBtn.insertAdjacentElement('afterend', wrap);
 }
 
 function wdpAttachPendingButton() {
     const sv = document.getElementById('super-admin-view');
-    if (!sv) {
-        const old = document.querySelectorAll('#wdp-btn-pending');
-        old.forEach(b => b.remove());
-        return;
-    }
+    if (!sv) return;
+
+    const exitBtn = Array.from(sv.querySelectorAll('button')).find(b => b.textContent.includes('Logout / Exit'));
+    const pinBtn = Array.from(sv.querySelectorAll('button')).find(b => b.textContent.includes('Change Master PIN'));
     
-    // Check if Super Admin view is active
-    if (!sv.classList.contains('active') && sv.style.display === 'none') {
-        const old = document.querySelectorAll('#wdp-btn-pending');
-        old.forEach(b => b.remove());
-        return;
-    }
-
-    // Find the container that holds the "Logout / Exit" button
     let anchor = null;
-    const btns = sv.querySelectorAll('button');
-    for (let i = 0; i < btns.length; i++) {
-        if ((btns[i].textContent || '').includes('Logout / Exit')) {
-            anchor = btns[i].parentElement;
-            break;
-        }
-    }
+    if (exitBtn) anchor = exitBtn.parentElement;
+    else if (pinBtn) anchor = pinBtn.parentElement;
 
-    if (!anchor) return; // Header not built yet
+    if (!anchor) return;
 
-    // Already there?
-    if (anchor.querySelector('#wdp-btn-pending')) {
+    if (document.getElementById('wdp-btn-pending') && document.getElementById('wdp-btn-pending').parentElement === anchor) {
         wdpUpdateBadge();
         return;
     }
 
-    // Clean up any strays and insert
     document.querySelectorAll('#wdp-btn-pending').forEach(el => el.remove());
-    
+
     const b = document.createElement('button');
     b.id = 'wdp-btn-pending';
     b.className = 'menu-btn';
-    b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0; border-radius:8px; cursor:pointer;';
+    b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0; border-radius:8px; cursor:pointer; background:#fef3c7; color:#92400e;';
     b.onclick = wdpOpenPending;
     
-    // Insert right before "Logout / Exit"
-    anchor.insertBefore(b, anchor.lastElementChild);
+    if (exitBtn) {
+        anchor.insertBefore(b, exitBtn);
+    } else {
+        anchor.appendChild(b);
+    }
     
     wdpStartListener();
     wdpUpdateBadge();
