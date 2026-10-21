@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.12) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.13) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,51 +16,25 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v4.12 FIX: the Pending payments button now anchors straight to the visible "Logout / Exit" button and no longer
-//   depends on #super-admin-view having the "active" class. wdpOpenPending no longer exits early for the same reason.
-// v4 FIXES (sidebar shake):
-//   * New global hook wdpAttachSidebar() — insert-only, idempotent, no reflows.
-//   * setInterval() replaced with MutationObserver — only reacts when sidebar actually changes.
-//   * Sidebar button uses btn-subscription (no CSS transition) so it never visually pops.
-//   * Other patches (staff-sidebar-patch.js, manager-preorder-patch.js) should call
-//       if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
-//     immediately after they rebuild the sidebar, to eliminate the race entirely.
-//
-// v4.1 FIX (login link): the login screen no longer uses .auth-card / "login to store", so the
-//   "Renew or pay subscription" link is now anchored under the "Register New Business" button.
-//
-// v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
-//   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
-//
-// v4.11: the Pending payments button can be written straight into app.html (data-static="1"); this file then only keeps
-//   its label and count up to date.
-// v4.10: the Pending payments button no longer depends on the currentUserRole value; it appears whenever the Super Admin
-//   screen is on screen.
-// v4.9: the Super Admin "Pending payments" button now goes in the dark header, before "Logout / Exit" (a button that is
-//   written in app.html, so it is always there). ?wdpdebug=1 also reports on the Super Admin screen.
-// v4.8: the Super Admin "Pending payments" button is placed next to the visible "Billing settings" / "Load usage" button.
-// v4.7: the sidebar button can be written straight into app.html (data-static="1"); adjustSidebarForRole then shows it
-//   for the Admin and hides it for other roles. The old JS insertion stays as a fallback. Open the app with ?wdpdebug=1
-//   for an on-screen report if the button is missing.
-// v4.6: the Subscription screen reads the billing record field by field (so the rules can keep payment history private).
-// v4.5: NOTHING FLOATS. The login link sits inside the login card again (re-inserted after every rebuild of the card),
-//   and the sidebar button is forced visible with a CSS rule so adjustSidebarForRole cannot hide it.
-// v4.4 FIX: the Subscription screen reads each database node separately (one blocked node no longer breaks it),
-//   falls back to the default bank details, and shows the real reason when loading fails.
-//
-// Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
+// v4.13 FIX: The Super Admin "Pending payments" button is now anchored directly inside the #super-admin-view
+//   header flex container, right next to "Change Master PIN". It no longer relies on searching the whole page
+//   for "Logout / Exit", which was failing and causing the button to disappear.
 
-console.log("Wise Decision payments-patch.js — v4.12 loaded");
+console.log("Wise Decision;
+ payments-patch.js — v4.13 loaded");
 
-var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
-var wdpAll = null;             // every payment request (Super Admin, kept live)
-var wdpListening = false;
-var wdpCtx = null;             // the store being shown on the renew screen
+var    WDP_SUPPORT_WA = (typeof WDN_SUPPORT_W returnA !== 'undefined' && WDN p_SUPPORT_WA) || '234;
+9168140710';
+var wdpAll}
+
+ = null;             
+var wfunctiondpListening = false;
+var wdpCtx = null;             
 var wdpBusy = false;
 var wdpBanner = { id: null, at: 0, loading: false, billing: null, soon: 7 };
 var wdpBannerDismissed = false;
 
-// ---------- Helpers (the pure ones are tested) ----------
+// ---------- Helpers ----------
 function wdpNum(n) { return Number(n) || 0; }
 function wdpEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function wdpMoney(n) { return '₦' + (Math.round(wdpNum(n) * 100) / 100).toLocaleString(); }
@@ -94,11 +68,7 @@ function wdpWaNumber(phone) {
     if (p.charAt(0) === '+') p = p.slice(1);
     else if (p.indexOf('00') === 0) p = p.slice(2);
     else if (p.charAt(0) === '0') p = '234' + p.slice(1);
-    else if (/^\d{10}$/.test(p)) p = '234' + p;
-    return p;
-}
-
-function wdpSubState(billing, todayStr, soonDays) {
+    else if (/^\d{10}$/.test(p)) p = '234' + p wdpSubState(billing, todayStr, soonDays) {
     if (!billing || !wdpIsDay(billing.dueDate)) return { state: 'none' };
     const days = wdpDaysUntil(billing.dueDate, todayStr);
     const trial = !!billing.trial;
@@ -163,9 +133,6 @@ function wdpAskStoreId(message) {
 
 async function wdpLoadStore(id) {
     const db = firebase.database();
-    // Each read is separate, so one blocked/slow node cannot break the whole screen.
-    // The billing record is read field by field (due date, trial, plan, fee) so the database rules can keep the
-    // payment history inside it private.
     const read = function (path) { return db.ref(path).once('value').then(function (snap) { return snap.val(); }); };
     const safe = function (label, promise) {
         return wdpTimeout(promise, 15000).then(
@@ -191,7 +158,6 @@ async function wdpLoadStore(id) {
         throw err;
     }
     const settings = Object.assign(typeof wdsDefaults === 'function' ? wdsDefaults() : {}, (r[2].ok && r[2].val) || {});
-    // If the name could not be read (blocked), carry on with the ID the person typed; null means "no such store".
     const name = r[0].ok ? (r[0].val || '') : id;
     return {
         id: id, name: name,
@@ -212,7 +178,7 @@ async function wdpOpenRenew(presetId) {
     const id = String(presetId || '').trim().toLowerCase();
     if (!id) { wdpAskStoreId(''); return; }
     wdpLastId = id;
-    wdpBanner.at = 0;   // refresh the reminder banner after this
+    wdpBanner.at = 0;
     wdpModal('💳 Subscription', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
     let data;
     try { data = await wdpLoadStore(id); }
@@ -470,7 +436,6 @@ async function wdpApprove(sid, key) {
     const statusRef = db.ref('paymentRequests/' + sid + '/' + key + '/status');
     let claimed = false;
     try {
-        // Claim the request so it can never be approved twice (even from two phones at once)
         const tx = await statusRef.transaction(function (cur) { return cur === 'pending' ? 'approved' : (cur === null ? cur : undefined); });
         if (!tx.committed || tx.snapshot.val() !== 'approved') { wdpBusy = false; alert('Someone has already handled this request.'); wdpOpenPending(); return; }
         claimed = true;
@@ -543,7 +508,7 @@ async function wdpReject(sid, key) {
 }
 
 // =====================================================================
-// FIX: saving "Billing settings" must not wipe the plans (it used set() on the whole node)
+// FIX: saving "Billing settings" must not wipe the plans
 // =====================================================================
 window.wdsSaveSettings = async function () {
     const v = function (id) { return document.getElementById(id).value.trim(); };
@@ -555,7 +520,7 @@ window.wdsSaveSettings = async function () {
     };
     if (!settings.bankName || !settings.accountNumber || !settings.accountName) { alert("Bank name, account number and account name are needed for the reminder messages."); return; }
     try {
-        await firebase.database().ref('billingSettings').update(settings);   // update, so plans and the payment link are kept
+        await firebase.database().ref('billingSettings').update(settings);
         wdsSettings = Object.assign(wdsDefaults(), wdsSettings || {}, settings);
         wdsCloseModal();
         wdsRender();
@@ -580,7 +545,7 @@ async function wdpEnsureBanner() {
             const db = firebase.database();
             const r = await Promise.all([wdpTimeout(db.ref('billing/' + sid + '/dueDate').once('value'), 10000), wdpTimeout(db.ref('billing/' + sid + '/trial').once('value'), 10000), wdpTimeout(db.ref('billingSettings/dueSoonDays').once('value'), 10000)]);
             wdpBanner = { id: sid, at: Date.now(), loading: false, billing: { dueDate: r[0].val(), trial: !!r[1].val() }, soon: r[2].val() == null ? 7 : wdpNum(r[2].val()) };
-        } catch (e) { wdpBanner.loading = false; wdpBanner.at = Date.now() - 4 * 60 * 1000; return; }   // try again in a minute
+        } catch (e) { wdpBanner.loading = false; wdpBanner.at = Date.now() - 4 * 60 * 1000; return; }
     }
 
     const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
@@ -621,44 +586,33 @@ async function wdpEnsureBanner() {
 }
 
 // =====================================================================
-// SIDEBAR BUTTON — global hook, insert-only, idempotent.
-// Called by wdpAttach AND (recommended) by any patch that rebuilds
-// the sidebar (e.g. staff-sidebar-patch.js, manager-preorder-patch.js).
-// Other patches should add, right after their sidebar rebuild:
-//     if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
+// SIDEBAR BUTTON
 // =====================================================================
 function wdpIsShown(el) { return !!(el && el.getClientRects().length > 0); }
-function wdpFindShownButton(root, test) {
-    const btns = root.querySelectorAll('button');
-    for (let i = 0; i < btns.length; i++) {
-        const t = (btns[i].textContent || '').trim().toLowerCase();
-        if (test(t) && wdpIsShown(btns[i])) return btns[i];
-    }
-    return null;
-}
 
 window.wdpAttachSidebar = function () {
     const wrap = document.getElementById('dashboard-main-wrapper');
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
     const old = document.querySelectorAll('#wdp-sidebar-btn');
-    // A button written straight into app.html (data-static="1") is handled by adjustSidebarForRole: shown for the
-    // Admin, hidden for other roles. Nothing to insert or remove then.
     if (old.length === 1 && old[0].dataset.static === '1') return;
     if (!wrap || !isAdmin) { old.forEach(function (b) { b.remove(); }); return; }
 
-    // The VISIBLE Logout button marks the sidebar the person is actually looking at
-    // (other patches rebuild/copy the sidebar, so ".sidebar" alone can point at a hidden one).
-    const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
+    let logout = null;
+    const btns = wrap.querySelectorAll('button');
+    for (let i = 0; i < btns.length; i++) {
+        if ((btns[i].textContent || '').trim().toLowerCase().endsWith('logout') && wdpIsShown(btns[i])) {
+            logout = btns[i]; break;
+        }
+    }
+    
     if (!logout) return;
 
-    // Already one copy, right before Logout: do nothing (flicker fix)
     if (old.length === 1 && logout.previousElementSibling === old[0]) return;
 
-    // Otherwise drop any stale copy (e.g. left in a hidden sidebar) and insert a fresh one
     old.forEach(function (b) { b.remove(); });
     const sb = document.createElement('button');
     sb.id = 'wdp-sidebar-btn';
-    sb.className = 'menu-btn btn-subscription';   // stable class, no CSS transition
+    sb.className = 'menu-btn btn-subscription';
     sb.textContent = '💳 Subscription';
     sb.onclick = function () { wdpOpenRenew(currentStoreId); };
     logout.parentNode.insertBefore(sb, logout);
@@ -667,14 +621,15 @@ window.wdpAttachSidebar = function () {
 // =====================================================================
 // MAIN ATTACH
 // =====================================================================
-// Login link: sits inside the login card, right under "Register New Business". The card is rebuilt by
-// email-auth-patch.js, so it is re-inserted after every rebuild (see wdpHookLoginBuild) and on every re-check.
 function wdpInsertLoginLink() {
-    const regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
+    const regBtn = document.querySelector('button[onclick*="register-view"]');
     const old = document.querySelectorAll('#wdp-login-wrap');
-    if (regBtn && old.length === 1 && regBtn.nextElementSibling === old[0]) return;   // already in place
+    
+    if (!regBtn || !wdpIsShown(regBtn)) { old.forEach(function (w) { w.remove(); }); return; }
+    if (old.length === 1 && regBtn.nextElementSibling === old[0]) return;
+    
     old.forEach(function (w) { w.remove(); });
-    if (!regBtn) return;
+    
     const wrap = document.createElement('div');
     wrap.id = 'wdp-login-wrap';
     wrap.style.cssText = 'text-align:center; margin-top:14px;';
@@ -683,118 +638,63 @@ function wdpInsertLoginLink() {
     regBtn.insertAdjacentElement('afterend', wrap);
 }
 
-// email-auth-patch.js loads after this file, so hook its card builder as soon as it exists.
-function wdpHookLoginBuild() {
-    const prev = window.wdaeBuildLoginScreen;
-    if (typeof prev !== 'function' || prev.__wdp) return;
-    const hooked = function () {
-        const r = prev.apply(this, arguments);
-        try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
-        return r;
-    };
-    hooked.__wdp = true;
-    window.wdaeBuildLoginScreen = hooked;
-}
-
-// Super Admin "Pending payments" button (v4.12). It anchors to the VISIBLE "Logout / Exit" button in the dark header
-// (a button written in app.html, so it is always there on the Super Admin screen) and does not depend on
-// #super-admin-view having an "active" class. On store screens "Logout / Exit" is not shown, so the button is removed.
-function wdpPendingAnchor(view) {
-    const exit = wdpFindShownButton(view, function (t) { return t.indexOf('logout / exit') !== -1; });
-    if (exit) return { el: exit, where: 'beforebegin' };
-    const other = wdpFindShownButton(view, function (t) { return t.indexOf('billing settings') !== -1; }) ||
-                  wdpFindShownButton(view, function (t) { return t.indexOf('load usage') !== -1; });
-    return other ? { el: other, where: 'afterend' } : null;
-}
-
 function wdpAttachPendingButton() {
     const old = document.querySelectorAll('#wdp-btn-pending');
-    // A button written straight into app.html (data-static="1") only needs its label and count kept up to date.
     if (old.length === 1 && old[0].dataset.static === '1') { wdpUpdateBadge(); return; }
 
-    const exit = wdpFindShownButton(document, function (t) { return t.indexOf('logout / exit') !== -1; });
-    if (!exit) { old.forEach(function (b) { b.remove(); }); return; }
+    const sv = document.getElementById('super-admin-view');
+    if (!sv || !wdpIsShown(sv)) { old.forEach(function (b) { b.remove(); }); return; }
 
     wdpStartListener();
 
-    // Already one copy, right before Logout / Exit: just refresh its label and count
-    if (old.length === 1 && old[0].nextElementSibling === exit) { wdpUpdateBadge(); return; }
+    // Find the exact container holding the "Change Master PIN" and "Logout / Exit" buttons
+    let anchor = null;
+    const btns = sv.querySelectorAll('button');
+    for (let i = 0; i < btns.length; i++) {
+        const txt = (btns[i].textContent || '').trim().toLowerCase();
+        if (txt.indexOf('logout') !== -1 || txt.indexOf('master pin') !== -1) {
+            if (wdpIsShown(btns[i])) { anchor = btns[i].parentElement; break; }
+        }
+    }
 
+    // Fallback: try to find the header flex container directly
+    if (!anchor) {
+        const header = sv.querySelector('div[style*="background: #1e293b"]');
+        if (header) anchor = header.querySelector('div[style*="display:flex"]') || header;
+    }
+
+    if (!anchor) return; // Super Admin view not ready
+
+    // Already there?
+    if (anchor.querySelector('#wdp-btn-pending')) {
+        wdpUpdateBadge();
+        return;
+    }
+
+    // Create and insert
     old.forEach(function (b) { b.remove(); });
     const b = document.createElement('button');
     b.id = 'wdp-btn-pending';
     b.className = 'menu-btn';
     b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
     b.onclick = wdpOpenPending;
-    exit.insertAdjacentElement('beforebegin', b);
+    
+    // Put it right at the start of the button group
+    anchor.insertBefore(b, anchor.firstChild);
     wdpUpdateBadge();
 }
 
-// Opt-in diagnostic: open the app with ?wdpdebug=1 and, after signing in, an alert reports why the sidebar button is or
-// is not showing (there is no console on a phone).
-var wdpDebugDone = false;
-function wdpDebugReport() {
-    if (wdpDebugDone || !/[?&]wdpdebug=1/.test(location.search)) return;
-    const sv = document.getElementById('super-admin-view');
-    if (sv && sv.classList.contains('active')) {
-        wdpDebugDone = true;
-        setTimeout(function () {
-            const pb = document.getElementById('wdp-btn-pending');
-            const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.12)\n' +
-                'role: ' + currentUserRole +
-                '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
-                '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
-                (pb ? '\nlabel: ' + pb.textContent : ''));
-        }, 3000);
-        return;
-    }
-    const wrap = document.getElementById('dashboard-main-wrapper');
-    if (!wrap || !wrap.classList.contains('active') || !currentStoreId) return;
-    wdpDebugDone = true;
-    setTimeout(function () {
-        const b = document.getElementById('wdp-sidebar-btn');
-        const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
-        alert('Subscription button check\n' +
-            'role: ' + currentUserRole + '\nstore: ' + currentStoreId +
-            '\nbutton exists: ' + !!b + '\nbutton shown: ' + wdpIsShown(b) +
-            (b ? '\ndisplay: ' + getComputedStyle(b).display : '') +
-            '\nlogout button found: ' + !!logout +
-            '\nsidebars on page: ' + document.querySelectorAll('.sidebar').length +
-            '\nbuttons in sidebar: ' + document.querySelectorAll('.sidebar button').length);
-    }, 3000);
-}
-
 function wdpAttach() {
-    // Each part is guarded on its own, so one failing can never stop the others.
-
-    // Super Admin: live listener + the "Pending payments" button
     try { wdpAttachPendingButton(); } catch (e) { console.warn(e); }
-
-    // Store Admin: sidebar button via the shared hook
     try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
-    try { wdpDebugReport(); } catch (e) { console.warn(e); }
-
-    // Login screen link (so a locked store can still pay)
-    try { wdpHookLoginBuild(); } catch (e) { console.warn(e); }
     try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
-
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
 
-// =====================================================================
-// OBSERVER — fires only when the DOM actually changes.
-// Replaces the old setInterval(1200) which caused the sidebar race.
-// =====================================================================
 (function () {
-    // Initial paint once the page settles
     window.addEventListener('load', function () {
         setTimeout(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 300);
     });
-
-    // Watch for any DOM change on the body and re-run wdpAttach.
-    // Cheap because wdpAttach itself is idempotent (does nothing if
-    // everything is already there). No more racing with other patches.
     var wdpObserver = new MutationObserver(function () {
         try { wdpAttach(); } catch (e) { console.warn(e); }
     });
@@ -807,8 +707,6 @@ function wdpAttach() {
     }
 })();
 
-// Safety net: re-check every 2 seconds (idempotent and cheap), in case a patch changes the page in a way the
-// observer does not see.
 (function () {
     setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 2000);
 })();
