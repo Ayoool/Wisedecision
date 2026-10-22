@@ -1,30 +1,11 @@
 // customer-shop-patch.js
-window.addEventListener('load', function() {
-    setTimeout(() => {
-        // 1. Inject the "Shop as a Customer" Button into the Login Card
-        const authCard = document.querySelector('.auth-card');
-        if (authCard) {
-            const shopBtn = document.createElement('button');
-            shopBtn.className = 'menu-btn';
-            shopBtn.style = 'margin-top: 15px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; width: 100%; font-weight: bold;';
-            shopBtn.innerHTML = '🛒 Shop as a Customer (Order Ahead)';
-            shopBtn.onclick = function() {
-                if (typeof switchView === 'function') switchView('customer-shop-view');
-            };
-            
-            // Insert it right before the "Renew or pay subscription" link if possible
-            const renewLink = Array.from(authCard.querySelectorAll('a, button')).find(el => el.textContent.includes('Renew'));
-            if (renewLink) {
-                authCard.insertBefore(shopBtn, renewLink);
-            } else {
-                authCard.appendChild(shopBtn);
-            }
-        }
-
-        // 2. Inject the Customer Shop View HTML
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // 1. Inject the Customer Shop View HTML into the body once
+    if (!document.getElementById('customer-shop-view')) {
         const shopHTML = `
             <style>
-                #customer-shop-view { background: #f8fafc; min-height: 100vh; padding-bottom: 80px; }
+                #customer-shop-view { background: #f8fafc; min-height: 100vh; padding-bottom: 80px; position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; overflow-y: auto; }
                 .shop-header { background: #0284c7; color: white; padding: 15px 20px; text-align: center; position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
                 .shop-header h2 { margin: 0; font-size: 18px; }
                 .back-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
@@ -46,7 +27,7 @@ window.addEventListener('load', function() {
             </style>
             <div id="customer-shop-view" class="view-section" style="display: none;">
                 <div class="shop-header">
-                    <button class="back-btn" onclick="switchView('login-view')">← Back</button>
+                    <button class="back-btn" onclick="document.getElementById('customer-shop-view').style.display='none';">← Back</button>
                     <h2 id="shop-store-title">Customer Ordering</h2>
                     <div style="width: 50px;"></div>
                 </div>
@@ -106,7 +87,39 @@ window.addEventListener('load', function() {
             </div>
         `;
         document.body.insertAdjacentHTML('beforeend', shopHTML);
-    }, 1000); // Wait 1 second for app to load
+    }
+
+    // 2. Watchdog: Keep checking for the login box to inject the button
+    let attempts = 0;
+    const injectInterval = setInterval(() => {
+        // Find the login card by looking for the Sign in button
+        const authCard = document.querySelector('.auth-card') || document.body;
+        const signInBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Sign in'));
+
+        if (signInBtn && !document.getElementById('customer-shop-btn-injected')) {
+            const shopBtn = document.createElement('button');
+            shopBtn.id = 'customer-shop-btn-injected';
+            shopBtn.className = 'menu-btn';
+            // Styled to match your exact green outline button
+            shopBtn.style = 'margin-top: 15px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; width: 100%; font-weight: bold; border-radius: 10px; padding: 15px; cursor: pointer; font-size: 14px;';
+            shopBtn.innerHTML = '🛒 Shop as a Customer (Order Ahead)';
+            
+            shopBtn.onclick = function() {
+                document.getElementById('customer-shop-view').style.display = 'block';
+            };
+
+            // Inject it right below the "Register New Business" button
+            const regBtn = Array.from(document.querySelectorAll('button, a')).find(el => el.innerText.includes('Register New Business'));
+            if (regBtn && regBtn.parentNode) {
+                regBtn.parentNode.insertBefore(shopBtn, regBtn.nextSibling);
+            } else {
+                signInBtn.parentNode.insertBefore(shopBtn, signInBtn.nextSibling);
+            }
+        }
+
+        attempts++;
+        if (attempts > 30) clearInterval(injectInterval); // Stop checking after 15 seconds
+    }, 500);
 });
 
 // --- CUSTOMER SHOP LOGIC ---
