@@ -4,7 +4,7 @@
 // Adds a "📦 Customer Orders" button to the store sidebar (any signed-in store user, not the Super Admin).
 //   * Type a tracking ID (e.g. WD-4K7P2X) to load the customer's order, or pick from the pending list.
 //   * Shows customer name, phone (call / WhatsApp), and the goods ordered.
-//   * Print an order slip (no prices), mark the order Completed, or Cancel it.
+//   * Print an order slip (no prices, receipt-style layout), mark the order Completed, or Cancel it.
 // Prices, stock and the normal sale/receipt are NOT connected yet (needs the checkout code).
 
 console.log("Wise Decision store-orders-patch.js v1 loaded");
@@ -134,21 +134,53 @@ async function wdsoSetStatus(tid, status) {
     } catch (e) { alert('Failed: ' + ((e && (e.code || e.message)) || 'error')); }
 }
 
-function wdsoPrint(tid) {
+async function wdsoPrint(tid) {
     var o = wdso.orders[tid];
     if (!o) return;
-    var store = '';
-    try { store = (document.getElementById('dashboard-store-title') || {}).textContent || wdsoSid(); } catch (e) { store = wdsoSid(); }
+    var sid = wdsoSid(), store = '', addr = '', phone = '';
+    try { store = (document.getElementById('dashboard-store-title') || {}).textContent || sid; } catch (e) { store = sid; }
+    try {
+        var db = firebase.database();
+        var r = await wdsoTimeout(Promise.all([
+            db.ref('stores/' + sid + '/businessName').once('value'),
+            db.ref('stores/' + sid + '/address').once('value'),
+            db.ref('stores/' + sid + '/phone').once('value')
+        ]), 6000);
+        store = r[0].val() || store; addr = r[1].val() || ''; phone = r[2].val() || '';
+    } catch (e) { /* print with what we have */ }
+
     var items = o.items || {};
-    var rows = Object.keys(items).map(function (k) { return '<tr><td>' + wdsoEsc(items[k].name) + '</td><td style="text-align:right;">× ' + wdsoEsc(items[k].qty) + '</td></tr>'; }).join('');
-    var w = window.open('', '_blank', 'width=380,height=600');
-    if (!w) { alert('Your browser blocked the print window. Allow pop-ups for this site and try again.'); return; }
-    w.document.write('<html><head><title>Order ' + wdsoEsc(tid) + '</title><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif; font-size:13px; padding:12px; max-width:340px; margin:0 auto;} h2,h3{text-align:center; margin:4px 0;} table{width:100%; border-collapse:collapse;} td{padding:4px 0; border-bottom:1px dashed #999;} .c{text-align:center; color:#555; font-size:11px; margin-top:12px;}</style></head><body>' +
-        '<h2>' + wdsoEsc(store) + '</h2><h3>Customer order slip</h3>' +
-        '<p><strong>Tracking ID:</strong> ' + wdsoEsc(tid) + '<br><strong>Customer:</strong> ' + wdsoEsc(o.name) + '<br><strong>Phone:</strong> ' + wdsoEsc(o.phone) + '<br><strong>Date:</strong> ' + wdsoWhen(o.createdAt) + '</p>' +
-        '<table>' + rows + '</table><p class="c">Order slip — prices not included</p></body></html>');
-    w.document.close();
-    setTimeout(function () { try { w.focus(); w.print(); } catch (e) {} }, 400);
+    var rows = Object.keys(items).map(function (k) {
+        return '<tr><td>' + wdsoEsc(items[k].name) + '</td><td>' + wdsoEsc(items[k].qty) + '</td></tr>';
+    }).join('');
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + wdsoEsc(tid) + '</title>' +
+        '<style>@page{margin:0;} html,body{margin:0; padding:0; background:#fff; color:#000; font-family:monospace;} ' +
+        '.box{width:100%; max-width:320px; margin:0 auto; padding:10px; box-sizing:border-box;} ' +
+        'table{width:100%; border-collapse:collapse;} th,td{padding:3px 0; text-align:left; font-size:12px; vertical-align:top;} th:last-child,td:last-child{text-align:right; white-space:nowrap; padding-left:6px;} ' +
+        'hr{border:0; border-top:1px dashed #000; margin:8px 0;}</style></head><body><div class="box">' +
+        '<div style="text-align:center; margin-bottom:8px;"><h3 style="margin:0; font-size:16px;">' + wdsoEsc(store) + '</h3>' +
+        (addr ? '<div style="font-size:10px; margin-top:3px;">' + wdsoEsc(addr) + '</div>' : '') +
+        (phone ? '<div style="font-size:10px;">' + wdsoEsc(phone) + '</div>' : '') + '</div>' +
+        '<hr><div style="text-align:center; font-weight:bold; font-size:12px; margin:6px 0;">CUSTOMER ORDER</div>' +
+        '<div style="font-size:11px; margin-bottom:10px;"><div><strong>TrackID:</strong> ' + wdsoEsc(tid) + '</div>' +
+        '<div><strong>Date:</strong> ' + wdsoEsc(wdsoWhen(o.createdAt)) + '</div>' +
+        '<div><strong>Customer:</strong> ' + wdsoEsc(o.name) + '</div><div><strong>Phone:</strong> ' + wdsoEsc(o.phone) + '</div></div><hr>' +
+        '<table><thead><tr style="border-bottom:1px solid #000;"><th>Item</th><th>Qty</th></tr></thead><tbody>' + rows + '</tbody></table><hr>' +
+        '<div style="text-align:center; font-size:10px; margin-top:6px;">Pay at the counter. Prices are added at checkout.</div></div></body></html>';
+
+    // Print from a hidden frame inside the page (no pop-up window, works better on phones and thermal printers)
+    var old = document.getElementById('wdso-print-frame');
+    if (old) old.remove();
+    var f = document.createElement('iframe');
+    f.id = 'wdso-print-frame';
+    f.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0; visibility:hidden;';
+    document.body.appendChild(f);
+    var d = f.contentWindow.document;
+    d.open(); d.write(html); d.close();
+    setTimeout(function () {
+        try { f.contentWindow.focus(); f.contentWindow.print(); }
+        catch (e) { alert('Could not open the print dialog: ' + ((e && e.message) || 'error')); }
+    }, 350);
 }
 
 // ---------- Sidebar button (insert-only, idempotent) ----------
