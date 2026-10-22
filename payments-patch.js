@@ -1,27 +1,83 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.19) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.18) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
-// v4.19 FIXES:
-//   * wdpUpdateBadge: textContent and styles are only written when they actually change, so the
-//     MutationObserver no longer loops (that loop was freezing the whole page and blocking the store list).
-//   * wdpStartListener: no longer retries on PERMISSION_DENIED; wdpOpenPending shows the real reason
-//     instead of showing "Loading..." forever.
-//   * wdpAttachPendingButton: requires the visible "Logout / Exit" button (Super-Admin-only signal), so a
-//     "Security" button on a store screen can no longer leak the listener onto a store session.
-//   * wdpReject: uses a "claimed + revert" pattern like wdpApprove — a mid-flight failure can no longer
-//     leave a request stuck as "rejected" with no reason.
-//   * wdcInject: removes the plan-picker box when the plan count drops below 2 or the form is gone.
-//   * wdpEsc also escapes single quotes; wdpFlatten stable-sorts missing createdAt; the 2-second
-//     setInterval safety net is slowed to 10 seconds.
+// STORE SIDE
+//   * "💳 Subscription" button in the Admin's sidebar, and a "Renew or pay subscription" link on the login
+//     screen (so a LOCKED store can still pay and send its proof)
+//   * Shows plan, due date, your bank details (and an optional online payment link)
+//   * The store picks a plan + billing cycle (Monthly or Yearly), pays by transfer, then taps "I've Paid" with its reference
+//   * A banner reminds the Admin when the subscription is due soon / overdue / the trial is ending
 //
-// STORE SIDE   * "💳 Subscription" button in the Admin's sidebar; "Renew or pay subscription" link on login
-// SUPER ADMIN  * "💳 Pending payments" button (live count) in the toolbar; Approve/Reject each request
-// Data: paymentRequests/{storeId}/{requestId}
+// SUPER ADMIN
+//   * "💳 Pending payments" button (with a live count) in the Super Admin toolbar
+//   * Review each request, change the amount/months if needed, then Approve (extends the due date, ends the
+//     trial, applies the plan, unlocks the store, sends a WhatsApp receipt) or Reject (with a reason)
+//   * Approving works exactly like "Record payment", and can only be done once per request
+//
+// ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
+//
+// v4.18: YEARLY PLANS. Plans may now include a `yearlyFee` (fallback = monthlyFee × 12).
+//   * Renew form has a "Billing cycle" picker (Monthly / Yearly). Yearly = 12 months upfront at the yearly rate,
+//     with a live "save ₦X" note when the plan is cheaper yearly.
+//   * Requests carry a `cycle` field, shown in the Super Admin review and the pending list.
+//   * On approval, `billing/<store>/cycle` is saved so the form defaults to the store's last choice.
+//   * Plan cards show "₦X/month · or ₦Y/year (save ₦Z)" when a yearly rate exists.
+//
+// v4.17: CHANGE PLAN. A "🔄 Change my plan" button on the Subscription screen.
+//   * Upgrade: the pay form opens with the chosen plan selected (switches on approval, as before).
+//   * Downgrade / same-price switch: a no-payment request (type 'plan-change', amount 0). When the store is signed in,
+//     its branches/staff/products are checked against the new limits first. The Super Admin reviews it (usage vs new
+//     limits) and approves: the plan is saved as billing/<store>/nextPlan and applies at the next renewal, or right
+//     away if "Switch now" is ticked. After approving a normal payment, the Super Admin is offered to apply a saved
+//     nextPlan. The store's pay form defaults to its nextPlan.
+//   * Needs two rules changes (paymentRequests .validate allows amount 0 for plan-change; billing/$storeId/nextPlan
+//     is publicly readable).
+// v4.16: emails the owner when a store sends a payment request (set WDP_ALERT_URL to the Apps Script web app URL).
+// v4.15: works with a Pending payments button written into app.html (it is reused and moved after "Security", never
+//   deleted); opening it starts the live listener itself, so it can never show a false "nothing pending".
+// v4.14: the Pending payments button now sits right after the "Security" button (falls back to before "Logout / Exit").
+// v4.13 FIX: a stale/hidden static copy of the Pending payments button (data-static="1" in app.html) is now removed and
+//   replaced by a visible one; the debug report no longer depends on #super-admin-view either.
+// v4.12 FIX: the Pending payments button now anchors straight to the visible "Logout / Exit" button and no longer
+//   depends on #super-admin-view having the "active" class. wdpOpenPending no longer exits early for the same reason.
+// v4 FIXES (sidebar shake):
+//   * New global hook wdpAttachSidebar() — insert-only, idempotent, no reflows.
+//   * setInterval() replaced with MutationObserver — only reacts when sidebar actually changes.
+//   * Sidebar button uses btn-subscription (no CSS transition) so it never visually pops.
+//   * Other patches (staff-sidebar-patch.js, manager-preorder-patch.js) should call
+//       if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
+//     immediately after they rebuild the sidebar, to eliminate the race entirely.
+//
+// v4.1 FIX (login link): the login screen no longer uses .auth-card / "login to store", so the
+//   "Renew or pay subscription" link is now anchored under the "Register New Business" button.
+//
+// v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
+//   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
+//
+// v4.11: the Pending payments button can be written straight into app.html (data-static="1"); this file then only keeps
+//   its label and count up to date.
+// v4.10: the Pending payments button no longer depends on the currentUserRole value; it appears whenever the Super Admin
+//   screen is on screen.
+// v4.9: the Super Admin "Pending payments" button now goes in the dark header, before "Logout / Exit" (a button that is
+//   written in app.html, so it is always there). ?wdpdebug=1 also reports on the Super Admin screen.
+// v4.8: the Super Admin "Pending payments" button is placed next to the visible "Billing settings" / "Load usage" button.
+// v4.7: the sidebar button can be written straight into app.html (data-static="1"); adjustSidebarForRole then shows it
+//   for the Admin and hides it for other roles. The old JS insertion stays as a fallback. Open the app with ?wdpdebug=1
+//   for an on-screen report if the button is missing.
+// v4.6: the Subscription screen reads the billing record field by field (so the rules can keep payment history private).
+// v4.5: NOTHING FLOATS. The login link sits inside the login card again (re-inserted after every rebuild of the card),
+//   and the sidebar button is forced visible with a CSS rule so adjustSidebarForRole cannot hide it.
+// v4.4 FIX: the Subscription screen reads each database node separately (one blocked node no longer breaks it),
+//   falls back to the default bank details, and shows the real reason when loading fails.
+//
+// Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.19 loaded");
+console.log("Wise Decision payments-patch.js — v4.18 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
+// Email alert to the owner when a store sends a payment request (Google Apps Script web app).
+// Paste your Web app URL between the quotes. Leave it empty to turn email alerts off.
 var WDP_ALERT_URL = 'https://script.google.com/macros/s/AKfycbz5bacSu21DjL82yXSt5zr9KsD7CcjL44nIrWh0kpPRvSNIwp4dLfvMrkGNJhq4yNLt/exec';
 function wdpNotifyEmail(rec) {
     if (!/^https:\/\/script\.google\.com\//.test(WDP_ALERT_URL)) return;
@@ -33,16 +89,16 @@ function wdpNotifyEmail(rec) {
         }).catch(function () {});
     } catch (e) { /* the alert must never get in the way of the payment itself */ }
 }
-var wdpAll = null;
+var wdpAll = null;             // every payment request (Super Admin, kept live)
 var wdpListening = false;
-var wdpListenerBlocked = false;   // v4.19: stop retrying once the listener hits PERMISSION_DENIED
-var wdpCtx = null;
+var wdpCtx = null;             // the store being shown on the renew screen
 var wdpBusy = false;
 var wdpBanner = { id: null, at: 0, loading: false, billing: null, soon: 7 };
 var wdpBannerDismissed = false;
 
+// ---------- Helpers (the pure ones are tested) ----------
 function wdpNum(n) { return Number(n) || 0; }
-function wdpEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function wdpEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function wdpMoney(n) { return '₦' + (Math.round(wdpNum(n) * 100) / 100).toLocaleString(); }
 function wdpPad(n) { return String(n).padStart(2, '0'); }
 function wdpToday() { const d = new Date(); return d.getFullYear() + '-' + wdpPad(d.getMonth() + 1) + '-' + wdpPad(d.getDate()); }
@@ -77,6 +133,7 @@ function wdpWaNumber(phone) {
     else if (/^\d{10}$/.test(p)) p = '234' + p;
     return p;
 }
+
 function wdpSubState(billing, todayStr, soonDays) {
     if (!billing || !wdpIsDay(billing.dueDate)) return { state: 'none' };
     const days = wdpDaysUntil(billing.dueDate, todayStr);
@@ -86,6 +143,8 @@ function wdpSubState(billing, todayStr, soonDays) {
     return { state: 'ok', days: days, trial: trial };
 }
 function wdpSuggestAmount(fee, months) { return Math.round(wdpNum(fee) * Math.max(1, parseInt(months) || 1) * 100) / 100; }
+
+// v4.18: yearly helpers
 function wdpYearlyFee(plan) {
     if (!plan) return 0;
     const y = wdpNum(plan.yearlyFee);
@@ -107,11 +166,7 @@ function wdpFlatten(all) {
             if (r && typeof r === 'object') out.push(Object.assign({}, r, { sid: sid, key: k }));
         });
     });
-    return out.sort(function (a, b) {
-        const ca = String(a.createdAt || '');
-        const cb = String(b.createdAt || '');
-        return ca.localeCompare(cb) || String(a.key).localeCompare(String(b.key));
-    });
+    return out.sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
 }
 function wdpSortedPlanIds(plans) {
     return Object.keys(plans || {}).sort(function (a, b) { return wdpNum(plans[a].monthlyFee) - wdpNum(plans[b].monthlyFee); });
@@ -158,6 +213,9 @@ function wdpAskStoreId(message) {
 
 async function wdpLoadStore(id) {
     const db = firebase.database();
+    // Each read is separate, so one blocked/slow node cannot break the whole screen.
+    // The billing record is read field by field (due date, trial, plan, fee, cycle) so the database rules can keep the
+    // payment history inside it private.
     const read = function (path) { return db.ref(path).once('value').then(function (snap) { return snap.val(); }); };
     const safe = function (label, promise) {
         return wdpTimeout(promise, 15000).then(
@@ -183,6 +241,7 @@ async function wdpLoadStore(id) {
         throw err;
     }
     const settings = Object.assign(typeof wdsDefaults === 'function' ? wdsDefaults() : {}, (r[2].ok && r[2].val) || {});
+    // If the name could not be read (blocked), carry on with the ID the person typed; null means "no such store".
     const name = r[0].ok ? (r[0].val || '') : id;
     return {
         id: id, name: name,
@@ -203,7 +262,7 @@ async function wdpOpenRenew(presetId) {
     const id = String(presetId || '').trim().toLowerCase();
     if (!id) { wdpAskStoreId(''); return; }
     wdpLastId = id;
-    wdpBanner.at = 0;
+    wdpBanner.at = 0;   // refresh the reminder banner after this
     wdpModal('💳 Subscription', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
     let data;
     try { data = await wdpLoadStore(id); }
@@ -245,6 +304,7 @@ function wdpRenderRenew() {
         (link ? '<a href="' + wdpEsc(link) + '" target="_blank" rel="noopener" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; background:#0284c7; color:#fff; text-decoration:none;">🔗 Pay online</a>' : '') +
         '</div></div>';
 
+    // v4.18: cycle + months. Yearly = 12 months upfront, amount = yearlyFee (or monthlyFee × 12 fallback).
     const planSelect = planIds.length === 0 ? '' :
         '<label style="font-size:12px; font-weight:bold;">Plan</label><select id="wdp-plan" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
         (currentPlan ? '' : '<option value="">Keep my current arrangement</option>') +
@@ -293,6 +353,7 @@ function wdpRenderRenew() {
         wdpFailNote(c) + bank + pendingNote + form + histHtml +
         '<div style="text-align:center; margin-top:12px;"><a href="https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent('Hello, I need help with my Wise Decision subscription. Store ID: ' + c.id) + '" target="_blank" rel="noopener" style="font-size:12px; color:#166534; font-weight:bold;">💬 Need help? Chat with support</a></div>');
 
+    // Default cycle to the store's last choice (persisted on approval), falling back to monthly.
     const cy = document.getElementById('wdp-cycle');
     if (cy && b.cycle === 'yearly') cy.value = 'yearly';
     wdpRecalc();
@@ -380,7 +441,7 @@ async function wdpSubmit() {
 // SUPER ADMIN — pending payments
 // =====================================================================
 function wdpStartListener() {
-    if (wdpListening || wdpListenerBlocked || typeof firebase === 'undefined') return;
+    if (wdpListening || typeof firebase === 'undefined') return;
     wdpListening = true;
     try {
         firebase.database().ref('paymentRequests').on('value', function (snap) {
@@ -388,6 +449,712 @@ function wdpStartListener() {
             wdpUpdateBadge();
             const m = document.getElementById('wdp-modal');
             if (m && m.style.display === 'flex' && m.dataset.view === 'pending') wdpOpenPending();
-        }, function (err) {
-            wdpListening = false;
-            if (err && (err.code ===
+        }, function () { wdpListening = false; });
+    } catch (e) { wdpListening = false; }
+}
+
+function wdpPendingCount() { return wdpFlatten(wdpAll).filter(function (r) { return r.status === 'pending'; }).length; }
+function wdpUpdateBadge() {
+    const b = document.getElementById('wdp-btn-pending');
+    if (!b) return;
+    const n = wdpPendingCount();
+    b.textContent = '💳 Pending payments' + (n ? ' (' + n + ')' : '');
+    b.style.background = n ? '#fef3c7' : '#f0fdf4';
+    b.style.borderColor = n ? '#fcd34d' : '#bbf7d0';
+    b.style.color = n ? '#92400e' : '#166534';
+}
+
+function wdpOpenPending() {
+    wdpStartListener();
+    if (wdpAll === null) {
+        wdpModal('💳 Pending payments', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
+        const lm = document.getElementById('wdp-modal');
+        if (lm) lm.dataset.view = 'pending';   // the listener redraws this screen as soon as data arrives
+        return;
+    }
+    const all = wdpFlatten(wdpAll);
+    const pending = all.filter(function (r) { return r.status === 'pending'; });
+    const decided = all.filter(function (r) { return r.status !== 'pending'; }).slice(-10).reverse();
+
+    const row = function (r, withButtons) {
+        const e = wdpEsc(r.sid), k = wdpEsc(r.key);
+        const cycleTag = r.cycle === 'yearly' ? ' <span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px;">YEARLY</span>' : '';
+        return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">' +
+            '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;"><div><strong>' + wdpEsc(r.storeName || r.sid) + '</strong><br><small style="color:#64748b;">' + e + '</small></div>' + wdpStatusChip(r.status) + '</div>' +
+            '<div style="font-size:13px; margin:6px 0;"><strong>' + wdpMoney(r.amount) + '</strong> · ' + wdpNum(r.months) + ' month' + (wdpNum(r.months) === 1 ? '' : 's') + cycleTag + ' · ' + wdpEsc(r.method || '') +
+            '<br><span style="color:#475569;">Ref: ' + wdpEsc(r.reference || '—') + '</span>' + (r.note ? '<br><span style="color:#64748b;">' + wdpEsc(r.note) + '</span>' : '') +
+            '<br><span style="color:#94a3b8; font-size:11px;">Sent ' + wdpPretty(r.createdAt) + ' (' + wdpAgo(r.createdAt) + ')</span></div>' +
+            (withButtons ? '<div style="display:flex; gap:6px;"><button data-sid="' + e + '" data-key="' + k + '" onclick="wdpReview(this.dataset.sid, this.dataset.key)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#dcfce7; border:1px solid #86efac; color:#166534;">Review &amp; approve</button>' +
+                '<button data-sid="' + e + '" data-key="' + k + '" onclick="wdpReject(this.dataset.sid, this.dataset.key)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#fef2f2; border:1px solid #fecaca; color:#991b1b;">Reject</button></div>' : '') + '</div>';
+    };
+
+    wdpModal('💳 Pending payments',
+        (pending.length ? pending.map(function (r) { return row(r, true); }).join('') : '<div style="text-align:center; color:#166534; padding:16px;">✅ No payments waiting for approval.</div>') +
+        (decided.length ? '<div style="font-weight:bold; font-size:13px; margin:14px 0 6px;">Recently handled</div>' + decided.map(function (r) { return row(r, false); }).join('') : '') +
+        '<div style="border-top:1px solid #e2e8f0; margin-top:12px; padding-top:10px;"><button onclick="wdpSetLink()" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">🔗 Set online payment link (Paystack)</button></div>');
+    const m = document.getElementById('wdp-modal');
+    if (m) m.dataset.view = 'pending';
+}
+
+async function wdpSetLink() {
+    let current = '';
+    try { current = (await firebase.database().ref('billingSettings/paymentLink').once('value')).val() || ''; } catch (e) {}
+    const entered = prompt('Paste your Paystack payment page link (must start with https://). Leave empty to remove it.', current);
+    if (entered === null) return;
+    const link = entered.trim();
+    if (link && !wdpSafeLink(link)) { alert('The link must start with https://'); return; }
+    try {
+        await firebase.database().ref('billingSettings/paymentLink').set(link || null);
+        alert(link ? 'Payment link saved. Stores will see a "Pay online" button.' : 'Payment link removed.');
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+function wdpRec(sid, key) { return wdpAll && wdpAll[sid] ? wdpAll[sid][key] : null; }
+
+async function wdpReview(sid, key) {
+    const rec = wdpRec(sid, key);
+    if (!rec || rec.status !== 'pending') { alert('This request is no longer pending.'); wdpOpenPending(); return; }
+    let plans = {};
+    try { plans = (await firebase.database().ref('billingSettings/plans').once('value')).val() || {}; } catch (e) {}
+    const st = typeof wdsFind === 'function' ? wdsFind(sid) : null;
+    const plan = rec.planId && plans[rec.planId] ? plans[rec.planId] : null;
+    const currentPlanId = st && st.billing && st.billing.plan;
+    const expected = plan ? wdpAmountFor(plan, rec.cycle === 'yearly' ? 'yearly' : 'monthly', rec.months) : 0;
+    const mismatch = expected > 0 && Math.abs(expected - wdpNum(rec.amount)) > 0.5;
+    const e = wdpEsc(sid), k = wdpEsc(key);
+    const cycleText = rec.cycle === 'yearly' ? 'Yearly (12 months upfront)' : 'Monthly';
+
+    wdpModal('Review payment — ' + (rec.storeName || sid),
+        (st ? '' : '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">This store is not in your list right now. Close this, tap "Refresh List", then try again.</div>') +
+        '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; margin-bottom:12px;">' +
+        'Store: <strong>' + wdpEsc(rec.storeName || sid) + '</strong> (' + e + ')<br>' +
+        'Says they paid: <strong>' + wdpMoney(rec.amount) + '</strong> for ' + wdpNum(rec.months) + ' month' + (wdpNum(rec.months) === 1 ? '' : 's') + ' by ' + wdpEsc(rec.method || '') + '<br>' +
+        'Billing cycle: <strong>' + cycleText + '</strong><br>' +
+        'Reference: <strong>' + wdpEsc(rec.reference || '—') + '</strong>' + (rec.note ? '<br>Note: ' + wdpEsc(rec.note) : '') + '<br>' +
+        'Sent: ' + wdpPretty(rec.createdAt) + (plan ? '<br>Plan chosen: <strong>' + wdpEsc(plan.name) + '</strong> (' + wdpMoney(plan.monthlyFee) + '/month' + (rec.cycle === 'yearly' ? ' · ' + wdpMoney(wdpYearlyFee(plan)) + '/year' : '') + ')' : '') + '</div>' +
+        '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">⚠ First check your bank/Moniepoint app and confirm this money really arrived.' +
+        (mismatch ? '<br>The expected amount is ' + wdpMoney(expected) + ', but they say they paid ' + wdpMoney(rec.amount) + '.' : '') + '</div>' +
+        wdpField('wdp-ra-amount', 'Amount received (₦)', 'number', rec.amount, 'min="0"') +
+        '<label style="font-size:12px; font-weight:bold;">Months to extend</label><select id="wdp-ra-months" style="' + WDP_INPUT + '">' +
+        [1, 2, 3, 6, 12].map(function (m) { return '<option value="' + m + '"' + (m === wdpNum(rec.months) ? ' selected' : '') + '>' + m + ' month' + (m === 1 ? '' : 's') + '</option>'; }).join('') + '</select>' +
+        (plan && rec.planId !== currentPlanId ? '<label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:8px;"><input id="wdp-ra-plan" type="checkbox" checked> Switch this store to the <strong>' + wdpEsc(plan.name) + '</strong> plan (updates fee and limits)</label>' : '') +
+        (st && st.status === 'suspended' ? '<label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:8px;"><input id="wdp-ra-unlock" type="checkbox" checked> Unlock this store (it is locked)</label>' : '') +
+        '<label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:12px;"><input id="wdp-ra-receipt" type="checkbox" checked> Send a WhatsApp receipt</label>' +
+        '<div style="display:flex; gap:8px;"><button id="wdp-ra-btn" data-sid="' + e + '" data-key="' + k + '" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#16a34a; flex:1;" onclick="wdpApprove(this.dataset.sid, this.dataset.key)">✔ Approve &amp; record payment</button>' +
+        '<button class="menu-btn" style="margin:0; width:auto; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdpOpenPending()">Back</button></div>');
+    const m = document.getElementById('wdp-modal');
+    if (m) m.dataset.view = 'review';
+}
+
+async function wdpApprove(sid, key) {
+    if (wdpBusy) return;
+    const rec = wdpRec(sid, key);
+    if (!rec || rec.status !== 'pending') { alert('This request is no longer pending.'); wdpOpenPending(); return; }
+    const st = typeof wdsFind === 'function' ? wdsFind(sid) : null;
+    if (!st) { alert('This store is not in your list right now. Tap "Refresh List" on the dashboard and try again (it may be in the Bin).'); return; }
+    const amount = parseFloat(document.getElementById('wdp-ra-amount').value);
+    const months = parseInt(document.getElementById('wdp-ra-months').value) || 1;
+    if (!(amount > 0)) { alert('Enter the amount you received.'); return; }
+    const planBox = document.getElementById('wdp-ra-plan'), unlockBox = document.getElementById('wdp-ra-unlock'), receiptBox = document.getElementById('wdp-ra-receipt');
+    const applyPlan = !!(planBox && planBox.checked), unlock = !!(unlockBox && unlockBox.checked), sendReceipt = !!(receiptBox && receiptBox.checked);
+
+    wdpBusy = true;
+    const btn = document.getElementById('wdp-ra-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    const db = firebase.database();
+    const statusRef = db.ref('paymentRequests/' + sid + '/' + key + '/status');
+    let claimed = false;
+    try {
+        // Claim the request so it can never be approved twice (even from two phones at once)
+        const tx = await statusRef.transaction(function (cur) { return cur === 'pending' ? 'approved' : (cur === null ? cur : undefined); });
+        if (!tx.committed || tx.snapshot.val() !== 'approved') { wdpBusy = false; alert('Someone has already handled this request.'); wdpOpenPending(); return; }
+        claimed = true;
+
+        const today = wdsTodayStr();
+        const nowIso = new Date().toISOString();
+        const dueBefore = st.billing && st.billing.dueDate ? st.billing.dueDate : null;
+        const dueAfter = wdsNextDueDate(dueBefore, today, months);
+        const pk = db.ref('billing/' + sid + '/payments').push().key;
+        const u = {};
+        u['billing/' + sid + '/dueDate'] = dueAfter;
+        u['billing/' + sid + '/lastPaidDate'] = today;
+        u['billing/' + sid + '/lastPaidAmount'] = amount;
+        u['billing/' + sid + '/trial'] = null;
+        // v4.18: remember the store's chosen cycle so the form defaults to it next time
+        u['billing/' + sid + '/cycle'] = rec.cycle === 'yearly' ? 'yearly' : 'monthly';
+        u['billing/' + sid + '/payments/' + pk] = { amount: amount, months: months, cycle: rec.cycle || 'monthly', method: rec.method || 'Transfer', note: 'Ref: ' + (rec.reference || '') + (rec.note ? ' — ' + rec.note : ''), paidDate: today, at: nowIso, dueBefore: dueBefore, dueAfter: dueAfter, recordedBy: 'Super Admin (approved request)' };
+
+        let appliedPlanName = '';
+        if (applyPlan && rec.planId) {
+            const plans = (await db.ref('billingSettings/plans').once('value')).val() || {};
+            const p = plans[rec.planId];
+            if (p) {
+                u['billing/' + sid + '/plan'] = rec.planId;
+                if (wdpNum(p.monthlyFee) > 0) u['billing/' + sid + '/monthlyFee'] = wdpNum(p.monthlyFee);
+                u['stores/' + sid + '/planLimits'] = wdpLimitsOf(rec.planId, p);
+                appliedPlanName = p.name;
+            }
+        }
+        if (!appliedPlanName && !(st.billing && st.billing.monthlyFee)) u['billing/' + sid + '/monthlyFee'] = Math.round((amount / months) * 100) / 100;
+        if (unlock && st.status === 'suspended') u['stores/' + sid + '/status'] = 'active';
+        u['paymentRequests/' + sid + '/' + key + '/decidedAt'] = nowIso;
+        u['paymentRequests/' + sid + '/' + key + '/decidedBy'] = 'Super Admin';
+        u['paymentRequests/' + sid + '/' + key + '/approvedAmount'] = amount;
+        u['paymentRequests/' + sid + '/' + key + '/approvedMonths'] = months;
+        u['paymentRequests/' + sid + '/' + key + '/dueAfter'] = dueAfter;
+
+        await db.ref().update(u);
+        claimed = false;
+        wdpBusy = false;
+        try { await wdsLog(sid, { type: 'payment', text: 'Payment ' + wdpMoney(amount) + ' (' + (rec.method || 'Transfer') + ') approved from store request — ' + months + 'mo → due ' + dueAfter + (appliedPlanName ? ' · plan ' + appliedPlanName : ''), amount: amount }); } catch (e) {}
+
+        if (sendReceipt) {
+            const receipt = 'Hello ' + (st.name || sid) + ', we have confirmed your payment of ' + wdpMoney(amount) + ' (' + (rec.cycle === 'yearly' ? '1 year — 12 months' : months + ' month' + (months === 1 ? '' : 's')) + ').\n\nYour next due date is ' + wdpPretty(dueAfter) + '.' + (unlock && st.status === 'suspended' ? '\n\nYour store has been unlocked.' : '') + '\n\nThank you for being with Wise Decision!';
+            const num = wdpWaNumber(st.phone);
+            if (num) window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(receipt), '_blank');
+            else prompt('No phone number saved. Copy this receipt:', receipt);
+        } else { alert('Approved. Next due date: ' + wdpPretty(dueAfter) + '.'); }
+        if (typeof wdsReload === 'function') { try { await wdsReload(); } catch (e) {} }
+        wdpOpenPending();
+    } catch (e) {
+        wdpBusy = false;
+        if (claimed) { try { await statusRef.set('pending'); } catch (_) {} }
+        alert('Could not approve: ' + e.message + '\n\nNothing was changed — you can try again.');
+        if (btn) { btn.disabled = false; btn.textContent = '✔ Approve & record payment'; }
+    }
+}
+
+async function wdpReject(sid, key) {
+    const rec = wdpRec(sid, key);
+    if (!rec || rec.status !== 'pending') { alert('This request is no longer pending.'); wdpOpenPending(); return; }
+    const reason = prompt('Why are you rejecting this payment? The store will see this.\n(e.g. "We did not receive the transfer yet")', '');
+    if (reason === null) return;
+    try {
+        const db = firebase.database();
+        const tx = await db.ref('paymentRequests/' + sid + '/' + key + '/status').transaction(function (cur) { return cur === 'pending' ? 'rejected' : (cur === null ? cur : undefined); });
+        if (!tx.committed || tx.snapshot.val() !== 'rejected') { alert('Someone has already handled this request.'); wdpOpenPending(); return; }
+        await db.ref('paymentRequests/' + sid + '/' + key).update({ rejectReason: reason.trim() || 'Payment not confirmed. Please contact support.', decidedAt: new Date().toISOString(), decidedBy: 'Super Admin' });
+        try { await wdsLog(sid, { type: 'payment', text: 'Payment request of ' + wdpMoney(rec.amount) + ' rejected' + (reason.trim() ? ': ' + reason.trim() : '') }); } catch (e) {}
+        wdpOpenPending();
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
+// =====================================================================
+// FIX: saving "Billing settings" must not wipe the plans (it used set() on the whole node)
+// =====================================================================
+window.wdsSaveSettings = async function () {
+    const v = function (id) { return document.getElementById(id).value.trim(); };
+    const settings = {
+        bankName: v('wds-set-bank'), accountNumber: v('wds-set-acct'), accountName: v('wds-set-name'),
+        defaultFee: Math.max(0, parseFloat(v('wds-set-fee')) || 0),
+        graceDays: Math.max(0, parseInt(v('wds-set-grace')) || 0),
+        dueSoonDays: Math.max(0, parseInt(v('wds-set-soon')) || 0)
+    };
+    if (!settings.bankName || !settings.accountNumber || !settings.accountName) { alert("Bank name, account number and account name are needed for the reminder messages."); return; }
+    try {
+        await firebase.database().ref('billingSettings').update(settings);   // update, so plans and the payment link are kept
+        wdsSettings = Object.assign(wdsDefaults(), wdsSettings || {}, settings);
+        wdsCloseModal();
+        wdsRender();
+    } catch (e) { alert("Failed to save: " + e.message); }
+};
+
+// =====================================================================
+// CHANGE PLAN (v4.17)
+// =====================================================================
+function wdcLimitText(p) {
+    var u = function (n) { return wdpNum(n) > 0 ? String(wdpNum(n)) : 'unlimited'; };
+    return u(p.maxBranches) + ' branch' + (wdpNum(p.maxBranches) === 1 ? '' : 'es') + ' · ' + u(p.maxStaff) + ' staff · ' + u(p.maxProducts) + ' products';
+}
+
+// Counts use storeplans-patch.js helpers. Fails quietly (null) when the person is not signed in as this store.
+async function wdcUsage(sid) {
+    if (typeof wdnShallow !== 'function' || typeof wdnCountProducts !== 'function') return null;
+    try {
+        var r = await Promise.all([wdnShallow('stores/' + sid + '/branches'), wdnShallow('stores/' + sid + '/staff'), wdnCountProducts(sid)]);
+        return { branches: r[0].length, staff: r[1].length, products: r[2] };
+    } catch (e) { return null; }
+}
+
+function wdcOver(u, p) {
+    var out = [];
+    if (!u) return out;
+    [['branches', 'maxBranches'], ['staff members', 'maxStaff'], ['products', 'maxProducts']].forEach(function (x, i) {
+        var have = [u.branches, u.staff, u.products][i], max = wdpNum(p[x[1]]);
+        if (max > 0 && have > max) out.push(have + ' ' + x[0] + ' (this plan allows ' + max + ')');
+    });
+    return out;
+}
+
+function wdcUsageHtml(u) {
+    return u ? '<div style="font-size:12px; color:#475569; margin-bottom:8px;">Now using: ' + u.branches + ' branch(es) · ' + u.staff + ' staff · ' + u.products + ' products</div>' : '';
+}
+
+// ---- Store side ----
+(function () {
+    var orig = window.wdpRenderRenew;
+    window.wdpRenderRenew = function () {
+        var r = orig.apply(this, arguments);
+        try { wdcInject(); } catch (e) { console.warn(e); }
+        return r;
+    };
+})();
+
+async function wdcInject() {
+    var c = wdpCtx, form = document.getElementById('wdp-form');
+    if (!c || !form || document.getElementById('wdc-box')) return;
+    if (wdpSortedPlanIds(c.plans).length < 2) return;
+    var waiting = wdpFlatten({ x: c.requests }).filter(function (r) { return r.type === 'plan-change' && r.status === 'pending'; });
+    var box = document.createElement('div');
+    box.id = 'wdc-box';
+    box.style.cssText = 'margin-bottom:12px;';
+    box.innerHTML = waiting.length
+        ? '<div style="background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; padding:10px; border-radius:8px; font-size:13px;">⏳ Your request to change to the <strong>' + wdpEsc((c.plans[waiting[waiting.length - 1].planId] || {}).name || 'new') + '</strong> plan is waiting for approval.</div>'
+        : '<button onclick="wdcOpenPicker()" style="width:100%; padding:10px; font-size:13px; font-weight:bold; border-radius:8px; cursor:pointer; border:1px solid #bae6fd; background:#f0f9ff; color:#0369a1;">🔄 Change my plan</button>';
+    form.parentNode.insertBefore(box, form);
+    try {
+        var np = (await firebase.database().ref('billing/' + c.id + '/nextPlan').once('value')).val();
+        if (np && c.plans[np] && wdpCtx === c && document.getElementById('wdc-box') === box) {
+            box.insertAdjacentHTML('afterbegin', '<div style="background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:10px; border-radius:8px; font-size:13px; margin-bottom:8px;">📅 Your plan changes to <strong>' + wdpEsc(c.plans[np].name) + '</strong> when you renew.</div>');
+            var sel = document.getElementById('wdp-plan');
+            if (sel && sel.value !== np && document.getElementById('wdp-months')) { sel.value = np; wdpRecalc(); }
+        }
+    } catch (e) { }
+}
+
+function wdcOpenPicker() {
+    var c = wdpCtx;
+    if (!c) return;
+    var cur = c.billing && c.billing.plan;
+    var curFee = cur && c.plans[cur] ? wdpNum(c.plans[cur].monthlyFee) : wdpNum(c.billing && c.billing.monthlyFee);
+    var cards = wdpSortedPlanIds(c.plans).map(function (pid) {
+        var p = c.plans[pid], isCur = pid === cur, up = wdpNum(p.monthlyFee) > curFee;
+        var tag = isCur ? '<span style="background:#dcfce7; color:#166534; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">CURRENT</span>'
+            : '<span style="background:' + (up ? '#dbeafe' : '#fef3c7') + '; color:' + (up ? '#1e40af' : '#92400e') + '; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">' + (up ? 'UPGRADE' : 'SWITCH DOWN') + '</span>';
+        // v4.18: show yearly rate (with savings) alongside monthly
+        var yf = wdpNum(p.yearlyFee), save = wdpNum(p.monthlyFee) * 12 - yf;
+        var yearlyHtml = yf > 0
+            ? '<div style="font-size:12px; color:#475569;">or <strong>' + wdpMoney(yf) + '</strong>/year' + (save > 0 ? ' <span style="color:#16a34a;">(save ' + wdpMoney(save) + ')</span>' : '') + '</div>'
+            : '';
+        return '<div style="border:' + (isCur ? '2px solid #86efac' : '1px solid #e2e8f0') + '; border-radius:8px; padding:10px; margin-bottom:8px;">' +
+            '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + wdpEsc(p.name) + '</strong>' + tag + '</div>' +
+            '<div style="font-weight:bold; color:#166534; margin:2px 0;">' + wdpMoney(p.monthlyFee) + '/month</div>' + yearlyHtml +
+            '<div style="font-size:12px; color:#475569;">' + wdcLimitText(p) + '</div>' +
+            (isCur ? '' : '<button data-id="' + wdpEsc(pid) + '" data-up="' + (up ? 1 : 0) + '" onclick="wdcPick(this.dataset.id, this.dataset.up === \'1\')" style="margin-top:8px; padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">' + (up ? 'Upgrade — pay now' : 'Request this plan') + '</button>') + '</div>';
+    }).join('');
+    wdpModal('🔄 Change plan', cards + '<button class="menu-btn" style="margin:0; justify-content:center; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdpRenderRenew()">Back</button>');
+}
+
+function wdcPick(pid, isUpgrade) {
+    if (isUpgrade) {
+        wdpRenderRenew();
+        var sel = document.getElementById('wdp-plan'), form = document.getElementById('wdp-form');
+        if (sel) sel.value = pid;
+        if (form) { form.style.display = ''; wdpRecalc(); form.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    } else wdcOpenRequest(pid);
+}
+
+async function wdcOpenRequest(pid) {
+    var c = wdpCtx, p = c && c.plans[pid];
+    if (!p) return;
+    wdpModal('🔄 Change plan', '<div style="text-align:center; color:#64748b; padding:24px;">Checking your usage...</div>');
+    var u = await wdcUsage(c.id), over = wdcOver(u, p);
+    var due = c.billing && c.billing.dueDate ? wdpPretty(c.billing.dueDate) : 'your next payment';
+    var yf = wdpNum(p.yearlyFee);
+    var html = '<div style="font-size:14px; margin-bottom:8px;">Switch to <strong>' + wdpEsc(p.name) + '</strong> — ' + wdpMoney(p.monthlyFee) + '/month' + (yf > 0 ? ' <span style="color:#64748b;">or ' + wdpMoney(yf) + '/year</span>' : '') + '</div>' +
+        '<div style="font-size:12px; color:#475569; margin-bottom:8px;">' + wdcLimitText(p) + '</div>' + wdcUsageHtml(u) +
+        '<div style="background:#f8fafc; border:1px solid #e2e8f0; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">Nothing to pay now. You keep your current plan until <strong>' + wdpEsc(due) + '</strong>, then the new plan and price apply.</div>';
+    if (over.length) {
+        html += '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:10px; border-radius:6px; font-size:13px; margin-bottom:10px;">You are over this plan\'s limits:<br>• ' + over.map(wdpEsc).join('<br>• ') + '<br><br>Please remove the extra first, then ask again.</div>';
+    } else {
+        if (!u) html += '<div style="background:#f1f5f9; padding:8px; border-radius:6px; font-size:12px; color:#475569; margin-bottom:10px;">We will check your usage against the new limits when we review this.</div>';
+        html += '<label style="font-size:12px; font-weight:bold;">Note (optional)</label><input id="wdc-note" type="text" style="' + WDP_INPUT + '">' +
+            '<button id="wdc-send" data-id="' + wdpEsc(pid) + '" class="menu-btn btn-action-primary" style="justify-content:center; margin:0 0 8px; background:#16a34a;" onclick="wdcSend(this.dataset.id)">Send request</button>';
+    }
+    html += '<button class="menu-btn" style="margin:0; justify-content:center; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdcOpenPicker()">Back</button>';
+    wdpModal('🔄 Change plan', html);
+}
+
+async function wdcSend(pid) {
+    var c = wdpCtx;
+    if (!c || wdpBusy) return;
+    var p = c.plans[pid];
+    if (!p) return;
+    var rec = { storeId: c.id, storeName: c.name, type: 'plan-change', amount: 0, months: 0, planId: pid, method: 'Plan change', reference: 'Plan change to ' + p.name, note: ((document.getElementById('wdc-note') || {}).value || '').trim(), status: 'pending', createdAt: new Date().toISOString() };
+    wdpBusy = true;
+    var btn = document.getElementById('wdc-send');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    try {
+        var ref = firebase.database().ref('paymentRequests/' + c.id).push();
+        await ref.set(rec);
+        wdpNotifyEmail(rec);
+        c.requests[ref.key] = rec;
+        wdpBusy = false;
+        wdpRenderRenew();
+        alert('✅ Sent! We will confirm your plan change shortly.');
+    } catch (e) {
+        wdpBusy = false;
+        alert('Could not send: ' + e.message + '\n\nPlease check your internet and try again.');
+        wdcOpenRequest(pid);
+    }
+}
+
+// ---- Super Admin side ----
+(function () {
+    var origReview = window.wdpReview;
+    window.wdpReview = function (sid, key) {
+        var rec = wdpRec(sid, key);
+        if (rec && rec.type === 'plan-change' && rec.status === 'pending') return wdcReview(sid, key);
+        return origReview.apply(this, arguments);
+    };
+    var origApprove = window.wdpApprove;
+    window.wdpApprove = async function (sid, key) {
+        var r = await origApprove.apply(this, arguments);
+        try { await wdcApplyNext(sid, key); } catch (e) { console.warn(e); }
+        return r;
+    };
+})();
+
+async function wdcReview(sid, key) {
+    var rec = wdpRec(sid, key);
+    if (!rec || rec.status !== 'pending') { alert('This request is no longer pending.'); wdpOpenPending(); return; }
+    wdpModal('Plan change — ' + (rec.storeName || sid), '<div style="text-align:center; color:#64748b; padding:24px;">Checking usage...</div>');
+    var plans = {};
+    try { plans = (await firebase.database().ref('billingSettings/plans').once('value')).val() || {}; } catch (e) { }
+    var p = plans[rec.planId];
+    if (!p) { alert('That plan no longer exists. Please reject this request.'); wdpOpenPending(); return; }
+    var st = typeof wdsFind === 'function' ? wdsFind(sid) : null;
+    var curName = st && st.billing && plans[st.billing.plan] ? plans[st.billing.plan].name : 'none';
+    var u = await wdcUsage(sid), over = wdcOver(u, p);
+    var e = wdpEsc(sid), k = wdpEsc(key);
+    var yf = wdpNum(p.yearlyFee);
+    wdpModal('Plan change — ' + (rec.storeName || sid),
+        '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; margin-bottom:10px;">Store: <strong>' + wdpEsc(rec.storeName || sid) + '</strong> (' + e + ')<br>' +
+        'From <strong>' + wdpEsc(curName) + '</strong> to <strong>' + wdpEsc(p.name) + '</strong> (' + wdpMoney(p.monthlyFee) + '/month' + (yf > 0 ? ' · ' + wdpMoney(yf) + '/year' : '') + ')<br>' +
+        '<span style="color:#475569;">' + wdcLimitText(p) + '</span>' + (rec.note ? '<br>Note: ' + wdpEsc(rec.note) : '') + '</div>' + wdcUsageHtml(u) +
+        (over.length ? '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">⚠ Over the new limits: ' + over.map(wdpEsc).join('; ') + '</div>' : '') +
+        '<label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:12px;"><input id="wdc-now" type="checkbox"> Switch now instead of at the next renewal</label>' +
+        '<div style="display:flex; gap:8px;"><button data-sid="' + e + '" data-key="' + k + '" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#16a34a; flex:1;" onclick="wdcApprove(this.dataset.sid, this.dataset.key)">✔ Approve</button>' +
+        '<button class="menu-btn" style="margin:0; width:auto; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdpOpenPending()">Back</button></div>');
+    var m = document.getElementById('wdp-modal');
+    if (m) m.dataset.view = 'review';
+}
+
+async function wdcApprove(sid, key) {
+    if (wdpBusy) return;
+    var rec = wdpRec(sid, key);
+    if (!rec || rec.status !== 'pending') { alert('This request is no longer pending.'); wdpOpenPending(); return; }
+    var now = !!(document.getElementById('wdc-now') || {}).checked;
+    wdpBusy = true;
+    var db = firebase.database(), statusRef = db.ref('paymentRequests/' + sid + '/' + key + '/status'), claimed = false;
+    try {
+        var plans = (await db.ref('billingSettings/plans').once('value')).val() || {};
+        var p = plans[rec.planId];
+        if (!p) throw new Error('Plan not found');
+        var tx = await statusRef.transaction(function (cur) { return cur === 'pending' ? 'approved' : (cur === null ? cur : undefined); });
+        if (!tx.committed || tx.snapshot.val() !== 'approved') { wdpBusy = false; alert('Someone has already handled this request.'); wdpOpenPending(); return; }
+        claimed = true;
+        var u = {}, nowIso = new Date().toISOString();
+        if (now) {
+            u['billing/' + sid + '/plan'] = rec.planId;
+            if (wdpNum(p.monthlyFee) > 0) u['billing/' + sid + '/monthlyFee'] = wdpNum(p.monthlyFee);
+            u['stores/' + sid + '/planLimits'] = wdpLimitsOf(rec.planId, p);
+            u['billing/' + sid + '/nextPlan'] = null;
+        } else u['billing/' + sid + '/nextPlan'] = rec.planId;
+        u['paymentRequests/' + sid + '/' + key + '/decidedAt'] = nowIso;
+        u['paymentRequests/' + sid + '/' + key + '/decidedBy'] = 'Super Admin';
+        await db.ref().update(u);
+        claimed = false; wdpBusy = false;
+        try { await wdsLog(sid, { type: 'plan', text: 'Plan change to ' + p.name + (now ? ' applied now' : ' approved — applies at next renewal') }); } catch (e) { }
+        if (typeof wdsReload === 'function') { try { await wdsReload(); } catch (e) { } }
+        alert(now ? 'Plan switched now.' : 'Approved. The ' + p.name + ' plan will apply at the next renewal.');
+        wdpOpenPending();
+    } catch (e) {
+        wdpBusy = false;
+        if (claimed) { try { await statusRef.set('pending'); } catch (_) { } }
+        alert('Could not approve: ' + e.message + '\n\nNothing was changed — you can try again.');
+    }
+}
+
+// After a normal payment is approved, offer to apply a saved nextPlan
+async function wdcApplyNext(sid, key) {
+    var db = firebase.database();
+    var node = (await db.ref('paymentRequests/' + sid + '/' + key).once('value')).val();
+    if (!node || node.status !== 'approved' || node.type === 'plan-change') return;
+    if (!(Date.now() - Date.parse(node.decidedAt) < 120000)) return;   // only for the approval just made
+    var np = (await db.ref('billing/' + sid + '/nextPlan').once('value')).val();
+    if (!np) return;
+    var cur = (await db.ref('billing/' + sid + '/plan').once('value')).val();
+    if (cur === np) { await db.ref('billing/' + sid + '/nextPlan').remove(); return; }
+    var p = ((await db.ref('billingSettings/plans').once('value')).val() || {})[np];
+    if (!p) { await db.ref('billing/' + sid + '/nextPlan').remove(); return; }
+    if (!confirm('This store asked to switch to the ' + p.name + ' plan at renewal.\n\nSwitch it now?')) return;
+    var u = {};
+    u['billing/' + sid + '/plan'] = np;
+    if (wdpNum(p.monthlyFee) > 0) u['billing/' + sid + '/monthlyFee'] = wdpNum(p.monthlyFee);
+    u['stores/' + sid + '/planLimits'] = wdpLimitsOf(np, p);
+    u['billing/' + sid + '/nextPlan'] = null;
+    await db.ref().update(u);
+    try { await wdsLog(sid, { type: 'plan', text: 'Switched to ' + p.name + ' plan at renewal' }); } catch (e) { }
+    if (typeof wdsReload === 'function') { try { await wdsReload(); } catch (e) { } }
+}
+
+// =====================================================================
+// STORE SIDE — reminder banner, sidebar button, login link
+// =====================================================================
+async function wdpEnsureBanner() {
+    const old = document.getElementById('wdp-banner');
+    const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
+    const wrap = document.getElementById('dashboard-main-wrapper');
+    const ws = document.getElementById('workspace-content');
+    if (!isAdmin || wdpBannerDismissed || !wrap || !wrap.classList.contains('active') || !ws) { if (old) old.remove(); return; }
+
+    if (wdpBanner.id !== currentStoreId || Date.now() - wdpBanner.at > 5 * 60 * 1000) {
+        if (wdpBanner.loading) return;
+        wdpBanner.loading = true;
+        const sid = currentStoreId;
+        try {
+            const db = firebase.database();
+            const r = await Promise.all([wdpTimeout(db.ref('billing/' + sid + '/dueDate').once('value'), 10000), wdpTimeout(db.ref('billing/' + sid + '/trial').once('value'), 10000), wdpTimeout(db.ref('billingSettings/dueSoonDays').once('value'), 10000)]);
+            wdpBanner = { id: sid, at: Date.now(), loading: false, billing: { dueDate: r[0].val(), trial: !!r[1].val() }, soon: r[2].val() == null ? 7 : wdpNum(r[2].val()) };
+        } catch (e) { wdpBanner.loading = false; wdpBanner.at = Date.now() - 4 * 60 * 1000; return; }   // try again in a minute
+    }
+
+    const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
+    if (s.state !== 'overdue' && s.state !== 'due-soon') { if (old) old.remove(); return; }
+
+    let text, bg, bd, col;
+    if (s.state === 'overdue') {
+        text = s.trial ? 'Your free trial ended ' + s.overdueBy + ' day' + (s.overdueBy === 1 ? '' : 's') + ' ago.' : 'Your subscription is overdue by ' + s.overdueBy + ' day' + (s.overdueBy === 1 ? '' : 's') + '.';
+        bg = '#fef2f2'; bd = '#fecaca'; col = '#991b1b';
+    } else {
+        text = (s.trial ? 'Your free trial ends ' : 'Your subscription is due ') + (s.days === 0 ? 'today' : 'in ' + s.days + ' day' + (s.days === 1 ? '' : 's')) + ' (' + wdpPretty(wdpBanner.billing.dueDate) + ').';
+        bg = '#fffbeb'; bd = '#fde68a'; col = '#92400e';
+    }
+
+    const newHtml = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
+        '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
+
+    let el = old;
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'wdp-banner';
+        ws.insertBefore(el, ws.firstChild);
+    } else if (el.parentElement !== ws) {
+        ws.insertBefore(el, ws.firstChild);
+    } else if (ws.firstChild !== el) {
+        ws.insertBefore(el, ws.firstChild);
+    }
+
+    const newStyle = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:13px; font-weight:bold;';
+
+    if (el.dataset.sig !== text + '|' + bg) {
+        el.dataset.sig = text + '|' + bg;
+        el.style.cssText = newStyle;
+        el.innerHTML = newHtml;
+    } else if (el.style.cssText !== newStyle) {
+        el.style.cssText = newStyle;
+    }
+}
+
+// =====================================================================
+// SIDEBAR BUTTON — global hook, insert-only, idempotent.
+// Called by wdpAttach AND (recommended) by any patch that rebuilds
+// the sidebar (e.g. staff-sidebar-patch.js, manager-preorder-patch.js).
+// Other patches should add, right after their sidebar rebuild:
+//     if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
+// =====================================================================
+function wdpIsShown(el) { return !!(el && el.getClientRects().length > 0); }
+function wdpFindShownButton(root, test) {
+    const btns = root.querySelectorAll('button');
+    for (let i = 0; i < btns.length; i++) {
+        const t = (btns[i].textContent || '').trim().toLowerCase();
+        if (test(t) && wdpIsShown(btns[i])) return btns[i];
+    }
+    return null;
+}
+
+window.wdpAttachSidebar = function () {
+    const wrap = document.getElementById('dashboard-main-wrapper');
+    const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
+    const old = document.querySelectorAll('#wdp-sidebar-btn');
+    // A button written straight into app.html (data-static="1") is handled by adjustSidebarForRole: shown for the
+    // Admin, hidden for other roles. Nothing to insert or remove then.
+    if (old.length === 1 && old[0].dataset.static === '1') return;
+    if (!wrap || !isAdmin) { old.forEach(function (b) { b.remove(); }); return; }
+
+    // The VISIBLE Logout button marks the sidebar the person is actually looking at
+    // (other patches rebuild/copy the sidebar, so ".sidebar" alone can point at a hidden one).
+    const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
+    if (!logout) return;
+
+    // Already one copy, right before Logout: do nothing (flicker fix)
+    if (old.length === 1 && logout.previousElementSibling === old[0]) return;
+
+    // Otherwise drop any stale copy (e.g. left in a hidden sidebar) and insert a fresh one
+    old.forEach(function (b) { b.remove(); });
+    const sb = document.createElement('button');
+    sb.id = 'wdp-sidebar-btn';
+    sb.className = 'menu-btn btn-subscription';   // stable class, no CSS transition
+    sb.textContent = '💳 Subscription';
+    sb.onclick = function () { wdpOpenRenew(currentStoreId); };
+    logout.parentNode.insertBefore(sb, logout);
+};
+
+// =====================================================================
+// MAIN ATTACH
+// =====================================================================
+// Login link: sits inside the login card, right under "Register New Business". The card is rebuilt by
+// email-auth-patch.js, so it is re-inserted after every rebuild (see wdpHookLoginBuild) and on every re-check.
+function wdpInsertLoginLink() {
+    const regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
+    const old = document.querySelectorAll('#wdp-login-wrap');
+    if (regBtn && old.length === 1 && regBtn.nextElementSibling === old[0]) return;   // already in place
+    old.forEach(function (w) { w.remove(); });
+    if (!regBtn) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'wdp-login-wrap';
+    wrap.style.cssText = 'text-align:center; margin-top:14px;';
+    wrap.innerHTML = '<a id="wdp-login-link" href="javascript:void(0)" style="font-size:13px; font-weight:700; color:#0d9488; text-decoration:none;">💳 Renew or pay subscription</a>';
+    wrap.firstChild.onclick = function () { wdpOpenRenew(''); };
+    regBtn.insertAdjacentElement('afterend', wrap);
+}
+
+// email-auth-patch.js loads after this file, so hook its card builder as soon as it exists.
+function wdpHookLoginBuild() {
+    const prev = window.wdaeBuildLoginScreen;
+    if (typeof prev !== 'function' || prev.__wdp) return;
+    const hooked = function () {
+        const r = prev.apply(this, arguments);
+        try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
+        return r;
+    };
+    hooked.__wdp = true;
+    window.wdaeBuildLoginScreen = hooked;
+}
+
+// Super Admin "Pending payments" button (v4.12). It anchors to the VISIBLE "Logout / Exit" button in the dark header
+// (a button written in app.html, so it is always there on the Super Admin screen) and does not depend on
+// #super-admin-view having an "active" class. On store screens "Logout / Exit" is not shown, so the button is removed.
+function wdpPendingAnchor(view) {
+    const exit = wdpFindShownButton(view, function (t) { return t.indexOf('logout / exit') !== -1; });
+    if (exit) return { el: exit, where: 'beforebegin' };
+    const other = wdpFindShownButton(view, function (t) { return t.indexOf('billing settings') !== -1; }) ||
+                  wdpFindShownButton(view, function (t) { return t.indexOf('load usage') !== -1; });
+    return other ? { el: other, where: 'afterend' } : null;
+}
+
+function wdpAttachPendingButton() {
+    const all = document.querySelectorAll('#wdp-btn-pending');
+    let btn = all[0] || null;
+    for (let i = 1; i < all.length; i++) all[i].remove();   // never more than one copy
+
+    // Preferred spot: right after the "Security" button. Fallback: right before "Logout / Exit".
+    const security = wdpFindShownButton(document, function (t) { return t.indexOf('security') !== -1; });
+    const exit = wdpFindShownButton(document, function (t) { return t.indexOf('logout / exit') !== -1; });
+    const anchor = security ? { el: security, where: 'afterend' } : (exit ? { el: exit, where: 'beforebegin' } : null);
+
+    if (!anchor) {
+        // Not on the Super Admin screen. A button written into app.html (data-static="1") stays where it is.
+        if (btn && btn.dataset.static !== '1') btn.remove();
+        return;
+    }
+
+    wdpStartListener();
+
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'wdp-btn-pending';
+        btn.className = 'menu-btn';
+        btn.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
+        btn.onclick = wdpOpenPending;
+    }
+    btn.style.display = '';
+
+    const inPlace = anchor.where === 'afterend' ? anchor.el.nextElementSibling === btn : btn.nextElementSibling === anchor.el;
+    if (!inPlace) anchor.el.insertAdjacentElement(anchor.where, btn);   // moves an existing button, or adds a new one
+    wdpUpdateBadge();
+}
+
+// Opt-in diagnostic: open the app with ?wdpdebug=1 and, after signing in, an alert reports why the sidebar button is or
+// is not showing (there is no console on a phone).
+var wdpDebugDone = false;
+function wdpDebugReport() {
+    if (wdpDebugDone || !/[?&]wdpdebug=1/.test(location.search)) return;
+    const sv = document.getElementById('super-admin-view') || document;
+    if (wdpFindShownButton(document, function (t) { return t.indexOf('logout / exit') !== -1; })) {
+        wdpDebugDone = true;
+        setTimeout(function () {
+            const pb = document.getElementById('wdp-btn-pending');
+            const an = wdpPendingAnchor(sv);
+            alert('Pending payments button check (payments-patch v4.18)\n' +
+                'role: ' + currentUserRole +
+                '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
+                '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
+                (pb ? '\nlabel: ' + pb.textContent : ''));
+        }, 3000);
+        return;
+    }
+    const wrap = document.getElementById('dashboard-main-wrapper');
+    if (!wrap || !wrap.classList.contains('active') || !currentStoreId) return;
+    wdpDebugDone = true;
+    setTimeout(function () {
+        const b = document.getElementById('wdp-sidebar-btn');
+        const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
+        alert('Subscription button check\n' +
+            'role: ' + currentUserRole + '\nstore: ' + currentStoreId +
+            '\nbutton exists: ' + !!b + '\nbutton shown: ' + wdpIsShown(b) +
+            (b ? '\ndisplay: ' + getComputedStyle(b).display : '') +
+            '\nlogout button found: ' + !!logout +
+            '\nsidebars on page: ' + document.querySelectorAll('.sidebar').length +
+            '\nbuttons in sidebar: ' + document.querySelectorAll('.sidebar button').length);
+    }, 3000);
+}
+
+function wdpAttach() {
+    // Each part is guarded on its own, so one failing can never stop the others.
+
+    // Super Admin: live listener + the "Pending payments" button
+    try { wdpAttachPendingButton(); } catch (e) { console.warn(e); }
+
+    // Store Admin: sidebar button via the shared hook
+    try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
+    try { wdpDebugReport(); } catch (e) { console.warn(e); }
+
+    // Login screen link (so a locked store can still pay)
+    try { wdpHookLoginBuild(); } catch (e) { console.warn(e); }
+    try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
+
+    wdpEnsureBanner().catch(function (e) { console.warn(e); });
+}
+
+// =====================================================================
+// OBSERVER — fires only when the DOM actually changes.
+// Replaces the old setInterval(1200) which caused the sidebar race.
+// =====================================================================
+(function () {
+    // Initial paint once the page settles
+    window.addEventListener('load', function () {
+        setTimeout(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 300);
+    });
+
+    // Watch for any DOM change on the body and re-run wdpAttach.
+    // Cheap because wdpAttach itself is idempotent (does nothing if
+    // everything is already there). No more racing with other patches.
+    var wdpObserver = new MutationObserver(function () {
+        try { wdpAttach(); } catch (e) { console.warn(e); }
+    });
+    if (document.body) {
+        wdpObserver.observe(document.body, { childList: true, subtree: true });
+    } else {
+        document.addEventListener('DOMContentLoaded', function () {
+            wdpObserver.observe(document.body, { childList: true, subtree: true });
+        });
+    }
+})();
+
+// Safety net: re-check every 2 seconds (idempotent and cheap), in case a patch changes the page in a way the
+// observer does not see.
+(function () {
+    setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 2000);
+})();
