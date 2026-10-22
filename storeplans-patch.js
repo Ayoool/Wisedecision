@@ -1,16 +1,12 @@
-// ==================== STOREPLANS-PATCH-FIX (v2) ====================
+// ==================== STOREPLANS-PATCH-FIX (v2.1) ====================
 // Drop-in fix for storeplans-patch.js v34. Load AFTER storeplans-patch.js (defer).
 //
-//   1. saveBranch wrapper is now null-safe (no throw when #edit-branch-id is
-//      missing or branchesCache hasn't been populated yet).
-//   2. wdnShallow URL-encodes each path segment (branch/store keys with spaces,
-//      %, etc. no longer break the shallow count).
-//   3. The planLimits realtime listener is detached on logout / store switch,
-//      so it no longer leaks across login sessions.
-//   4. Injects the "📋 Plans" button directly next to "Billing settings" 
-//      on the Super Admin screen so it's always visible.
+//   1. saveBranch wrapper is now null-safe.
+//   2. wdnShallow URL-encodes each path segment.
+//   3. The planLimits realtime listener is detached on logout.
+//   4. Injects the "📋 Plans" button next to "Billing settings".
 
-console.log("Wise Decision storeplans-patch-fix.js — v2 loaded");
+console.log("Wise Decision storeplans-patch-fix.js — v2.1 loaded");
 
 (function () {
     'use strict';
@@ -170,10 +166,13 @@ console.log("Wise Decision storeplans-patch-fix.js — v2 loaded");
         
         btn.onclick = function(e) {
             e.preventDefault();
-            if (typeof window.wdnOpenPlans === 'function') {
+            // Check both global and window scopes
+            if (typeof wdnOpenPlans === 'function') {
+                wdnOpenPlans();
+            } else if (typeof window.wdnOpenPlans === 'function') {
                 window.wdnOpenPlans();
             } else {
-                alert('Plans module not ready. Check console for errors.');
+                alert('The main plans code is missing!\n\nPlease make sure you uploaded "storeplans-patch.js" to GitHub and added it to your index.html BEFORE this file.');
             }
         };
 
