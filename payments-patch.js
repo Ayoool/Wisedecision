@@ -62,7 +62,7 @@ var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) |
 
 // Email alert to the owner when a store sends a payment request (Google Apps Script web app).
 // Paste your Web app URL between the quotes. Leave it empty to turn email alerts off.
-var WDP_ALERT_URL = '';
+var WDP_ALERT_URL = 'https://script.google.com/macros/s/AKfycbz5bacSu21DjL82yXSt5zr9KsD7CcjL44nIrWh0kpPRvSNIwp4dLfvMrkGNJhq4yNLt/exec';
 function wdpNotifyEmail(rec) {
     if (!/^https:\/\/script\.google\.com\//.test(WDP_ALERT_URL)) return;
     try {
