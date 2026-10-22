@@ -605,66 +605,63 @@
             font-size: 13px;
         }
 
-        /* PRICING PLANS */
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 22px;
-            align-items: stretch;
-        }
-
-        .pricing-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 18px;
-            padding: 30px 25px;
-            box-shadow: 0 10px 30px rgba(15,23,42,0.05);
-            transition: all 0.3s ease;
+        /* NEW HORIZONTAL PRICING LIST */
+        .pricing-list {
+            max-width: 900px;
+            margin: 0 auto;
             display: flex;
             flex-direction: column;
+            gap: 16px;
         }
 
-        .pricing-card:hover {
-            transform: translateY(-6px);
+        .pricing-row {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 25px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 10px 30px rgba(15,23,42,0.04);
+            transition: all 0.3s ease;
+        }
+
+        .pricing-row:hover {
             border-color: #0f766e;
-            box-shadow: 0 20px 40px rgba(15,118,110,0.12);
+            box-shadow: 0 15px 35px rgba(15,118,110,0.1);
+            transform: translateY(-3px);
         }
 
-        .pricing-card h3 {
-            font-size: 18px;
+        .pricing-info h3 {
+            font-size: 20px;
             color: #0f766e;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .pricing-card .price {
-            font-size: 28px;
+        .pricing-info p {
+            color: #64748b;
+            font-size: 15px;
+        }
+
+        .pricing-action {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .pricing-price {
+            font-size: 24px;
             font-weight: 800;
             color: #0f172a;
-            margin-bottom: 20px;
+            white-space: nowrap;
         }
 
-        .pricing-card .price span {
+        .pricing-price span {
             font-size: 14px;
-            font-weight: 500;
             color: #64748b;
-        }
-
-        .plan-features {
-            list-style: none;
-            margin-bottom: 25px;
-            flex-grow: 1;
-        }
-
-        .plan-features li {
-            font-size: 14px;
-            color: #475569;
-            padding: 10px 0;
-            border-bottom: 1px dashed #e2e8f0;
-        }
-
-        .plan-features li:last-child {
-            border-bottom: none;
+            font-weight: 500;
         }
 
         /* FAQ */
@@ -840,10 +837,6 @@
             .devices-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
-            
-            .pricing-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
 
             .mockup-grid {
                 grid-template-columns: 1fr;
@@ -899,9 +892,28 @@
             .steps-grid,
             .grid,
             .business-grid,
-            .devices-grid,
-            .pricing-grid {
+            .devices-grid {
                 grid-template-columns: 1fr;
+            }
+
+            /* Mobile Pricing Adjustments */
+            .pricing-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 20px;
+                padding: 20px;
+            }
+
+            .pricing-action {
+                width: 100%;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 15px;
+            }
+            
+            .pricing-action .btn-whatsapp {
+                width: 100%;
+                text-align: center;
             }
 
             .hero-cta,
@@ -937,6 +949,16 @@
     </div>
     <div class="loading-text">Redirecting to Wise Decision POS...</div>
 </div>
+
+<!-- IMMEDIATE SAFETY NET: Instantly remove spinner if page is loaded from cache -->
+<script>
+    (function() {
+        var overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+    })();
+</script>
 
 <!-- HEADER -->
 <header>
@@ -1158,60 +1180,62 @@
     </div>
 </section>
 
-<!-- PRICING PLANS -->
+<!-- NEW HORIZONTAL PRICING LIST -->
 <section id="pricing">
     <h2>Simple, Transparent Pricing</h2>
     <p class="section-description">
         Choose the perfect plan for your business size and needs. No hidden fees.
     </p>
-    <div class="pricing-grid">
+    <div class="pricing-list">
+        
         <!-- BASIC PLAN -->
-        <div class="pricing-card">
-            <h3>Basic</h3>
-            <div class="price">₦5,000<span>/month</span></div>
-            <ul class="plan-features">
-                <li>✔️ 1 Branch</li>
-                <li>✔️ 2 Staff Accounts</li>
-                <li>✔️ 500 Products</li>
-            </ul>
-            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20BASIC%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Choose Basic</a>
+        <div class="pricing-row">
+            <div class="pricing-info">
+                <h3>BASIC</h3>
+                <p>1 branch · 2 staff · 500 products</p>
+            </div>
+            <div class="pricing-action">
+                <div class="pricing-price">₦5,000<span>/month</span></div>
+                <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20BASIC%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Subscribe</a>
+            </div>
         </div>
 
         <!-- BUSINESS PLAN -->
-        <div class="pricing-card">
-            <h3>Business</h3>
-            <div class="price">₦7,000<span>/month</span></div>
-            <ul class="plan-features">
-                <li>✔️ 1 Branch</li>
-                <li>✔️ 3 Staff Accounts</li>
-                <li>✔️ 3,500 Products</li>
-            </ul>
-            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20BUSINESS%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Choose Business</a>
+        <div class="pricing-row">
+            <div class="pricing-info">
+                <h3>BUSINESS</h3>
+                <p>1 branch · 3 staff · 3,500 products</p>
+            </div>
+            <div class="pricing-action">
+                <div class="pricing-price">₦7,000<span>/month</span></div>
+                <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20BUSINESS%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Subscribe</a>
+            </div>
         </div>
 
         <!-- PROFESSIONAL PLAN -->
-        <div class="pricing-card">
-            <h3>Professional</h3>
-            <div class="price">₦15,000<span>/month</span></div>
-            <ul class="plan-features">
-                <li>✔️ 2 Branches</li>
-                <li>✔️ 5 Staff Accounts</li>
-                <li>✔️ 7,000 Products</li>
-            </ul>
-            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20PROFESSIONAL%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Choose Professional</a>
+        <div class="pricing-row">
+            <div class="pricing-info">
+                <h3>PROFESSIONAL</h3>
+                <p>2 branches · 5 staff · 7,000 products</p>
+            </div>
+            <div class="pricing-action">
+                <div class="pricing-price">₦15,000<span>/month</span></div>
+                <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20PROFESSIONAL%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Subscribe</a>
+            </div>
         </div>
 
         <!-- ENTERPRISE PLAN -->
-        <div class="pricing-card">
-            <h3>Enterprise</h3>
-            <div class="price">₦25,000<span>/month</span></div>
-            <ul class="plan-features">
-                <li>✔️ 5 Branches</li>
-                <li>✔️ 7 Staff Accounts</li>
-                <li>✔️ 10,000 Products</li>
-            </ul>
-            <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20ENTERPRISE%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Choose Enterprise</a>
+        <div class="pricing-row">
+            <div class="pricing-info">
+                <h3>ENTERPRISE</h3>
+                <p>5 branches · 7 staff · 10,000 products</p>
+            </div>
+            <div class="pricing-action">
+                <div class="pricing-price">₦25,000<span>/month</span></div>
+                <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20subscribe%20to%20the%20ENTERPRISE%20plan." target="_blank" rel="noopener" class="btn-whatsapp action-link">Subscribe</a>
+            </div>
         </div>
+
     </div>
 </section>
 
@@ -1338,18 +1362,30 @@
             e.preventDefault();
             const targetUrl = this.href;
             document.getElementById('loading-overlay').classList.add('active');
-            setTimeout(function() {
+            
+            // Clear any existing timeout just in case of double-clicking
+            if (window.spinnerTimer) clearTimeout(window.spinnerTimer);
+            
+            window.spinnerTimer = setTimeout(function() {
                 window.location.href = targetUrl;
             }, 650);
         });
     });
 
-    // FIX: Ensure spinner is removed when the page loads or is restored from browser cache (e.g. logging out and coming back)
-    window.addEventListener('pageshow', function(event) {
+    // Bulletproof Fix: Ensure spinner is removed whenever page is restored from cache (e.g., logging out and hitting back)
+    function clearSpinner() {
         const overlay = document.getElementById('loading-overlay');
         if (overlay) {
             overlay.classList.remove('active');
         }
+    }
+
+    // Run when page is fully loaded
+    document.addEventListener('DOMContentLoaded', clearSpinner);
+
+    // Run when page is restored from bfcache (Back/Forward navigation)
+    window.addEventListener('pageshow', function(event) {
+        clearSpinner();
     });
 </script>
 
