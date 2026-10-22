@@ -1,14 +1,10 @@
-// ==================== WISE DECISION STORE DETAIL & PLANS PATCH (v35) ====================
-// Includes: Original plans logic, Bug fixes (URL encoding, Listener cleanup, Null-safe branches),
-// and a robust UI injector for the Super Admin "Plans" button.
-// Load AFTER superadmin-patch.js, activation-patch.js and superadmin-tools-patch.js (defer).
+// ==================== WISE DECISION STORE DETAIL & PLANS (v36 MASTER) ====================
+console.log("✅ MASTER PLANS CODE LOADED (v36)");
 
-console.log("Wise Decision storeplans-patch.js — v35 loaded");
-
-var wdnPlans = {};        // planId -> { name, monthlyFee, maxBranches, maxStaff, maxProducts }
-var wdnLimits = null;     // limits of the store that is logged in (null = none)
+var wdnPlans = {};        
+var wdnLimits = null;     
 var wdnLoadedFor = null;
-var WDN_SUPPORT_WA = '2349168140710';   // your support WhatsApp
+var WDN_SUPPORT_WA = '2349168140710';   
 
 // ---------- Helpers ----------
 function wdnEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -56,7 +52,6 @@ function wdnModal(title, html) {
 }
 function wdnCloseModal() { const m = document.getElementById('wdn-modal'); if (m) m.style.display = 'none'; }
 
-// Fix #2: URL-encode shallow fetch paths
 async function wdnShallow(path) {
     let base = firebase.app().options.databaseURL;
     if (!base) throw new Error('databaseURL not configured');
@@ -65,7 +60,7 @@ async function wdnShallow(path) {
     try {
         const u = firebase.auth && firebase.auth().currentUser;
         if (u) url += '&auth=' + encodeURIComponent(await u.getIdToken());
-    } catch (e) { /* not signed in with Firebase Auth */ }
+    } catch (e) { }
     const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const j = await res.json();
@@ -91,7 +86,7 @@ function wdnStoresOnPlan(planId) {
 }
 
 async function wdnOpenPlans() {
-    if (currentUserRole' !== 'SuperAdmin') return;
+    if (currentUserRole !== 'SuperAdmin') return;
     wdnModal('📋 Plans', '<div style="text-align:center; color:#64748b; padding:20px;">Loading...</div>');
     try { await wdnLoadPlans(); } catch (e) { wdnModal('📋 Plans', '<div style="color:#b91c1c;">Could not load: ' + wdnEsc(e.message) + '</div>'); return; }
 
@@ -103,7 +98,7 @@ async function wdnOpenPlans() {
             return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">' +
                 '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + wdnEsc(p.name) + '</strong><span style="color:#166534; font-weight:bold;">' + wdnMoney(p.monthlyFee) + '/month</span></div>' +
                 '<div style="font-size:12px; color:#475569; margin:4px 0;">' + wdnPlanText(p) + '</div>' +
-                '<div style="font-size:11px; color:#64748b; margin-bottom:6px;"> + n + ' store' + (n === 1 ? '' : 's') + ' on this plan</div>' +
+                '<div style="font-size:11px; color:#64748b; margin-bottom:6px;">' + n + ' store' + (n === 1 ? '' : 's') + ' on this plan</div>' +
                 '<div style="display:flex; gap:6px;">' +
                 '<button data-id="' + e + '" onclick="wdnEditPlan(this.dataset.id)" style="padding:5px 10px; font-size:11px; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc;">✏ Edit</button>' +
                 '<button data-id="' + e + '" onclick="wdnDeletePlan(this.dataset.id)" style="padding:5px 10px; font-size:11px; border-radius:6px; cursor:pointer; border:1px solid #fecaca; background:#fef2f2; color:#991b1b;">Delete</button></div></div>';
@@ -357,7 +352,6 @@ function wdnWrap(name, factory) {
 }
 
 function wdnInstallEnforcement() {
-    // Fix #1: Null-safe saveBranch wrapper
     wdnWrap('saveBranch', function (prev) {
         return function () {
             var editEl = document.getElementById('edit-branch-id');
@@ -399,7 +393,6 @@ function wdnInstallEnforcement() {
     });
 }
 
-// Fix #3: Listener leak off()
 var _limitsRef = null;
 window.wdnClearLimitsListener = function () {
     if (_limitsRef) {
@@ -412,7 +405,6 @@ function wdnLoadLimits() {
     if (!currentStoreId || currentStoreId === 'SUPER_ADMIN') return;
     const sid = currentStoreId;
     
-    // Detach prior listener
     window.wdnClearLimitsListener();
 
     try { const c = JSON.parse(localStorage.getItem('wd_limits_' + sid) || 'null'); if (c && typeof c === 'object') wdnLimits = c; } catch (e) {}
@@ -473,7 +465,7 @@ async function wdnShowPlanCard() {
                 if (wdnLoadedFor !== currentStoreId) { wdnLoadedFor = currentStoreId; wdnLoadLimits(); }
                 if (viewId === 'settings-view') wdnShowPlanCard();
             }
-        } catch (e) { /* never block navigation */ }
+        } catch (e) { }
         return r;
     };
 })();
@@ -515,10 +507,8 @@ function wdnAttach() {
     wdnInstallEnforcement();
     if (currentUserRole !== 'SuperAdmin') return;
     
-    // Inject the button
     injectPlansButton();
 
-    // Extra line + "Details" button on every store card
     const cur = window.wdsExtraCardHtml;
     if (typeof cur === 'function' ? !cur.__wdn : true) {
         const prev = typeof cur === 'function' ? cur : function () { return ''; };
