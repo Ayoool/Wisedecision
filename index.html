@@ -691,12 +691,13 @@
             font-weight: 500;
         }
 
-        /* FAQ */
+        /* FAQ (FIXED FOR MOBILE) */
         .faq-container {
             max-width: 850px;
             margin: auto;
             display: grid;
             gap: 15px;
+            width: 100%;
         }
 
         .faq-item {
@@ -706,6 +707,8 @@
             padding: 22px 25px;
             cursor: pointer;
             transition: 0.25s ease;
+            width: 100%;
+            overflow: hidden;
         }
 
         .faq-item:hover {
@@ -723,8 +726,14 @@
             margin-bottom: 0;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            gap: 16px;
+            align-items: flex-start;
+            gap: 15px;
+            line-height: 1.5;
+        }
+
+        .faq-item h4 span {
+            flex: 1;
+            word-break: break-word;
         }
 
         .faq-item h4::after {
@@ -754,6 +763,7 @@
         .faq-answer p {
             color: #64748b;
             font-size: 14px;
+            line-height: 1.6;
         }
 
         /* FINAL CTA */
@@ -880,7 +890,7 @@
             }
 
             section:not(.hero):not(.final-cta) {
-                padding: 60px 5%;
+                padding: 60px 4%; /* Slightly reduced to give more room */
             }
 
             .steps-grid,
@@ -895,7 +905,7 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 20px;
-                padding: 25px;
+                padding: 25px 20px; /* Adjusted padding */
             }
 
             .pricing-features {
@@ -920,6 +930,20 @@
                 text-align: center;
             }
 
+            /* Mobile FAQ Adjustments */
+            .faq-item {
+                padding: 18px 15px; /* Less horizontal padding on phones */
+            }
+
+            .faq-item h4 {
+                font-size: 15px;
+                gap: 10px;
+            }
+
+            .faq-container {
+                gap: 10px;
+            }
+
             .hero-cta,
             .final-cta-buttons {
                 flex-direction: column;
@@ -932,7 +956,7 @@
             }
 
             .final-cta {
-                margin: 30px 5%;
+                margin: 30px 4%;
                 padding: 55px 6%;
                 border-radius: 22px;
             }
@@ -1023,7 +1047,7 @@
                     <h4>Active Stock Items</h4>
                     <div class="stat">1,240</div>
                 </div>
-                <div class="mockup-card <">
+                <div class="mockup-card">
                     <h4>Active Branches</h4>
                     <div class="stat">Multi-Branch</div>
                 </div>
@@ -1042,7 +1066,7 @@
         Start using Wise Decision POS with a simple three-step registration process.
     </p>
     <div class="steps-grid">
-       div class="step-card">
+        <div class="step-card">
             <div class="step-number">01</div>
             <h3>Request Activation Code</h3>
             <p>
@@ -1257,31 +1281,31 @@
     <h2>Frequently Asked Questions</h2>
     <div class="faq-container">
         <div class="faq-item">
-            <h4>What do I need to register my business?</h4>
+            <h4><span>What do I need to register my business?</span></h4>
             <div class="faq-answer">
-                <p>You will need an official Activation Code provided>
- by Wise Decision management. Use the WhatsApp button        on this page to request yours.</p>
- </            </div>
+                <p>You will need an official Activation Code provided by Wise Decision management. Use the WhatsApp button on this page to request yours.</p>
+            </div>
         </div>
-        <divdiv class="faq-item">
-            <h4>Can I access Wise Decision POS on my phone or tablet?</h4>
+        <div class="faq-item">
+            <h4><span>Can I access Wise Decision POS on my phone or tablet?</span></h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS is designed to work through supported web browsers on smartphones, tablets and desktop computers.</p>
             </div>
         </div>
         <div class="faq-item">
-            <h4>Does the system support thermal receipt printers?</h4>
+            <h4><span>Does the system support thermal receipt printers?</span></h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS supports compatible thermal receipt printing setups.</p>
             </div>
+        </div>
         <div class="faq-item">
-            <h4>Can I manage more than one store branch?</h4>
+            <h4><span>Can I manage more than one store branch?</span></h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS includes multi-branch business management functionality for supported accounts.</p>
             </div>
         </div>
         <div class="faq-item">
-            <h4>What is Wise Decision POS?</h4>
+            <h4><span>What is Wise Decision POS?</span></h4>
             <div class="faq-answer">
                 <p>Wise Decision POS is a cloud-based point-of-sale and business management system designed for businesses in Nigeria.</p>
             </div>
