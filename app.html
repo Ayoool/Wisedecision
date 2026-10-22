@@ -28,15 +28,21 @@
         .auth-card .brand-title {
             font-size: 0 !important; 
             display: block !important;
-            height: 160px !important; /* Made much taller to scale up the logo */
+            height: 160px !important; 
             background-image: url('logo.png') !important;
             background-size: contain !important;
             background-repeat: no-repeat !important;
             background-position: center !important;
-            margin-top: -30px !important; /* Pulls the logo up to remove invisible white space */
-            margin-bottom: -15px !important; /* Pulls the text below it closer */
+            margin-top: -30px !important; 
+            margin-bottom: -50px !important; /* Pulls the text up closer */
             width: 100% !important;
         }
+        
+        /* Ensure the subtitle doesn't have extra spacing pushing it down */
+        .auth-card .subtitle {
+            margin-top: 0 !important;
+        }
+
         /* Hide any inner spans or text inside that container */
         .auth-card .brand-title span, 
         .auth-card .brand-title * {
