@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v90';
+const CACHE = 'wd-shell-v92';
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -25,6 +25,7 @@ const PRECACHE = [
     './auth-patch.js',
     './email-auth-patch.js',
     './customer-order-patch.js',
+    './store-orders-patch.js',
     './phone-vendor-patch.js',
     './phone-sale-patch.js',
     './materials-patch.js',
