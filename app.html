@@ -21,6 +21,27 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" defer></script>
 
     <link rel="stylesheet" href="style.css?v=48">
+    
+    <!-- FIX: Forces the logo to show even if JS patches try to inject text -->
+    <style>
+        /* Hide the text logo injected by the JS patch */
+        .auth-card .brand-title {
+            font-size: 0 !important; 
+            display: block !important;
+            height: 90px !important;
+            background-image: url('logo.png') !important;
+            background-size: contain !important;
+            background-repeat: no-repeat !important;
+            background-position: center !important;
+            margin-bottom: 10px !important;
+            margin-top: 10px !important;
+        }
+        /* Hide any inner spans or text inside that container */
+        .auth-card .brand-title span, 
+        .auth-card .brand-title * {
+            display: none !important;
+        }
+    </style>
 </head>
 <body>
 
@@ -29,9 +50,9 @@
         <div id="login-view" class="view-section active">
             <div class="auth-wrapper">
                 <div class="auth-card">
-                    <!-- LOGO ADDED HERE -->
-                    <div style="text-align: center; margin-bottom: 15px; margin-top: 10px;">
-                        <img src="logo.png" alt="Wise Decision Logo" style="height: 85px; width: auto; mix-blend-mode: multiply; margin: -10px 0;">
+                    <!-- The CSS above will take over this div and replace the text with the image -->
+                    <div class="brand-title">
+                        <span class="big-w">W</span>ISE DECISION
                     </div>
                     <div class="subtitle">Cloud Enterprise & POS Portal</div>
 
@@ -54,7 +75,7 @@
         <div id="register-view" class="view-section">
             <div class="auth-wrapper">
                 <div class="auth-card" style="max-height: 90vh; overflow-y: auto;">
-                    <div class="brand-title" style="text-align: center;">REGISTER BUSINESS</div>
+                    <div class="brand-title" style="text-align: center; font-size: 22px; font-weight: 900; color: #0284c7;">REGISTER BUSINESS</div>
                     <div class="subtitle" style="text-align: center;">Create a New Store on Cloud</div>
 
                     <div class="form-group">
