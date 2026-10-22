@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Wise Decision POS | Cloud POS & Business Management Software in Nigeria</title>
     <meta name="description" content="Wise Decision POS is a cloud-based point-of-sale and business management software for businesses in Nigeria. Manage sales, inventory, suppliers, staff, expenses, branches and thermal receipts from one platform.">
-    <meta name="author" content="EMMANUEL AYOOOLA FISUYI">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://ayoool.github.io/Wisedecision/">
 
@@ -31,11 +30,7 @@
             {
                 "@type": "Organization",
                 "name": "Wise Decision",
-                "url": "https://ayoool.github.io/Wisedecision/",
-                "founder": {
-                    "@type": "Person",
-                    "name": "Emmanuel Ayooola Fisuyi"
-                }
+                "url": "https://ayoool.github.io/Wisedecision/"
             },
             {
                 "@type": "SoftwareApplication",
@@ -43,17 +38,7 @@
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Web",
                 "url": "https://ayoool.github.io/Wisedecision/",
-                "description": "Cloud-based point-of-sale and business management software for businesses in Nigeria.",
-                "creator": {
-                    "@type": "Person",
-                    "name": "EMMANUEL AYOOOLA FISUYI"
-                }
-            },
-            {
-                "@type": "Person",
-                "name": "EMMANUEL AYOOOLA FISUYI",
-                "jobTitle": "Founder of Wise Decision",
-                "url": "https://ayoool.github.io/Wisedecision/"
+                "description": "Cloud-based point-of-sale and business management software for businesses in Nigeria."
             }
         ]
     }
@@ -88,7 +73,7 @@
             padding: 18px 7%;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
             gap: 20px;
             background: rgba(255,255,255,0.92);
             border-bottom: 1px solid #e2e8f0;
@@ -102,6 +87,7 @@
             display: flex;
             flex-direction: column;
             gap: 3px;
+            align-items: center;
         }
 
         /* === LOGO === */
@@ -141,12 +127,7 @@
             max-width: 360px;
             text-transform: uppercase;
             margin-top: 2px;
-        }
-
-        .nav-buttons {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            text-align: center;
         }
 
         /* BUTTONS */
@@ -392,6 +373,16 @@
             font-size: 22px;
             font-weight: 800;
             color: #0f766e;
+        }
+
+        .mockup-powered-by {
+            text-align: right;
+            margin-top: 25px;
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
         }
 
         /* LOADING SPINNER OVERLAY */
@@ -765,45 +756,6 @@
             font-size: 14px;
         }
 
-        /* FOUNDER */
-        .founder-card {
-            max-width: 900px;
-            margin: auto;
-            padding: 40px;
-            background: linear-gradient(135deg, #f0fdfa, #eff6ff);
-            border: 1px solid #bae6fd;
-            border-radius: 22px;
-            box-shadow: 0 15px 40px rgba(15,23,42,0.06);
-            transition: transform 0.3s ease;
-        }
-
-        .founder-card:hover {
-            transform: translateY(-4px);
-        }
-
-        .founder-card h3 {
-            font-size: 27px;
-            margin-bottom: 20px;
-            color: #0f766e;
-        }
-
-        .founder-card p {
-            color: #475569;
-            margin-bottom: 15px;
-        }
-
-        .founder-card strong {
-            color: #0f172a;
-        }
-
-        .founder-card .tagline {
-            margin-top: 25px;
-            margin-bottom: 0;
-            font-size: 18px;
-            font-weight: 800;
-            color: #0f766e;
-        }
-
         /* FINAL CTA */
         .final-cta {
             max-width: 1100px;
@@ -858,6 +810,15 @@
             color: white;
         }
 
+        .footer-powered-by {
+            margin-top: 15px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
         /* MOBILE */
         @media (max-width: 900px) {
             header {
@@ -898,14 +859,6 @@
 
             .big-w {
                 font-size: 38px;
-            }
-
-            .nav-buttons {
-                justify-content: center;
-            }
-
-            .ceo-tag {
-                max-width: none;
             }
 
             .hero {
@@ -978,10 +931,6 @@
                 max-width: 400px;
             }
 
-            .founder-card {
-                padding: 28px 22px;
-            }
-
             .final-cta {
                 margin: 30px 5%;
                 padding: 55px 6%;
@@ -1020,10 +969,6 @@
         <div class="ceo-tag">
             LET YOUR NEXT BUSINESS MOVE BE A WISE DECISION
         </div>
-    </div>
-    <div class="nav-buttons">
-        <a href="app.html" class="btn-login action-link">Login</a>
-        <a href="app.html?action=register" class="btn-register action-link">Get Started</a>
     </div>
 </header>
 
@@ -1078,10 +1023,13 @@
                     <h4>Active Stock Items</h4>
                     <div class="stat">1,240</div>
                 </div>
-                <div class="mockup-card">
+                <div class="mockup-card <">
                     <h4>Active Branches</h4>
                     <div class="stat">Multi-Branch</div>
                 </div>
+            </div>
+            <div class="mockup-powered-by">
+                POWERED BY WISE DECISION SOFTWARE
             </div>
         </div>
     </div>
@@ -1094,7 +1042,7 @@
         Start using Wise Decision POS with a simple three-step registration process.
     </p>
     <div class="steps-grid">
-        <div class="step-card">
+       div class="step-card">
             <div class="step-number">01</div>
             <h3>Request Activation Code</h3>
             <p>
@@ -1311,10 +1259,11 @@
         <div class="faq-item">
             <h4>What do I need to register my business?</h4>
             <div class="faq-answer">
-                <p>You will need an official Activation Code provided by Wise Decision management. Use the WhatsApp button on this page to request yours.</p>
-            </div>
+                <p>You will need an official Activation Code provided>
+ by Wise Decision management. Use the WhatsApp button        on this page to request yours.</p>
+ </            </div>
         </div>
-        <div class="faq-item">
+        <divdiv class="faq-item">
             <h4>Can I access Wise Decision POS on my phone or tablet?</h4>
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS is designed to work through supported web browsers on smartphones, tablets and desktop computers.</p>
@@ -1325,7 +1274,6 @@
             <div class="faq-answer">
                 <p>Yes. Wise Decision POS supports compatible thermal receipt printing setups.</p>
             </div>
-        </div>
         <div class="faq-item">
             <h4>Can I manage more than one store branch?</h4>
             <div class="faq-answer">
@@ -1338,39 +1286,6 @@
                 <p>Wise Decision POS is a cloud-based point-of-sale and business management system designed for businesses in Nigeria.</p>
             </div>
         </div>
-        <div class="faq-item">
-            <h4>Who founded Wise Decision?</h4>
-            <div class="faq-answer">
-                <p>Wise Decision was founded by <strong>Emmanuel Ayooola Fisuyi</strong>.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- FOUNDER -->
-<section>
-    <h2>About the Founder</h2>
-    <div class="founder-card">
-        <h3>EMMANUEL AYOOOLA FISUYI</h3>
-        <p>
-            <strong>EMMANUEL AYOOOLA FISUYI</strong> is the founder of
-            <strong>Wise Decision</strong>, a Nigerian software brand
-            focused on business management and point-of-sale solutions.
-        </p>
-        <p>
-            Through Wise Decision, he develops practical digital tools
-            designed to help businesses manage sales, inventory,
-            customers, expenses, suppliers, staff and day-to-day
-            business operations from one platform.
-        </p>
-        <p>
-            <strong>Wise Decision POS</strong> is designed for businesses
-            in Nigeria looking for a digital solution for managing
-            everyday sales and business operations.
-        </p>
-        <p class="tagline">
-            Let your next business move be a wise decision.
-        </p>
     </div>
 </section>
 
@@ -1403,6 +1318,9 @@
     </p>
     <p style="margin-top: 8px;">
         WhatsApp: <strong>09168140710</strong>
+    </p>
+    <p class="footer-powered-by">
+        POWERED BY WISE DECISION SOFTWARE
     </p>
 </footer>
 
