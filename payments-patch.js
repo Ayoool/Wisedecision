@@ -1,11 +1,11 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.17) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.18) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
 //   * "💳 Subscription" button in the Admin's sidebar, and a "Renew or pay subscription" link on the login
 //     screen (so a LOCKED store can still pay and send its proof)
 //   * Shows plan, due date, your bank details (and an optional online payment link)
-//   * The store picks a plan + months, pays by transfer, then taps "I've Paid" with its reference
+//   * The store picks a plan + billing cycle (Monthly or Yearly), pays by transfer, then taps "I've Paid" with its reference
 //   * A banner reminds the Admin when the subscription is due soon / overdue / the trial is ending
 //
 // SUPER ADMIN
@@ -15,6 +15,13 @@
 //   * Approving works exactly like "Record payment", and can only be done once per request
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
+//
+// v4.18: YEARLY PLANS. Plans may now include a `yearlyFee` (fallback = monthlyFee × 12).
+//   * Renew form has a "Billing cycle" picker (Monthly / Yearly). Yearly = 12 months upfront at the yearly rate,
+//     with a live "save ₦X" note when the plan is cheaper yearly.
+//   * Requests carry a `cycle` field, shown in the Super Admin review and the pending list.
+//   * On approval, `billing/<store>/cycle` is saved so the form defaults to the store's last choice.
+//   * Plan cards show "₦X/month · or ₦Y/year (save ₦Z)" when a yearly rate exists.
 //
 // v4.17: CHANGE PLAN. A "🔄 Change my plan" button on the Subscription screen.
 //   * Upgrade: the pay form opens with the chosen plan selected (switches on approval, as before).
@@ -65,7 +72,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.17 loaded");
+console.log("Wise Decision payments-patch.js — v4.18 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
@@ -78,7 +85,7 @@ function wdpNotifyEmail(rec) {
         fetch(WDP_ALERT_URL, {
             method: 'POST', mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ kind: 'wd-payment', storeId: rec.storeId, storeName: rec.storeName, amount: rec.amount, months: rec.months, method: rec.method, reference: rec.reference, note: rec.note })
+            body: JSON.stringify({ kind: 'wd-payment', storeId: rec.storeId, storeName: rec.storeName, amount: rec.amount, months: rec.months, cycle: rec.cycle || 'monthly', method: rec.method, reference: rec.reference, note: rec.note })
         }).catch(function () {});
     } catch (e) { /* the alert must never get in the way of the payment itself */ }
 }
@@ -136,6 +143,20 @@ function wdpSubState(billing, todayStr, soonDays) {
     return { state: 'ok', days: days, trial: trial };
 }
 function wdpSuggestAmount(fee, months) { return Math.round(wdpNum(fee) * Math.max(1, parseInt(months) || 1) * 100) / 100; }
+
+// v4.18: yearly helpers
+function wdpYearlyFee(plan) {
+    if (!plan) return 0;
+    const y = wdpNum(plan.yearlyFee);
+    return y > 0 ? y : wdpNum(plan.monthlyFee) * 12;
+}
+function wdpCycleLabel(cycle) { return cycle === 'yearly' ? 'Yearly (12 months)' : 'Monthly'; }
+function wdpAmountFor(plan, cycle, months) {
+    if (!plan) return 0;
+    if (cycle === 'yearly') return wdpYearlyFee(plan);
+    return wdpNum(plan.monthlyFee) * Math.max(1, parseInt(months) || 1);
+}
+
 function wdpFlatten(all) {
     const out = [];
     Object.keys(all || {}).forEach(function (sid) {
@@ -193,7 +214,7 @@ function wdpAskStoreId(message) {
 async function wdpLoadStore(id) {
     const db = firebase.database();
     // Each read is separate, so one blocked/slow node cannot break the whole screen.
-    // The billing record is read field by field (due date, trial, plan, fee) so the database rules can keep the
+    // The billing record is read field by field (due date, trial, plan, fee, cycle) so the database rules can keep the
     // payment history inside it private.
     const read = function (path) { return db.ref(path).once('value').then(function (snap) { return snap.val(); }); };
     const safe = function (label, promise) {
@@ -201,7 +222,7 @@ async function wdpLoadStore(id) {
             function (val) { return { ok: true, val: val }; },
             function (e) { return { ok: false, label: label, err: String((e && (e.code || e.message)) || 'error') }; });
     };
-    const billingFields = ['dueDate', 'trial', 'plan', 'monthlyFee'];
+    const billingFields = ['dueDate', 'trial', 'plan', 'monthlyFee', 'cycle'];
     const r = await Promise.all([
         safe('store name', read('stores/' + id + '/businessName')),
         safe('billing', Promise.all(billingFields.map(function (k) { return read('billing/' + id + '/' + k); })).then(function (v) {
@@ -283,17 +304,27 @@ function wdpRenderRenew() {
         (link ? '<a href="' + wdpEsc(link) + '" target="_blank" rel="noopener" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; background:#0284c7; color:#fff; text-decoration:none;">🔗 Pay online</a>' : '') +
         '</div></div>';
 
+    // v4.18: cycle + months. Yearly = 12 months upfront, amount = yearlyFee (or monthlyFee × 12 fallback).
     const planSelect = planIds.length === 0 ? '' :
         '<label style="font-size:12px; font-weight:bold;">Plan</label><select id="wdp-plan" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
         (currentPlan ? '' : '<option value="">Keep my current arrangement</option>') +
         planIds.map(function (pid) {
             const p = c.plans[pid];
-            return '<option value="' + wdpEsc(pid) + '"' + (pid === b.plan ? ' selected' : '') + '>' + wdpEsc(p.name) + ' — ' + wdpMoney(p.monthlyFee) + '/month' + (pid === b.plan ? ' (current)' : '') + '</option>';
+            const yf = wdpNum(p.yearlyFee);
+            return '<option value="' + wdpEsc(pid) + '"' + (pid === b.plan ? ' selected' : '') + '>' + wdpEsc(p.name) + ' — ' + wdpMoney(p.monthlyFee) + '/month' + (yf > 0 ? ' (or ' + wdpMoney(yf) + '/year)' : '') + (pid === b.plan ? ' (current)' : '') + '</option>';
         }).join('') + '</select>';
 
-    const form = '<div id="wdp-form" style="' + (pending.length ? 'display:none;' : '') + '">' + planSelect +
-        '<label style="font-size:12px; font-weight:bold;">Months paying for</label><select id="wdp-months" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
-        [1, 2, 3, 6, 12].map(function (m) { return '<option value="' + m + '">' + m + ' month' + (m === 1 ? '' : 's') + '</option>'; }).join('') + '</select>' +
+    const cycleSelect = '<label style="font-size:12px; font-weight:bold;">Billing cycle</label><select id="wdp-cycle" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
+        '<option value="monthly">Monthly</option>' +
+        '<option value="yearly">Yearly — 12 months upfront</option>' +
+        '</select>';
+
+    const monthSelect = '<div id="wdp-monthly-wrap"><label style="font-size:12px; font-weight:bold;">Months paying for</label><select id="wdp-months" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
+        [1, 2, 3, 6].map(function (m) { return '<option value="' + m + '">' + m + ' month' + (m === 1 ? '' : 's') + '</option>'; }).join('') + '</select></div>';
+
+    const yearlyNote = '<div id="wdp-yearly-note" style="display:none; font-size:12px; color:#166534; background:#f0fdf4; border:1px solid #bbf7d0; padding:8px; border-radius:6px; margin:4px 0 10px;">You are paying for 12 months upfront at the yearly rate.</div>';
+
+    const form = '<div id="wdp-form" style="' + (pending.length ? 'display:none;' : '') + '">' + planSelect + cycleSelect + monthSelect + yearlyNote +
         wdpField('wdp-amount', 'Amount you paid (₦)', 'number', '', 'min="0"') +
         '<div id="wdp-amount-hint" style="font-size:11px; color:#64748b; margin:-6px 0 10px;"></div>' +
         '<label style="font-size:12px; font-weight:bold;">How did you pay?</label><select id="wdp-method" style="' + WDP_INPUT + '"><option>Transfer</option><option>POS</option><option>Cash deposit</option><option>Online link</option></select>' +
@@ -310,7 +341,7 @@ function wdpRenderRenew() {
     const histHtml = hist.length === 0 ? '' :
         '<div style="border-top:1px solid #e2e8f0; margin-top:14px; padding-top:10px;"><div style="font-weight:bold; font-size:13px; margin-bottom:6px;">Your payment requests</div>' +
         hist.map(function (r) {
-            return '<div style="padding:6px 0; border-bottom:1px dashed #e2e8f0; font-size:12px;"><div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + (r.type === 'plan-change' ? 'Plan change → ' + wdpEsc(r.planId || '') : wdpMoney(r.amount) + ' · ' + wdpNum(r.months) + ' mo') + '</strong>' + wdpStatusChip(r.status) + '</div>' +
+            return '<div style="padding:6px 0; border-bottom:1px dashed #e2e8f0; font-size:12px;"><div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + (r.type === 'plan-change' ? 'Plan change → ' + wdpEsc(r.planId || '') : wdpMoney(r.amount) + ' · ' + wdpNum(r.months) + ' mo' + (r.cycle === 'yearly' ? ' (yearly)' : '')) + '</strong>' + wdpStatusChip(r.status) + '</div>' +
                 '<div style="color:#64748b;">' + wdpPretty(r.createdAt) + ' · ' + wdpEsc(r.method || '') + ' · ref ' + wdpEsc(r.reference || '') + '</div>' +
                 (r.status === 'approved' && r.dueAfter ? '<div style="color:#166534;">Next payment due ' + wdpPretty(r.dueAfter) + '</div>' : '') +
                 (r.status === 'rejected' ? '<div style="color:#991b1b;">' + wdpEsc(r.rejectReason || 'Not confirmed. Please contact support.') + '</div>' : '') + '</div>';
@@ -321,6 +352,10 @@ function wdpRenderRenew() {
         '<div style="font-size:15px; font-weight:bold; color:' + statusColor + ';">' + statusText + '</div></div>' +
         wdpFailNote(c) + bank + pendingNote + form + histHtml +
         '<div style="text-align:center; margin-top:12px;"><a href="https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent('Hello, I need help with my Wise Decision subscription. Store ID: ' + c.id) + '" target="_blank" rel="noopener" style="font-size:12px; color:#166534; font-weight:bold;">💬 Need help? Chat with support</a></div>');
+
+    // Default cycle to the store's last choice (persisted on approval), falling back to monthly.
+    const cy = document.getElementById('wdp-cycle');
+    if (cy && b.cycle === 'yearly') cy.value = 'yearly';
     wdpRecalc();
 }
 
@@ -338,12 +373,30 @@ function wdpRecalc() {
     const sel = document.getElementById('wdp-plan');
     const planId = sel ? sel.value : (c.billing && c.billing.plan) || '';
     const plan = planId && c.plans[planId] ? c.plans[planId] : null;
-    const fee = plan ? wdpNum(plan.monthlyFee) : wdpNum(c.billing && c.billing.monthlyFee);
-    const months = parseInt(document.getElementById('wdp-months').value) || 1;
+
+    const cycleEl = document.getElementById('wdp-cycle');
+    const cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
+
+    const monthWrap = document.getElementById('wdp-monthly-wrap');
+    const yearNote = document.getElementById('wdp-yearly-note');
+    if (monthWrap) monthWrap.style.display = cycle === 'yearly' ? 'none' : '';
+    if (yearNote) yearNote.style.display = cycle === 'yearly' ? '' : 'none';
+
+    const months = cycle === 'yearly' ? 12 : (parseInt((document.getElementById('wdp-months') || {}).value) || 1);
+    const monthlyFee = plan ? wdpNum(plan.monthlyFee) : wdpNum(c.billing && c.billing.monthlyFee);
+    const yearlyFee = plan ? wdpYearlyFee(plan) : monthlyFee * 12;
+    const fee = cycle === 'yearly' ? yearlyFee : monthlyFee;
+
     const amountEl = document.getElementById('wdp-amount'), hint = document.getElementById('wdp-amount-hint');
     if (fee > 0) {
-        amountEl.value = wdpSuggestAmount(fee, months);
-        hint.textContent = wdpMoney(fee) + ' × ' + months + ' month' + (months === 1 ? '' : 's') + ' = ' + wdpMoney(wdpSuggestAmount(fee, months)) + '. Change it if you paid a different amount.';
+        const amt = cycle === 'yearly' ? fee : fee * months;
+        amountEl.value = amt;
+        if (cycle === 'yearly') {
+            const save = monthlyFee * 12 - fee;
+            hint.textContent = wdpMoney(fee) + ' for 12 months' + (save > 0 ? ' — you save ' + wdpMoney(save) + ' vs paying monthly.' : '.') + ' Change it if you paid a different amount.';
+        } else {
+            hint.textContent = wdpMoney(fee) + ' × ' + months + ' month' + (months === 1 ? '' : 's') + ' = ' + wdpMoney(fee * months) + '. Change it if you paid a different amount.';
+        }
     } else { hint.textContent = 'Enter exactly what you paid.'; }
 }
 
@@ -351,7 +404,9 @@ async function wdpSubmit() {
     const c = wdpCtx;
     if (!c || wdpBusy) return;
     const amount = parseFloat(document.getElementById('wdp-amount').value);
-    const months = parseInt(document.getElementById('wdp-months').value) || 1;
+    const cycleEl = document.getElementById('wdp-cycle');
+    const cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
+    const months = cycle === 'yearly' ? 12 : (parseInt(document.getElementById('wdp-months').value) || 1);
     const method = document.getElementById('wdp-method').value;
     const reference = document.getElementById('wdp-ref').value.trim();
     const note = document.getElementById('wdp-note').value.trim();
@@ -360,7 +415,7 @@ async function wdpSubmit() {
     if (!(amount > 0)) { alert('Enter the amount you paid.'); return; }
     if (reference.length < 3) { alert('Please enter the sender name or transfer reference, so we can find your payment.'); return; }
 
-    const rec = { storeId: c.id, storeName: c.name, amount: amount, months: months, planId: planId || null, method: method, reference: reference, note: note, status: 'pending', createdAt: new Date().toISOString() };
+    const rec = { storeId: c.id, storeName: c.name, amount: amount, months: months, cycle: cycle, planId: planId || null, method: method, reference: reference, note: note, status: 'pending', createdAt: new Date().toISOString() };
     wdpBusy = true;
     const btn = document.getElementById('wdp-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
@@ -372,7 +427,7 @@ async function wdpSubmit() {
         wdpBusy = false;
         wdpRenderRenew();
         if (confirm('✅ Sent! We will confirm your payment shortly.\n\nTap OK to also message Wise Decision on WhatsApp so it is confirmed faster.')) {
-            const msg = 'Hello, I have paid my Wise Decision subscription.\n\nStore ID: ' + c.id + '\nAmount: ' + wdpMoney(amount) + ' (' + months + ' month' + (months === 1 ? '' : 's') + ')\nPaid by: ' + method + '\nReference: ' + reference + '\n\nPlease approve it. Thank you!';
+            const msg = 'Hello, I have paid my Wise Decision subscription.\n\nStore ID: ' + c.id + '\nAmount: ' + wdpMoney(amount) + ' (' + (cycle === 'yearly' ? '1 year — 12 months' : months + ' month' + (months === 1 ? '' : 's')) + ')\nPaid by: ' + method + '\nReference: ' + reference + '\n\nPlease approve it. Thank you!';
             window.open('https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent(msg), '_blank');
         }
     } catch (e) {
@@ -423,9 +478,10 @@ function wdpOpenPending() {
 
     const row = function (r, withButtons) {
         const e = wdpEsc(r.sid), k = wdpEsc(r.key);
+        const cycleTag = r.cycle === 'yearly' ? ' <span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px;">YEARLY</span>' : '';
         return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">' +
             '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;"><div><strong>' + wdpEsc(r.storeName || r.sid) + '</strong><br><small style="color:#64748b;">' + e + '</small></div>' + wdpStatusChip(r.status) + '</div>' +
-            '<div style="font-size:13px; margin:6px 0;"><strong>' + wdpMoney(r.amount) + '</strong> · ' + wdpNum(r.months) + ' month' + (wdpNum(r.months) === 1 ? '' : 's') + ' · ' + wdpEsc(r.method || '') +
+            '<div style="font-size:13px; margin:6px 0;"><strong>' + wdpMoney(r.amount) + '</strong> · ' + wdpNum(r.months) + ' month' + (wdpNum(r.months) === 1 ? '' : 's') + cycleTag + ' · ' + wdpEsc(r.method || '') +
             '<br><span style="color:#475569;">Ref: ' + wdpEsc(r.reference || '—') + '</span>' + (r.note ? '<br><span style="color:#64748b;">' + wdpEsc(r.note) + '</span>' : '') +
             '<br><span style="color:#94a3b8; font-size:11px;">Sent ' + wdpPretty(r.createdAt) + ' (' + wdpAgo(r.createdAt) + ')</span></div>' +
             (withButtons ? '<div style="display:flex; gap:6px;"><button data-sid="' + e + '" data-key="' + k + '" onclick="wdpReview(this.dataset.sid, this.dataset.key)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#dcfce7; border:1px solid #86efac; color:#166534;">Review &amp; approve</button>' +
@@ -463,19 +519,21 @@ async function wdpReview(sid, key) {
     const st = typeof wdsFind === 'function' ? wdsFind(sid) : null;
     const plan = rec.planId && plans[rec.planId] ? plans[rec.planId] : null;
     const currentPlanId = st && st.billing && st.billing.plan;
-    const expected = plan ? wdpSuggestAmount(plan.monthlyFee, rec.months) : 0;
+    const expected = plan ? wdpAmountFor(plan, rec.cycle === 'yearly' ? 'yearly' : 'monthly', rec.months) : 0;
     const mismatch = expected > 0 && Math.abs(expected - wdpNum(rec.amount)) > 0.5;
     const e = wdpEsc(sid), k = wdpEsc(key);
+    const cycleText = rec.cycle === 'yearly' ? 'Yearly (12 months upfront)' : 'Monthly';
 
     wdpModal('Review payment — ' + (rec.storeName || sid),
         (st ? '' : '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">This store is not in your list right now. Close this, tap "Refresh List", then try again.</div>') +
         '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; margin-bottom:12px;">' +
         'Store: <strong>' + wdpEsc(rec.storeName || sid) + '</strong> (' + e + ')<br>' +
         'Says they paid: <strong>' + wdpMoney(rec.amount) + '</strong> for ' + wdpNum(rec.months) + ' month' + (wdpNum(rec.months) === 1 ? '' : 's') + ' by ' + wdpEsc(rec.method || '') + '<br>' +
+        'Billing cycle: <strong>' + cycleText + '</strong><br>' +
         'Reference: <strong>' + wdpEsc(rec.reference || '—') + '</strong>' + (rec.note ? '<br>Note: ' + wdpEsc(rec.note) : '') + '<br>' +
-        'Sent: ' + wdpPretty(rec.createdAt) + (plan ? '<br>Plan chosen: <strong>' + wdpEsc(plan.name) + '</strong> (' + wdpMoney(plan.monthlyFee) + '/month)' : '') + '</div>' +
+        'Sent: ' + wdpPretty(rec.createdAt) + (plan ? '<br>Plan chosen: <strong>' + wdpEsc(plan.name) + '</strong> (' + wdpMoney(plan.monthlyFee) + '/month' + (rec.cycle === 'yearly' ? ' · ' + wdpMoney(wdpYearlyFee(plan)) + '/year' : '') + ')' : '') + '</div>' +
         '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">⚠ First check your bank/Moniepoint app and confirm this money really arrived.' +
-        (mismatch ? '<br>The plan price for ' + wdpNum(rec.months) + ' month(s) is ' + wdpMoney(expected) + ', but they say they paid ' + wdpMoney(rec.amount) + '.' : '') + '</div>' +
+        (mismatch ? '<br>The expected amount is ' + wdpMoney(expected) + ', but they say they paid ' + wdpMoney(rec.amount) + '.' : '') + '</div>' +
         wdpField('wdp-ra-amount', 'Amount received (₦)', 'number', rec.amount, 'min="0"') +
         '<label style="font-size:12px; font-weight:bold;">Months to extend</label><select id="wdp-ra-months" style="' + WDP_INPUT + '">' +
         [1, 2, 3, 6, 12].map(function (m) { return '<option value="' + m + '"' + (m === wdpNum(rec.months) ? ' selected' : '') + '>' + m + ' month' + (m === 1 ? '' : 's') + '</option>'; }).join('') + '</select>' +
@@ -522,7 +580,9 @@ async function wdpApprove(sid, key) {
         u['billing/' + sid + '/lastPaidDate'] = today;
         u['billing/' + sid + '/lastPaidAmount'] = amount;
         u['billing/' + sid + '/trial'] = null;
-        u['billing/' + sid + '/payments/' + pk] = { amount: amount, months: months, method: rec.method || 'Transfer', note: 'Ref: ' + (rec.reference || '') + (rec.note ? ' — ' + rec.note : ''), paidDate: today, at: nowIso, dueBefore: dueBefore, dueAfter: dueAfter, recordedBy: 'Super Admin (approved request)' };
+        // v4.18: remember the store's chosen cycle so the form defaults to it next time
+        u['billing/' + sid + '/cycle'] = rec.cycle === 'yearly' ? 'yearly' : 'monthly';
+        u['billing/' + sid + '/payments/' + pk] = { amount: amount, months: months, cycle: rec.cycle || 'monthly', method: rec.method || 'Transfer', note: 'Ref: ' + (rec.reference || '') + (rec.note ? ' — ' + rec.note : ''), paidDate: today, at: nowIso, dueBefore: dueBefore, dueAfter: dueAfter, recordedBy: 'Super Admin (approved request)' };
 
         let appliedPlanName = '';
         if (applyPlan && rec.planId) {
@@ -549,7 +609,7 @@ async function wdpApprove(sid, key) {
         try { await wdsLog(sid, { type: 'payment', text: 'Payment ' + wdpMoney(amount) + ' (' + (rec.method || 'Transfer') + ') approved from store request — ' + months + 'mo → due ' + dueAfter + (appliedPlanName ? ' · plan ' + appliedPlanName : ''), amount: amount }); } catch (e) {}
 
         if (sendReceipt) {
-            const receipt = 'Hello ' + (st.name || sid) + ', we have confirmed your payment of ' + wdpMoney(amount) + ' (' + months + ' month' + (months === 1 ? '' : 's') + ').\n\nYour next due date is ' + wdpPretty(dueAfter) + '.' + (unlock && st.status === 'suspended' ? '\n\nYour store has been unlocked.' : '') + '\n\nThank you for being with Wise Decision!';
+            const receipt = 'Hello ' + (st.name || sid) + ', we have confirmed your payment of ' + wdpMoney(amount) + ' (' + (rec.cycle === 'yearly' ? '1 year — 12 months' : months + ' month' + (months === 1 ? '' : 's')) + ').\n\nYour next due date is ' + wdpPretty(dueAfter) + '.' + (unlock && st.status === 'suspended' ? '\n\nYour store has been unlocked.' : '') + '\n\nThank you for being with Wise Decision!';
             const num = wdpWaNumber(st.phone);
             if (num) window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(receipt), '_blank');
             else prompt('No phone number saved. Copy this receipt:', receipt);
@@ -671,9 +731,14 @@ function wdcOpenPicker() {
         var p = c.plans[pid], isCur = pid === cur, up = wdpNum(p.monthlyFee) > curFee;
         var tag = isCur ? '<span style="background:#dcfce7; color:#166534; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">CURRENT</span>'
             : '<span style="background:' + (up ? '#dbeafe' : '#fef3c7') + '; color:' + (up ? '#1e40af' : '#92400e') + '; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">' + (up ? 'UPGRADE' : 'SWITCH DOWN') + '</span>';
+        // v4.18: show yearly rate (with savings) alongside monthly
+        var yf = wdpNum(p.yearlyFee), save = wdpNum(p.monthlyFee) * 12 - yf;
+        var yearlyHtml = yf > 0
+            ? '<div style="font-size:12px; color:#475569;">or <strong>' + wdpMoney(yf) + '</strong>/year' + (save > 0 ? ' <span style="color:#16a34a;">(save ' + wdpMoney(save) + ')</span>' : '') + '</div>'
+            : '';
         return '<div style="border:' + (isCur ? '2px solid #86efac' : '1px solid #e2e8f0') + '; border-radius:8px; padding:10px; margin-bottom:8px;">' +
             '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + wdpEsc(p.name) + '</strong>' + tag + '</div>' +
-            '<div style="font-weight:bold; color:#166534; margin:2px 0;">' + wdpMoney(p.monthlyFee) + '/month</div>' +
+            '<div style="font-weight:bold; color:#166534; margin:2px 0;">' + wdpMoney(p.monthlyFee) + '/month</div>' + yearlyHtml +
             '<div style="font-size:12px; color:#475569;">' + wdcLimitText(p) + '</div>' +
             (isCur ? '' : '<button data-id="' + wdpEsc(pid) + '" data-up="' + (up ? 1 : 0) + '" onclick="wdcPick(this.dataset.id, this.dataset.up === \'1\')" style="margin-top:8px; padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">' + (up ? 'Upgrade — pay now' : 'Request this plan') + '</button>') + '</div>';
     }).join('');
@@ -695,7 +760,8 @@ async function wdcOpenRequest(pid) {
     wdpModal('🔄 Change plan', '<div style="text-align:center; color:#64748b; padding:24px;">Checking your usage...</div>');
     var u = await wdcUsage(c.id), over = wdcOver(u, p);
     var due = c.billing && c.billing.dueDate ? wdpPretty(c.billing.dueDate) : 'your next payment';
-    var html = '<div style="font-size:14px; margin-bottom:8px;">Switch to <strong>' + wdpEsc(p.name) + '</strong> — ' + wdpMoney(p.monthlyFee) + '/month</div>' +
+    var yf = wdpNum(p.yearlyFee);
+    var html = '<div style="font-size:14px; margin-bottom:8px;">Switch to <strong>' + wdpEsc(p.name) + '</strong> — ' + wdpMoney(p.monthlyFee) + '/month' + (yf > 0 ? ' <span style="color:#64748b;">or ' + wdpMoney(yf) + '/year</span>' : '') + '</div>' +
         '<div style="font-size:12px; color:#475569; margin-bottom:8px;">' + wdcLimitText(p) + '</div>' + wdcUsageHtml(u) +
         '<div style="background:#f8fafc; border:1px solid #e2e8f0; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">Nothing to pay now. You keep your current plan until <strong>' + wdpEsc(due) + '</strong>, then the new plan and price apply.</div>';
     if (over.length) {
@@ -761,9 +827,10 @@ async function wdcReview(sid, key) {
     var curName = st && st.billing && plans[st.billing.plan] ? plans[st.billing.plan].name : 'none';
     var u = await wdcUsage(sid), over = wdcOver(u, p);
     var e = wdpEsc(sid), k = wdpEsc(key);
+    var yf = wdpNum(p.yearlyFee);
     wdpModal('Plan change — ' + (rec.storeName || sid),
         '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:13px; margin-bottom:10px;">Store: <strong>' + wdpEsc(rec.storeName || sid) + '</strong> (' + e + ')<br>' +
-        'From <strong>' + wdpEsc(curName) + '</strong> to <strong>' + wdpEsc(p.name) + '</strong> (' + wdpMoney(p.monthlyFee) + '/month)<br>' +
+        'From <strong>' + wdpEsc(curName) + '</strong> to <strong>' + wdpEsc(p.name) + '</strong> (' + wdpMoney(p.monthlyFee) + '/month' + (yf > 0 ? ' · ' + wdpMoney(yf) + '/year' : '') + ')<br>' +
         '<span style="color:#475569;">' + wdcLimitText(p) + '</span>' + (rec.note ? '<br>Note: ' + wdpEsc(rec.note) : '') + '</div>' + wdcUsageHtml(u) +
         (over.length ? '<div style="background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">⚠ Over the new limits: ' + over.map(wdpEsc).join('; ') + '</div>' : '') +
         '<label style="display:flex; gap:8px; align-items:center; font-size:13px; margin-bottom:12px;"><input id="wdc-now" type="checkbox"> Switch now instead of at the next renewal</label>' +
@@ -1020,7 +1087,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.17)\n' +
+            alert('Pending payments button check (payments-patch v4.18)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
