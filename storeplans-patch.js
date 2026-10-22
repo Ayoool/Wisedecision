@@ -1,13 +1,20 @@
-// ==================== WISE DECISION STORE DETAIL & PLANS (v37 MASTER) ====================
-console.log("✅ MASTER PLANS CODE LOADED (v37)");
+// ==================== WISE DECISION STORE DETAIL & PLANS (v38) ====================
+// v38: fixes typos that stopped the Super Admin Plans editor and card injection from working:
+//   * wdnModal0 -> wdnModal (typo). "SuperfAdmin" -> isSuperAdmin() (role string typo).
+//   * style;= typo, `.(value')` -> `.once('value')`, `||once count` -> `|| count`.
+//   * injectPlansButton rewritten: visibility-aware anchor; the button is created, moved, or removed safely.
+//   * wdsExtraCardHtml wrap only replaces a real base function (no longer wipes out a patch that loads later).
+//   * wdnLoadPlans failures are logged and no longer block the store list from rendering.
+//   * MutationObserver added; setInterval slowed to 3s (matches payments-patch behaviour).
+console.log("✅ MASTER PLANS CODE LOADED (v38)");
 
-var wdnPlans = {};        
-var wdnLimits = null;     
+var wdnPlans = {};
+var wdnLimits = null;
 var wdnLoadedFor = null;
-var WDN_SUPPORT_WA = '2349168140710';   
+var WDN_SUPPORT_WA = '2349168140710';
 
 // ---------- Helpers ----------
-function wdnEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function wdnEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function wdnNum(n) { return Number(n) || 0; }
 function wdnMoney(n) { return '₦' + (Math.round(wdnNum(n) * 100) / 100).toLocaleString(); }
 function wdnUnl(n) { return wdnNum(n) > 0 ? String(wdnNum(n)) : 'unlimited'; }
@@ -26,10 +33,16 @@ function wdnWithTimeout(promise, ms) {
 }
 function wdnLimitReached(count, max) { max = wdnNum(max); return max > 0 && count >= max; }
 function wdnSlug(name) { return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'plan'; }
+
+// v38: accept any common Super Admin role spelling so a role-string mismatch never disables the editor.
+function isSuperAdmin() {
+    var r = String(currentUserRole || '').replace(/\s+/g, '').toLowerCase();
+    return r === 'superadmin';
+}
+
 function wdnPlanText(p) {
     return wdnUnl(p.maxBranches) + ' branch' + (wdnNum(p.maxBranches) === 1 ? '' : 'es') + ' · ' + wdnUnl(p.maxStaff) + ' staff · ' + wdnUnl(p.maxProducts) + ' products';
 }
-// v37: yearly helpers (mirror the payments-patch so prices match exactly)
 function wdnYearlyFee(plan) {
     if (!plan) return 0;
     var y = wdnNum(plan.yearlyFee);
@@ -100,16 +113,21 @@ function wdnStoresOnPlan(planId) {
 }
 
 async function wdnOpenPlans() {
-    if (currentUserRole !== 'SuperfAdmin') return;
-    wdnModal0('📋 Plans', '<div style;="text-align:center; color:#64748b; padding:20px;">Loading...</div>');
-    try { await wdnLoadPlans(); } catch (e) { wdnModal('📋 Plans', '<div style="color:#b91c1c;">Could not load: ' + wdnEsc(e.message) + '</div>'); return; }
+    if (!isSuperAdmin()) return;
+    wdnModal('📋 Plans', '<div style="text-align:center; color:#64748b; padding:20px;">Loading...</div>');
+    try { await wdnLoadPlans(); }
+    catch (e) {
+        console.warn('wdnOpenPlans: cannot load plans', e);
+        wdnModal('📋 Plans', '<div style="color:#b91c1c; padding:8px;">Could not load: ' + wdnEsc(e.message) + '</div>');
+        return;
+    }
 
     const ids = Object.keys(wdnPlans).sort(function (a, b) { return wdnNum(wdnPlans[a].monthlyFee) - wdnNum(wdnPlans[b].monthlyFee); });
     const rows = ids.length === 0
         ? '<div style="text-align:center; color:#64748b; padding:12px;">No plans yet. Make your first one below.</div>'
         : ids.map(function (id) {
             const p = wdnPlans[id], n = wdnStoresOnPlan(id).length, e = wdnEsc(id);
-            return '<div style="border:1px solid #e2e8 border-radius:8px; padding:10px; margin-bottom:8px;">' +
+            return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">' +
                 '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;"><strong>' + wdnEsc(p.name) + '</strong>' +
                 '<div style="color:#166534; font-weight:bold; text-align:right;">' + wdnPlanPriceHtml(p) + '</div></div>' +
                 '<div style="font-size:12px; color:#475569; margin:4px 0;">' + wdnPlanText(p) + '</div>' +
@@ -205,7 +223,6 @@ async function wdnApplyPlan(storeId) {
     } catch (e) { alert("Failed: " + e.message); }
 }
 
-// v37: set the store's billing cycle (monthly / yearly) without going through a payment request
 async function wdnApplyCycle(storeId) {
     const sel = document.getElementById('wdn-detail-cycle');
     const cycle = sel ? sel.value : 'monthly';
@@ -226,15 +243,15 @@ function wdnRow(label, value) {
     return '<div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:2px 0;"><span style="color:#64748b;">' + label + '</span><span style="text-align:right;">' + value + '</span></div>';
 }
 function wdnMeterValue(count, max) {
-    const over = count !== null && wdnLimitReached(count, max);
-    return '<strong style="color:' + (over ? '#b91c1c' : '#0f172a') + ';">' + (count === null ||once count === undefined ? '?' : count) + '</strong> of ' + wdnUnl(max) + (over ? ' ⚠ at limit' : '');
+    const over = count !== null && count !== undefined && wdnLimitReached(count, max);
+    return '<strong style="color:' + (over ? '#b91c1c' : '#0f172a') + ';">' + (count === null || count === undefined ? '?' : count) + '</strong> of ' + wdnUnl(max) + (over ? ' ⚠ at limit' : '');
 }
 function wdnUsageHtml(u) {
     return wdnRow('Sales this month', (u.capped ? u.salesMonth + '+' : u.salesMonth) + ' · ' + (u.capped ? 'at least ' : '') + wdnMoney(u.revenueMonth)) + wdnRow('Last sale', wdnAgo(u.lastSaleAt));
 }
 
 async function wdnOpenDetail(id) {
-    if (currentUserRole !== 'SuperAdmin') return;
+    if (!isSuperAdmin()) return;
     const st = typeof wdsFind === 'function' ? wdsFind(id) : null;
     if (!st) return;
     wdnDetailId = id;
@@ -242,8 +259,13 @@ async function wdnOpenDetail(id) {
 
     const quick = function (p) { return wdnWithTimeout(p, 20000).catch(function () { return null; }); };
     const root = firebase.database().ref('stores/' + id);
-    const got = await Promise.all([quick(root.child('staff').once('value')), quick(root.child('branches').('value')), quick(root.child('address').once('value')), quick(wdnLoadPlans())]);
-    if (wdnDetailId !== id) return;                                   
+    const got = await Promise.all([
+        quick(root.child('staff').once('value')),
+        quick(root.child('branches').once('value')),
+        quick(root.child('address').once('value')),
+        quick(wdnLoadPlans())
+    ]);
+    if (wdnDetailId !== id) return;
 
     const staffSnap = got[0], branchSnap = got[1], addrSnap = got[2];
     const branches = {}; if (branchSnap) branchSnap.forEach(function (c) { branches[c.key] = c.val() || {}; });
@@ -283,7 +305,6 @@ async function wdnOpenDetail(id) {
 
     const act = function (a, label, style) { return '<button data-id="' + eid + '" onclick="wdnAct(\'' + a + '\', this.dataset.id)" style="padding:7px 11px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc; ' + (style || '') + '">' + label + '</button>'; };
 
-    // v37: show plan's yearly fee (if any) and the store's current billing cycle
     const cycleRow = plan
         ? wdnRow('Billing cycle', (b.cycle === 'yearly' ? '<strong>Yearly</strong>' : 'Monthly') + (wdnNum(plan.yearlyFee) > 0 ? ' <span style="color:#64748b;">· yearly ' + wdnMoney(plan.yearlyFee) + '</span>' : ''))
         : '';
@@ -341,7 +362,7 @@ function wdnFillSlowParts(id, lim) {
                 put('wdn-slow-products', '<span style="color:#b45309;">couldn\'t count</span> ' + retryBtn);
             });
     }
-    tryCountProducts(1);   
+    tryCountProducts(1);
 
     wdnWithTimeout(wdnShallow('stores/' + id + '/customers'), 25000)
         .then(function (keys) { put('wdn-slow-customers', String(keys.length)); })
@@ -420,7 +441,7 @@ function wdnInstallEnforcement() {
                 try {
                     const snap = await wdnWithTimeout(firebase.database().ref('stores/' + currentStoreId + '/staff').once('value'), 6000);
                     n = 0; snap.forEach(function () { n++; });
-                } catch (e) { n = null; }              
+                } catch (e) { n = null; }
                 if (n !== null && wdnLimitReached(n, wdnLimits.maxStaff)) { wdnBlock('staff members', n, wdnLimits.maxStaff); return; }
             }
             return prev.apply(self, args);
@@ -452,7 +473,7 @@ window.wdnClearLimitsListener = function () {
 function wdnLoadLimits() {
     if (!currentStoreId || currentStoreId === 'SUPER_ADMIN') return;
     const sid = currentStoreId;
-    
+
     window.wdnClearLimitsListener();
 
     try { const c = JSON.parse(localStorage.getItem('wd_limits_' + sid) || 'null'); if (c && typeof c === 'object') wdnLimits = c; } catch (e) {}
@@ -506,7 +527,7 @@ async function wdnShowPlanCard() {
         try {
             if (viewId === 'login-view') {
                 window.wdnClearLimitsListener();
-                wdnLoadedFor = null; 
+                wdnLoadedFor = null;
                 wdnLimits = null;
             }
             else if (currentStoreId && currentStoreId !== 'SUPER_ADMIN' && viewId !== 'register-view') {
@@ -519,59 +540,99 @@ async function wdnShowPlanCard() {
 })();
 
 // =====================================================================
-// BUTTON INJECTOR — Robustly finds the Super Admin toolbar
+// BUTTON INJECTOR — visibility-aware anchor
 // =====================================================================
-function injectPlansButton() {
-    if (typeof currentUserRole === 'undefined' || currentUserRole !== 'SuperAdmin') return;
-    if (document.getElementById('wdn-btn-plans')) return; 
-
-    const allButtons = Array.from(document.querySelectorAll('button, .menu-btn, a, div[onclick]'));
-    const targetBtn = 
-        allButtons.find(b => b.textContent.trim().includes('Billing settings')) ||
-        allButtons.find(b => b.textContent.trim().includes('Reminders'));
-
-    if (!targetBtn) return; 
-
-    const btn = document.createElement('button');
-    btn.id = 'wdn-btn-plans';
-    btn.className = targetBtn.className; 
-    if (targetBtn.style.cssText) {
-        btn.style.cssText = targetBtn.style.cssText;
+function wdnFindShownButton(root, test) {
+    var btns = root.querySelectorAll('button, .menu-btn, a, div[onclick]');
+    for (var i = 0; i < btns.length; i++) {
+        if (test((btns[i].textContent || '').trim().toLowerCase()) && btns[i].getClientRects().length > 0) return btns[i];
     }
+    return null;
+}
+
+function injectPlansButton() {
+    if (!isSuperAdmin()) return;
+    var existing = document.getElementById('wdn-btn-plans');
+    var targetBtn =
+        wdnFindShownButton(document, function (t) { return t.indexOf('billing settings') !== -1; }) ||
+        wdnFindShownButton(document, function (t) { return t.indexOf('reminders') !== -1; });
+    if (!targetBtn) {
+        // Not on the Super Admin dashboard — clean up a stray button that might be hiding in a collapsed panel.
+        if (existing && existing.dataset.static !== '1') existing.remove();
+        return;
+    }
+    if (existing) {
+        // Keep the button right after the anchor (in case the toolbar was rebuilt)
+        if (targetBtn.parentNode && existing.previousElementSibling !== targetBtn) {
+            targetBtn.parentNode.insertBefore(existing, targetBtn.nextSibling);
+        }
+        return;
+    }
+    var btn = document.createElement('button');
+    btn.id = 'wdn-btn-plans';
+    btn.className = targetBtn.className;
+    if (targetBtn.style.cssText) btn.style.cssText = targetBtn.style.cssText;
     btn.style.marginLeft = '6px';
     btn.textContent = '📋 Plans';
-    
-    btn.onclick = function(e) {
-        e.preventDefault();
-        wdnOpenPlans();
-    };
+    btn.onclick = function (e) { e.preventDefault(); wdnOpenPlans(); };
+    targetBtn.parentNode.insertBefore(btn, targetBtn.nextSibling);
+}
 
-    if (targetBtn.parentNode) {
-        targetBtn.parentNode.insertBefore(btn, targetBtn.nextSibling);
-    }
+// Only wrap wdsExtraCardHtml once it exists. Returns true the moment the wrap first succeeds,
+// so wdnAttach can trigger a re-render and the plan label + 👁 Details button appear immediately.
+function wdnWrapExtraCard() {
+    var cur = window.wdsExtraCardHtml;
+    if (typeof cur !== 'function' || cur.__wdn) return false;
+    var wrapped = function (st) {
+        var base = cur(st) || '';
+        var planId = st.billing && st.billing.plan;
+        var plan = planId && wdnPlans[planId] ? wdnPlans[planId] : null;
+        var cycleTag = st.billing && st.billing.cycle === 'yearly'
+            ? ' <span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px;">YEARLY</span>'
+            : '';
+        var planLine = plan
+            ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(plan.name) + ' plan · ' + wdnPlanText(plan) + cycleTag + '</span>'
+            : (planId ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(planId) + ' plan' + cycleTag + '</span>' : '');
+        return base + planLine + '<br><button data-id="' + wdnEsc(st.id) + '" onclick="wdnOpenDetail(this.dataset.id)" style="margin-top:6px; padding:5px 12px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #bae6fd; background:#f0f9ff; color:#0369a1;">👁 Details</button>';
+    };
+    wrapped.__wdn = true;
+    window.wdsExtraCardHtml = wrapped;
+    return true;
 }
 
 function wdnAttach() {
     wdnInstallEnforcement();
-    if (currentUserRole !== 'SuperAdmin') return;
-    
+    if (!isSuperAdmin()) return;
+
     injectPlansButton();
 
-    const cur = window.wdsExtraCardHtml;
-    if (typeof cur === 'function' ? !cur.__wdn : true) {
-        const prev = typeof cur === 'function' ? cur : function () { return ''; };
-        const wrapped = function (st) {
-            const base = prev(st) || '';
-            const planId = st.billing && st.billing.plan;
-            const plan = planId && wdnPlans[planId] ? wdnPlans[planId] : null;
-            const cycleTag = st.billing && st.billing.cycle === 'yearly' ? ' <span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px;">YEARLY</span>' : '';
-            const planLine = plan ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(plan.name) + ' plan · ' + wdnPlanText(plan) + cycleTag + '</span>' : (planId ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(planId) + ' plan' + cycleTag + '</span>' : '');
-            return base + planLine + '<br><button data-id="' + wdnEsc(st.id) + '" onclick="wdnOpenDetail(this.dataset.id)" style="margin-top:6px; padding:5px 12px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #bae6fd; background:#f0f9ff; color:#0369a1;">👁 Details</button>';
-        };
-        wrapped.__wdn = true;
-        window.wdsExtraCardHtml = wrapped;
+    if (wdnWrapExtraCard() && typeof wdsRender === 'function') {
+        // Just wrapped for the first time — re-render so the new label / Details button appear now.
+        try { wdsRender(); } catch (e) { console.warn(e); }
     }
-    if (!wdnAttach.loadedPlans) { wdnAttach.loadedPlans = true; wdnLoadPlans().then(function () { if (typeof wdsRender === 'function') wdsRender(); }).catch(function () { wdnAttach.loadedPlans = false; }); }
+
+    if (!wdnAttach.loadedPlans) {
+        wdnAttach.loadedPlans = true;
+        wdnLoadPlans()
+            .then(function () { if (typeof wdsRender === 'function') wdsRender(); })
+            .catch(function (e) {
+                wdnAttach.loadedPlans = false;
+                console.warn('wdnLoadPlans failed:', (e && (e.code || e.message)) || e,
+                    '— check that database rules allow the Super Admin to read billingSettings/plans');
+            });
+    }
 }
 
-setInterval(function () { try { wdnAttach(); } catch (e) { console.warn(e); } }, 1200);
+// =====================================================================
+// OBSERVER + slow safety net
+// =====================================================================
+window.addEventListener('load', function () {
+    setTimeout(function () { try { wdnAttach(); } catch (e) { console.warn(e); } }, 300);
+});
+(function () {
+    var wdnObserver = new MutationObserver(function () { try { wdnAttach(); } catch (e) { console.warn(e); } });
+    if (document.body) wdnObserver.observe(document.body, { childList: true, subtree: true });
+    else document.addEventListener('DOMContentLoaded', function () { wdnObserver.observe(document.body, { childList: true, subtree: true }); });
+})();
+// Slow safety net (3s) in case a patch rebuilds the page in a way the observer misses.
+setInterval(function () { try { wdnAttach(); } catch (e) { console.warn(e); } }, 3000);
