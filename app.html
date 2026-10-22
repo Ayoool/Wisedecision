@@ -131,6 +131,7 @@
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap: wrap;">
                         <button class="menu-btn" style="width: auto; margin: 0; background: #7c3aed; color: #fff;" onclick="wdaOpenCodes()">🎟 Activation codes</button>
                         <button class="menu-btn btn-action-primary" style="width: auto; margin: 0;" onclick="changeSuperAdminMasterPin()">🔑 Change Master PIN</button>
+                        <button id="wdp-btn-pending" data-static="1" class="menu-btn" style="width: auto; margin: 0; padding: 8px 12px; font-size: 12px; font-weight: bold; border: 1px solid #bbf7d0; background: #f0fdf4; color: #166534;" onclick="wdpOpenPending()">💳 Pending payments</button>
                         <button class="menu-btn btn-logout" style="width: auto; margin: 0;" onclick="switchView('login-view')">Logout / Exit</button>
                     </div>
                 </div>
@@ -1720,7 +1721,7 @@
         <script src="storeplans-patch.js?v=38" defer></script>
         <script src="staff-sidebar-patch.js?v=38" defer></script>
         <script src="extras-patch.js?v=38" defer></script>
-        <script src="payments-patch.js?v=414" defer></script>
+        <script src="payments-patch.js?v=415" defer></script>
         <script src="auth-patch.js?v=1" defer></script>
         <script src="email-auth-patch.js?v=7" defer></script>
         <script src="phone-vendor-patch.js?v=2" defer></script>
