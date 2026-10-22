@@ -5,7 +5,18 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!document.getElementById('customer-shop-view')) {
         const shopHTML = `
             <style>
-                #customer-shop-view { background: #f8fafc; min-height: 100vh; padding-bottom: 80px; position: absolute; top: 0; left: 0; width: 100%; z-index: 1000; overflow-y: auto; }
+                /* Force the shop view to sit on top of everything and cover the screen */
+                #customer-shop-view { 
+                    position: fixed !important; 
+                    top: 0 !important; 
+                    left: 0 !important; 
+                    width: 100vw !important; 
+                    height: 100vh !important; 
+                    background: #f8fafc !important; 
+                    z-index: 999999 !important; 
+                    overflow-y: auto !important; 
+                    display: none; 
+                }
                 .shop-header { background: #0284c7; color: white; padding: 15px 20px; text-align: center; position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
                 .shop-header h2 { margin: 0; font-size: 18px; }
                 .back-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
@@ -22,12 +33,13 @@ document.addEventListener("DOMContentLoaded", function() {
                 .add-to-cart-btn { background: #ecfdf5; color: #0f766e; border: 1px solid #a7f3d0; padding: 8px; border-radius: 8px; font-weight: bold; cursor: pointer; }
                 .add-to-cart-btn:disabled { background: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; cursor: not-allowed; }
                 .floating-cart-btn { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: calc(100% - 40px); max-width: 500px; background: #16a34a; color: white; padding: 16px; border-radius: 12px; text-align: center; font-weight: bold; font-size: 16px; box-shadow: 0 10px 25px rgba(22,163,74,0.3); border: none; cursor: pointer; z-index: 100; display: none; }
-                .customer-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; justify-content: center; align-items: flex-end; }
+                .customer-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999999; justify-content: center; align-items: flex-end; }
                 .customer-modal-content { background: white; width: 100%; max-width: 600px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 90vh; overflow-y: auto; }
             </style>
-            <div id="customer-shop-view" class="view-section" style="display: none;">
+            
+            <div id="customer-shop-view">
                 <div class="shop-header">
-                    <button class="back-btn" onclick="document.getElementById('customer-shop-view').style.display='none';">← Back</button>
+                    <button class="back-btn" onclick="document.getElementById('customer-shop-view').style.display='none'; document.body.style.overflow='auto';">← Back</button>
                     <h2 id="shop-store-title">Customer Ordering</h2>
                     <div style="width: 50px;"></div>
                 </div>
@@ -90,8 +102,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // 2. The MutationObserver (Security Guard)
-    // This watches the page for when your email patch redraws the login box, 
-    // and instantly puts the button back.
     const observer = new MutationObserver(function(mutations) {
         const regBtn = Array.from(document.querySelectorAll('button, a')).find(el => el.innerText.includes('Register New Business'));
         
@@ -104,16 +114,15 @@ document.addEventListener("DOMContentLoaded", function() {
             
             shopBtn.onclick = function() {
                 document.getElementById('customer-shop-view').style.display = 'block';
+                document.body.style.overflow = 'hidden'; // Stop background scrolling
             };
 
-            // Insert it right after the "Register New Business" button
             if (regBtn.parentNode) {
                 regBtn.parentNode.insertBefore(shopBtn, regBtn.nextSibling);
             }
         }
     });
 
-    // Start watching the body for changes
     observer.observe(document.body, { childList: true, subtree: true });
 });
 
@@ -130,6 +139,12 @@ function loadCustomerStore() {
     if (!storeIdInput) { errorMsg.innerText = "Please enter a Store ID."; errorMsg.style.display = 'block'; return; }
     errorMsg.style.display = 'none';
     
+    // Check if firebase is loaded
+    if (typeof firebase === 'undefined') {
+        alert("System is still loading. Please wait a moment and try again.");
+        return;
+    }
+
     firebase.database().ref('stores/' + storeIdInput).once('value').then(snapshot => {
         const store = snapshot.val();
         document.getElementById('shop-store-title').innerText = store ? (store.businessName || store.name || storeIdInput.toUpperCase()) : storeIdInput.toUpperCase();
