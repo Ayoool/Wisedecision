@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.15) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.16) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,6 +16,7 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v4.16: emails the owner when a store sends a payment request (set WDP_ALERT_URL to the Apps Script web app URL).
 // v4.15: works with a Pending payments button written into app.html (it is reused and moved after "Security", never
 //   deleted); opening it starts the live listener itself, so it can never show a false "nothing pending".
 // v4.14: the Pending payments button now sits right after the "Security" button (falls back to before "Logout / Exit").
@@ -55,9 +56,23 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.15 loaded");
+console.log("Wise Decision payments-patch.js — v4.16 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
+
+// Email alert to the owner when a store sends a payment request (Google Apps Script web app).
+// Paste your Web app URL between the quotes. Leave it empty to turn email alerts off.
+var WDP_ALERT_URL = '';
+function wdpNotifyEmail(rec) {
+    if (!/^https:\/\/script\.google\.com\//.test(WDP_ALERT_URL)) return;
+    try {
+        fetch(WDP_ALERT_URL, {
+            method: 'POST', mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ kind: 'wd-payment', storeId: rec.storeId, storeName: rec.storeName, amount: rec.amount, months: rec.months, method: rec.method, reference: rec.reference, note: rec.note })
+        }).catch(function () {});
+    } catch (e) { /* the alert must never get in the way of the payment itself */ }
+}
 var wdpAll = null;             // every payment request (Super Admin, kept live)
 var wdpListening = false;
 var wdpCtx = null;             // the store being shown on the renew screen
@@ -343,6 +358,7 @@ async function wdpSubmit() {
     try {
         const ref = firebase.database().ref('paymentRequests/' + c.id).push();
         await ref.set(rec);
+        wdpNotifyEmail(rec);
         c.requests[ref.key] = rec;
         wdpBusy = false;
         wdpRenderRenew();
@@ -762,7 +778,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.15)\n' +
+            alert('Pending payments button check (payments-patch v4.16)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
