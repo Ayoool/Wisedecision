@@ -89,18 +89,16 @@ document.addEventListener("DOMContentLoaded", function() {
         document.body.insertAdjacentHTML('beforeend', shopHTML);
     }
 
-    // 2. Watchdog: Keep checking for the login box to inject the button
-    let attempts = 0;
-    const injectInterval = setInterval(() => {
-        // Find the login card by looking for the Sign in button
-        const authCard = document.querySelector('.auth-card') || document.body;
-        const signInBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Sign in'));
-
-        if (signInBtn && !document.getElementById('customer-shop-btn-injected')) {
+    // 2. The MutationObserver (Security Guard)
+    // This watches the page for when your email patch redraws the login box, 
+    // and instantly puts the button back.
+    const observer = new MutationObserver(function(mutations) {
+        const regBtn = Array.from(document.querySelectorAll('button, a')).find(el => el.innerText.includes('Register New Business'));
+        
+        if (regBtn && !document.getElementById('customer-shop-btn-injected')) {
             const shopBtn = document.createElement('button');
             shopBtn.id = 'customer-shop-btn-injected';
             shopBtn.className = 'menu-btn';
-            // Styled to match your exact green outline button
             shopBtn.style = 'margin-top: 15px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; width: 100%; font-weight: bold; border-radius: 10px; padding: 15px; cursor: pointer; font-size: 14px;';
             shopBtn.innerHTML = '🛒 Shop as a Customer (Order Ahead)';
             
@@ -108,19 +106,17 @@ document.addEventListener("DOMContentLoaded", function() {
                 document.getElementById('customer-shop-view').style.display = 'block';
             };
 
-            // Inject it right below the "Register New Business" button
-            const regBtn = Array.from(document.querySelectorAll('button, a')).find(el => el.innerText.includes('Register New Business'));
-            if (regBtn && regBtn.parentNode) {
+            // Insert it right after the "Register New Business" button
+            if (regBtn.parentNode) {
                 regBtn.parentNode.insertBefore(shopBtn, regBtn.nextSibling);
-            } else {
-                signInBtn.parentNode.insertBefore(shopBtn, signInBtn.nextSibling);
             }
         }
+    });
 
-        attempts++;
-        if (attempts > 30) clearInterval(injectInterval); // Stop checking after 15 seconds
-    }, 500);
+    // Start watching the body for changes
+    observer.observe(document.body, { childList: true, subtree: true });
 });
+
 
 // --- CUSTOMER SHOP LOGIC ---
 let customerShopStoreId = null;
