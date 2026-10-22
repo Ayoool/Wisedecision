@@ -1,5 +1,5 @@
-// ==================== WISE DECISION STORE DETAIL & PLANS (v36 MASTER) ====================
-console.log("✅ MASTER PLANS CODE LOADED (v36)");
+// ==================== WISE DECISION STORE DETAIL & PLANS (v37 MASTER) ====================
+console.log("✅ MASTER PLANS CODE LOADED (v37)");
 
 var wdnPlans = {};        
 var wdnLimits = null;     
@@ -28,6 +28,20 @@ function wdnLimitReached(count, max) { max = wdnNum(max); return max > 0 && coun
 function wdnSlug(name) { return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'plan'; }
 function wdnPlanText(p) {
     return wdnUnl(p.maxBranches) + ' branch' + (wdnNum(p.maxBranches) === 1 ? '' : 'es') + ' · ' + wdnUnl(p.maxStaff) + ' staff · ' + wdnUnl(p.maxProducts) + ' products';
+}
+// v37: yearly helpers (mirror the payments-patch so prices match exactly)
+function wdnYearlyFee(plan) {
+    if (!plan) return 0;
+    var y = wdnNum(plan.yearlyFee);
+    return y > 0 ? y : wdnNum(plan.monthlyFee) * 12;
+}
+function wdnPlanPriceHtml(p) {
+    var yf = wdnNum(p.yearlyFee);
+    var monthlyTotal = wdnNum(p.monthlyFee) * 12;
+    var save = yf > 0 && monthlyTotal > yf ? monthlyTotal - yf : 0;
+    var html = wdnMoney(p.monthlyFee) + '/month';
+    if (yf > 0) html += '<div style="font-weight:normal; font-size:11px; color:#475569;">or ' + wdnMoney(yf) + '/year' + (save > 0 ? ' <span style="color:#16a34a;">(save ' + wdnMoney(save) + ')</span>' : '') + '</div>';
+    return html;
 }
 function wdnLimitsOf(planId, plan) {
     return { planId: planId, name: plan.name, maxBranches: wdnNum(plan.maxBranches), maxStaff: wdnNum(plan.maxStaff), maxProducts: wdnNum(plan.maxProducts) };
@@ -86,8 +100,8 @@ function wdnStoresOnPlan(planId) {
 }
 
 async function wdnOpenPlans() {
-    if (currentUserRole !== 'SuperAdmin') return;
-    wdnModal('📋 Plans', '<div style="text-align:center; color:#64748b; padding:20px;">Loading...</div>');
+    if (currentUserRole !== 'SuperfAdmin') return;
+    wdnModal0('📋 Plans', '<div style;="text-align:center; color:#64748b; padding:20px;">Loading...</div>');
     try { await wdnLoadPlans(); } catch (e) { wdnModal('📋 Plans', '<div style="color:#b91c1c;">Could not load: ' + wdnEsc(e.message) + '</div>'); return; }
 
     const ids = Object.keys(wdnPlans).sort(function (a, b) { return wdnNum(wdnPlans[a].monthlyFee) - wdnNum(wdnPlans[b].monthlyFee); });
@@ -95,8 +109,9 @@ async function wdnOpenPlans() {
         ? '<div style="text-align:center; color:#64748b; padding:12px;">No plans yet. Make your first one below.</div>'
         : ids.map(function (id) {
             const p = wdnPlans[id], n = wdnStoresOnPlan(id).length, e = wdnEsc(id);
-            return '<div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px; margin-bottom:8px;">' +
-                '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + wdnEsc(p.name) + '</strong><span style="color:#166534; font-weight:bold;">' + wdnMoney(p.monthlyFee) + '/month</span></div>' +
+            return '<div style="border:1px solid #e2e8 border-radius:8px; padding:10px; margin-bottom:8px;">' +
+                '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;"><strong>' + wdnEsc(p.name) + '</strong>' +
+                '<div style="color:#166534; font-weight:bold; text-align:right;">' + wdnPlanPriceHtml(p) + '</div></div>' +
                 '<div style="font-size:12px; color:#475569; margin:4px 0;">' + wdnPlanText(p) + '</div>' +
                 '<div style="font-size:11px; color:#64748b; margin-bottom:6px;">' + n + ' store' + (n === 1 ? '' : 's') + ' on this plan</div>' +
                 '<div style="display:flex; gap:6px;">' +
@@ -118,7 +133,9 @@ function wdnPlanForm(id, p) {
         '<div style="font-weight:bold; font-size:13px; margin-bottom:8px;">' + (id ? 'Edit plan' : 'New plan') + '</div>' +
         '<input id="wdn-plan-id" type="hidden" value="' + wdnEsc(id || '') + '">' +
         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">' +
-        field('wdn-plan-name', 'Plan name', p.name || '', 'text') + field('wdn-plan-fee', 'Monthly fee (₦)', p.monthlyFee || '', 'number') +
+        field('wdn-plan-name', 'Plan name', p.name || '', 'text') +
+        field('wdn-plan-fee', 'Monthly fee (₦)', p.monthlyFee === undefined ? '' : p.monthlyFee, 'number', 'Required') +
+        field('wdn-plan-yearly', 'Yearly fee (₦)', p.yearlyFee === undefined || p.yearlyFee === null ? '' : p.yearlyFee, 'number', 'Leave blank = no yearly option') +
         field('wdn-plan-branches', 'Max branches', p.maxBranches === undefined ? '' : p.maxBranches, 'number', '0 = unlimited') +
         field('wdn-plan-staff', 'Max staff', p.maxStaff === undefined ? '' : p.maxStaff, 'number', '0 = unlimited') +
         field('wdn-plan-products', 'Max products', p.maxProducts === undefined ? '' : p.maxProducts, 'number', '0 = unlimited') + '</div>' +
@@ -136,8 +153,12 @@ async function wdnSavePlan() {
     const existingId = v('wdn-plan-id');
     const name = v('wdn-plan-name');
     const fee = parseFloat(v('wdn-plan-fee')), mb = parseInt(v('wdn-plan-branches')), ms = parseInt(v('wdn-plan-staff')), mp = parseInt(v('wdn-plan-products'));
+    const yearlyRaw = v('wdn-plan-yearly');
+    const yearlyFee = yearlyRaw === '' ? null : parseFloat(yearlyRaw);
     if (!name) { alert("Give the plan a name."); return; }
     if (isNaN(fee) || fee < 0) { alert("Enter the monthly fee (0 or more)."); return; }
+    if (yearlyFee !== null && (isNaN(yearlyFee) || yearlyFee < 0)) { alert("Enter the yearly fee (0 or more), or leave it blank to disable yearly billing."); return; }
+    if (yearlyFee !== null && yearlyFee > 0 && yearlyFee < fee * 12 && !confirm('The yearly fee (' + wdnMoney(yearlyFee) + ') is less than 12 × monthly (' + wdnMoney(fee * 12) + ').\n\nThat is a discount — okay?')) return;
     if ([mb, ms, mp].some(function (x) { return isNaN(x) || x < 0; })) { alert("Enter the limits as whole numbers. Use 0 for unlimited."); return; }
 
     let id = existingId;
@@ -147,6 +168,8 @@ async function wdnSavePlan() {
         while (wdnPlans[id]) { id = base + '-' + i++; }
     }
     const plan = { name: name, monthlyFee: fee, maxBranches: mb, maxStaff: ms, maxProducts: mp };
+    if (yearlyFee !== null && yearlyFee > 0) plan.yearlyFee = yearlyFee;
+
     try {
         const updates = {};
         updates['billingSettings/plans/' + id] = plan;
@@ -182,6 +205,18 @@ async function wdnApplyPlan(storeId) {
     } catch (e) { alert("Failed: " + e.message); }
 }
 
+// v37: set the store's billing cycle (monthly / yearly) without going through a payment request
+async function wdnApplyCycle(storeId) {
+    const sel = document.getElementById('wdn-detail-cycle');
+    const cycle = sel ? sel.value : 'monthly';
+    try {
+        await firebase.database().ref('billing/' + storeId + '/cycle').set(cycle === 'yearly' ? 'yearly' : null);
+        if (typeof wdsReload === 'function') { try { await wdsReload(); } catch (e) {} }
+        alert('Billing cycle set to ' + (cycle === 'yearly' ? 'yearly (12 months)' : 'monthly') + '.');
+        wdnOpenDetail(storeId);
+    } catch (e) { alert('Failed: ' + e.message); }
+}
+
 // =====================================================================
 // SUPER ADMIN — STORE DETAIL PAGE
 // =====================================================================
@@ -192,7 +227,7 @@ function wdnRow(label, value) {
 }
 function wdnMeterValue(count, max) {
     const over = count !== null && wdnLimitReached(count, max);
-    return '<strong style="color:' + (over ? '#b91c1c' : '#0f172a') + ';">' + (count === null || count === undefined ? '?' : count) + '</strong> of ' + wdnUnl(max) + (over ? ' ⚠ at limit' : '');
+    return '<strong style="color:' + (over ? '#b91c1c' : '#0f172a') + ';">' + (count === null ||once count === undefined ? '?' : count) + '</strong> of ' + wdnUnl(max) + (over ? ' ⚠ at limit' : '');
 }
 function wdnUsageHtml(u) {
     return wdnRow('Sales this month', (u.capped ? u.salesMonth + '+' : u.salesMonth) + ' · ' + (u.capped ? 'at least ' : '') + wdnMoney(u.revenueMonth)) + wdnRow('Last sale', wdnAgo(u.lastSaleAt));
@@ -207,7 +242,7 @@ async function wdnOpenDetail(id) {
 
     const quick = function (p) { return wdnWithTimeout(p, 20000).catch(function () { return null; }); };
     const root = firebase.database().ref('stores/' + id);
-    const got = await Promise.all([quick(root.child('staff').once('value')), quick(root.child('branches').once('value')), quick(root.child('address').once('value')), quick(wdnLoadPlans())]);
+    const got = await Promise.all([quick(root.child('staff').once('value')), quick(root.child('branches').('value')), quick(root.child('address').once('value')), quick(wdnLoadPlans())]);
     if (wdnDetailId !== id) return;                                   
 
     const staffSnap = got[0], branchSnap = got[1], addrSnap = got[2];
@@ -243,10 +278,15 @@ async function wdnOpenDetail(id) {
 
     const pays = typeof wdsPaymentsOf === 'function' ? wdsPaymentsOf(st.billing).slice(0, 5) : [];
     const payRows = pays.length === 0 ? '<div style="font-size:12px; color:#64748b;">No payments recorded yet.</div>' : pays.map(function (p) {
-        return wdnRow(wdnPretty(p.paidDate) + ' · ' + wdnEsc(p.method || ''), wdnMoney(p.amount) + ' → due ' + wdnPretty(p.dueAfter));
+        return wdnRow(wdnPretty(p.paidDate) + ' · ' + wdnEsc(p.method || '') + (p.cycle === 'yearly' ? ' (yearly)' : ''), wdnMoney(p.amount) + ' → due ' + wdnPretty(p.dueAfter));
     }).join('');
 
     const act = function (a, label, style) { return '<button data-id="' + eid + '" onclick="wdnAct(\'' + a + '\', this.dataset.id)" style="padding:7px 11px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #cbd5e1; background:#f8fafc; ' + (style || '') + '">' + label + '</button>'; };
+
+    // v37: show plan's yearly fee (if any) and the store's current billing cycle
+    const cycleRow = plan
+        ? wdnRow('Billing cycle', (b.cycle === 'yearly' ? '<strong>Yearly</strong>' : 'Monthly') + (wdnNum(plan.yearlyFee) > 0 ? ' <span style="color:#64748b;">· yearly ' + wdnMoney(plan.yearlyFee) + '</span>' : ''))
+        : '';
 
     const html =
         '<div style="margin-bottom:8px;"><small style="color:#64748b;">' + eid + '</small> ' +
@@ -254,10 +294,18 @@ async function wdnOpenDetail(id) {
         (b.trial ? '<span style="background:#ede9fe; color:#6d28d9; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">FREE TRIAL</span>' : '') + '</div>' +
         sec('Contact', wdnRow('Phone', wdnEsc(st.phone || '—')) + wdnRow('Address', wdnEsc((addrSnap && addrSnap.val()) || '—')) + wdnRow('Registered', wdnPretty(st.createdAt)) + wdnRow('Last active', wdnAgo(st.lastActiveAt))) +
         sec('Plan &amp; billing',
-            wdnRow('Plan', plan ? '<strong>' + wdnEsc(plan.name) + '</strong>' : 'none') + wdnRow('Monthly fee', b.monthlyFee ? wdnMoney(b.monthlyFee) : '—') + wdnRow('Payment', dueText) +
+            wdnRow('Plan', plan ? '<strong>' + wdnEsc(plan.name) + '</strong>' : 'none') +
+            wdnRow('Monthly fee', b.monthlyFee ? wdnMoney(b.monthlyFee) : '—') +
+            (plan && wdnNum(plan.yearlyFee) > 0 ? wdnRow('Yearly fee', wdnMoney(plan.yearlyFee)) : '') +
+            cycleRow +
+            wdnRow('Payment', dueText) +
             (b.lastPaidDate ? wdnRow('Last paid', wdnPretty(b.lastPaidDate) + ' (' + wdnMoney(b.lastPaidAmount) + ')') : '') +
             '<div style="display:flex; gap:6px; margin-top:8px;"><select id="wdn-detail-plan" style="flex:1; padding:7px; border:1px solid #cbd5e1; border-radius:6px;">' + planOptions + '</select>' +
-            '<button data-id="' + eid + '" onclick="wdnApplyPlan(this.dataset.id)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#0284c7; color:#fff; border:none;">Apply plan</button></div>') +
+            '<button data-id="' + eid + '" onclick="wdnApplyPlan(this.dataset.id)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#0284c7; color:#fff; border:none;">Apply plan</button></div>' +
+            '<div style="display:flex; gap:6px; margin-top:6px;"><select id="wdn-detail-cycle" style="flex:1; padding:7px; border:1px solid #cbd5e1; border-radius:6px;">' +
+            '<option value="monthly"' + (b.cycle !== 'yearly' ? ' selected' : '') + '>Monthly billing</option>' +
+            '<option value="yearly"' + (b.cycle === 'yearly' ? ' selected' : '') + '>Yearly billing (12 months)</option></select>' +
+            '<button data-id="' + eid + '" onclick="wdnApplyCycle(this.dataset.id)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#0284c7; color:#fff; border:none;">Set cycle</button></div>') +
         sec('Usage' + (plan ? ' vs plan limits' : ''),
             wdnRow('Branches', branchSnap ? wdnMeterValue(branchKeys.length, lim.maxBranches) : '?') +
             wdnRow('Staff', wdnMeterValue(staffSnap ? staff.length : null, lim.maxStaff)) +
@@ -516,7 +564,8 @@ function wdnAttach() {
             const base = prev(st) || '';
             const planId = st.billing && st.billing.plan;
             const plan = planId && wdnPlans[planId] ? wdnPlans[planId] : null;
-            const planLine = plan ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(plan.name) + ' plan · ' + wdnPlanText(plan) + '</span>' : (planId ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(planId) + ' plan</span>' : '');
+            const cycleTag = st.billing && st.billing.cycle === 'yearly' ? ' <span style="background:#dbeafe; color:#1e40af; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:8px;">YEARLY</span>' : '';
+            const planLine = plan ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(plan.name) + ' plan · ' + wdnPlanText(plan) + cycleTag + '</span>' : (planId ? '<br><span style="color:#0e7490;">📋 ' + wdnEsc(planId) + ' plan' + cycleTag + '</span>' : '');
             return base + planLine + '<br><button data-id="' + wdnEsc(st.id) + '" onclick="wdnOpenDetail(this.dataset.id)" style="margin-top:6px; padding:5px 12px; font-size:11px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #bae6fd; background:#f0f9ff; color:#0369a1;">👁 Details</button>';
         };
         wrapped.__wdn = true;
