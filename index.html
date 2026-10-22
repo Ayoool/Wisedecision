@@ -104,7 +104,7 @@
             gap: 3px;
         }
 
-        /* === LOGO: ONE SOLID BLUE, BIG W === */
+        /* === LOGO === */
         .logo {
             font-size: 22px;
             font-weight: 900;
@@ -181,6 +181,7 @@
             color: white;
             background: linear-gradient(135deg, #0f766e, #0284c7);
             box-shadow: 0 8px 20px rgba(15,118,110,0.18);
+            border: none;
         }
 
         .btn-register:hover {
@@ -192,6 +193,7 @@
             color: white;
             background: #16a34a;
             box-shadow: 0 8px 20px rgba(22,163,74,0.18);
+            border: none;
         }
 
         .btn-whatsapp:hover {
@@ -283,17 +285,17 @@
         .activation-notice {
             max-width: 750px;
             margin: 28px auto;
-            padding: 17px 20px;
-            background: #fffbeb;
-            border: 1px solid #fde68a;
+            padding: 16px 20px;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
             border-radius: 12px;
-            color: #78350f;
+            color: #0369a1;
             font-size: 14px;
-            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.08);
-        }
-
-        .activation-notice span {
-            font-weight: 800;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 15px rgba(2, 132, 199, 0.05);
         }
 
         .hero-cta {
@@ -499,6 +501,7 @@
             font-weight: 800;
             color: #0f766e;
             margin-bottom: 15px;
+            letter-spacing: 1px;
         }
 
         .step-card h3 {
@@ -536,6 +539,7 @@
         .card h3 {
             font-size: 18px;
             margin-bottom: 12px;
+            color: #0f172a;
         }
 
         .card p {
@@ -605,25 +609,26 @@
             font-size: 13px;
         }
 
-        /* NEW HORIZONTAL PRICING LIST */
+        /* PROFESSIONAL PRICING LIST */
         .pricing-list {
             max-width: 900px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 20px;
         }
 
         .pricing-row {
             background: white;
             border: 1px solid #e2e8f0;
             border-radius: 16px;
-            padding: 25px 30px;
+            padding: 28px 35px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            box-shadow: 0 10px 30px rgba(15,23,42,0.04);
+            box-shadow: 0 8px 25px rgba(15,23,42,0.03);
             transition: all 0.3s ease;
+            position: relative;
         }
 
         .pricing-row:hover {
@@ -632,23 +637,54 @@
             transform: translateY(-3px);
         }
 
-        .pricing-info h3 {
-            font-size: 20px;
-            color: #0f766e;
-            margin-bottom: 4px;
+        .pricing-row.popular {
+            border: 2px solid #0f766e;
+            box-shadow: 0 12px 30px rgba(15,118,110,0.12);
+        }
+
+        .popular-badge {
+            position: absolute;
+            top: -12px;
+            left: 35px;
+            background: #0f766e;
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
             text-transform: uppercase;
+            padding: 4px 12px;
+            border-radius: 20px;
             letter-spacing: 0.5px;
         }
 
-        .pricing-info p {
-            color: #64748b;
-            font-size: 15px;
+        .pricing-info h3 {
+            font-size: 20px;
+            color: #0f172a;
+            margin-bottom: 6px;
+            font-weight: 800;
+        }
+
+        .pricing-features {
+            display: flex;
+            gap: 15px;
+            color: #475569;
+            font-size: 14px;
+            flex-wrap: wrap;
+        }
+
+        .pricing-features span::before {
+            content: "•";
+            color: #94a3b8;
+            margin-right: 15px;
+        }
+        .pricing-features span:first-child::before {
+            content: "";
+            margin-right: 0;
         }
 
         .pricing-action {
             display: flex;
             align-items: center;
-            gap: 25px;
+            gap: 30px;
         }
 
         .pricing-price {
@@ -659,7 +695,7 @@
         }
 
         .pricing-price span {
-            font-size: 14px;
+            font-size: 13px;
             color: #64748b;
             font-weight: 500;
         }
@@ -884,6 +920,11 @@
             .hero > p {
                 font-size: 16px;
             }
+            
+            .activation-notice {
+                flex-direction: column;
+                text-align: center;
+            }
 
             section:not(.hero):not(.final-cta) {
                 padding: 60px 5%;
@@ -901,7 +942,17 @@
                 flex-direction: column;
                 align-items: flex-start;
                 gap: 20px;
-                padding: 20px;
+                padding: 25px;
+            }
+
+            .pricing-features {
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .pricing-features span::before {
+                content: "•";
+                margin-right: 8px;
             }
 
             .pricing-action {
@@ -979,7 +1030,7 @@
 <!-- HERO -->
 <section class="hero">
     <div class="hero-badge">
-        🇳🇬 Cloud Business Management Software for Nigeria
+        Cloud Business Management Software for Nigeria
     </div>
     <h1>
         Run Your Enterprise Smarter with
@@ -991,15 +1042,12 @@
         and thermal receipts from one platform.
     </p>
     <div class="activation-notice">
-        ⚠️ <span>Note:</span>
-        You need an <span>Activation Code</span> before you can successfully
-        register your business.
-        Click below to request yours instantly on WhatsApp.
+        <strong>Important:</strong> You need an Activation Code before you can successfully register your business. Click below to request yours instantly via WhatsApp.
     </div>
     <div class="hero-cta">
         <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20to%20register%20my%20business%20on%20Wise%20Decision%20POS."
            target="_blank" rel="noopener" class="btn-whatsapp">
-            💬 Get Activation Code on WhatsApp
+            Get Activation Code
         </a>
         <a href="app.html?action=register" class="btn-register action-link">
             Register Business
@@ -1019,7 +1067,7 @@
             <div class="mockup-url">https://ayoool.github.io/Wisedecision/dashboard</div>
         </div>
         <div class="mockup-body">
-            <h3 style="font-size: 18px; color: #0f172a; margin-bottom: 5px;">📊 Wise Decision Enterprise Cloud Portal</h3>
+            <h3 style="font-size: 18px; color: #0f172a; margin-bottom: 5px;">Wise Decision Enterprise Cloud Portal</h3>
             <p style="font-size: 14px; color: #64748b;">Live multi-branch inventory, sales tracking, and thermal receipt management.</p>
             <div class="mockup-grid">
                 <div class="mockup-card">
@@ -1075,14 +1123,14 @@
 
 <!-- FEATURES -->
 <section>
-    <h2>Wise Decision POS Features</h2>
+    <h2>Core Features</h2>
     <p class="section-description">
         Business management tools designed to help you organize your everyday
         operations from one platform.
     </p>
     <div class="grid">
         <div class="card">
-            <h3>📦 Multi-Branch Tracking</h3>
+            <h3>Multi-Branch Tracking</h3>
             <p>
                 Monitor stock levels, sales activity and overall business
                 performance across multiple store branches from one
@@ -1090,35 +1138,35 @@
             </p>
         </div>
         <div class="card">
-            <h3>🖨️ Thermal Receipt Printing</h3>
+            <h3>Thermal Receipt Printing</h3>
             <p>
                 Generate clean, professional receipts for your customers
                 with compatible thermal receipt printers.
             </p>
         </div>
         <div class="card">
-            <h3>👥 Role-Based Staff Access</h3>
+            <h3>Role-Based Staff Access</h3>
             <p>
                 Assign controlled Admin and Staff access to help protect
                 sensitive business information and manage employee activity.
             </p>
         </div>
         <div class="card">
-            <h3>🔄 Easy Sales Returns</h3>
+            <h3>Easy Sales Returns</h3>
             <p>
                 Process customer refunds and product returns while keeping
                 sales and inventory records organized.
             </p>
         </div>
         <div class="card">
-            <h3>📊 Supplier & Stock Tracking</h3>
+            <h3>Supplier & Stock Tracking</h3>
             <p>
                 Keep records of incoming supplies, supplier information
                 and product quantities so your inventory stays organized.
             </p>
         </div>
         <div class="card">
-            <h3>☁️ Cloud Business Management</h3>
+            <h3>Cloud Accessibility</h3>
             <p>
                 Access your business management system through supported
                 web browsers on phones, tablets, laptops and PCs.
@@ -1129,26 +1177,26 @@
 
 <!-- BUSINESS TYPES -->
 <section>
-    <h2>Businesses That Can Use Wise Decision POS</h2>
+    <h2>Built for Your Industry</h2>
     <p class="section-description">
         Wise Decision POS can be used by businesses that need organized
         sales, inventory and day-to-day business management.
     </p>
     <div class="business-grid">
         <div class="business-card">
-            <h3>💊 Pharmacies</h3>
+            <h3>Pharmacies</h3>
             <p>Manage products, sales and inventory from one business system.</p>
         </div>
         <div class="business-card">
-            <h3>🛒 Retail Stores</h3>
+            <h3>Retail Stores</h3>
             <p>Record everyday transactions and monitor store inventory.</p>
         </div>
         <div class="business-card">
-            <h3>🍾 Beverage & Wine Stores</h3>
+            <h3>Beverage & Wine Stores</h3>
             <p>Track products, sales, stock quantities and transactions.</p>
         </div>
         <div class="business-card">
-            <h3>🏪 Supermarkets</h3>
+            <h3>Supermarkets</h3>
             <p>Organize products, sales and inventory for everyday operations.</p>
         </div>
     </div>
@@ -1162,25 +1210,25 @@
     </p>
     <div class="devices-grid">
         <div class="device-badge">
-            <h4>📱 Smartphones</h4>
+            <h4>Smartphones</h4>
             <p>Run your store through a supported mobile browser.</p>
         </div>
         <div class="device-badge">
-            <h4>🖥️ Tablets / iPads</h4>
+            <h4>Tablets / iPads</h4>
             <p>Convenient layout for counter and store operations.</p>
         </div>
         <div class="device-badge">
-            <h4>💻 Laptops & PCs</h4>
+            <h4>Laptops & PCs</h4>
             <p>Full management view for detailed business operations.</p>
         </div>
         <div class="device-badge">
-            <h4>🖨️ Thermal Printers</h4>
+            <h4>Thermal Printers</h4>
             <p>Compatible thermal printing setups for customer receipts.</p>
         </div>
     </div>
 </section>
 
-<!-- NEW HORIZONTAL PRICING LIST -->
+<!-- PROFESSIONAL PRICING LIST -->
 <section id="pricing">
     <h2>Simple, Transparent Pricing</h2>
     <p class="section-description">
@@ -1192,7 +1240,11 @@
         <div class="pricing-row">
             <div class="pricing-info">
                 <h3>BASIC</h3>
-                <p>1 branch · 2 staff · 500 products</p>
+                <div class="pricing-features">
+                    <span>1 Branch</span>
+                    <span>2 Staff Accounts</span>
+                    <span>Standard Support</span>
+                </div>
             </div>
             <div class="pricing-action">
                 <div class="pricing-price">₦5,000<span>/month</span></div>
@@ -1200,11 +1252,16 @@
             </div>
         </div>
 
-        <!-- BUSINESS PLAN -->
-        <div class="pricing-row">
+        <!-- BUSINESS PLAN (Popular) -->
+        <div class="pricing-row popular">
+            <div class="popular-badge">Most Popular</div>
             <div class="pricing-info">
                 <h3>BUSINESS</h3>
-                <p>1 branch · 3 staff · 3,500 products</p>
+                <div class="pricing-features">
+                    <span>1 Branch</span>
+                    <span>3 Staff Accounts</span>
+                    <span>Priority Support</span>
+                </div>
             </div>
             <div class="pricing-action">
                 <div class="pricing-price">₦7,000<span>/month</span></div>
@@ -1216,7 +1273,11 @@
         <div class="pricing-row">
             <div class="pricing-info">
                 <h3>PROFESSIONAL</h3>
-                <p>2 branches · 5 staff · 7,000 products</p>
+                <div class="pricing-features">
+                    <span>2 Branches</span>
+                    <span>5 Staff Accounts</span>
+                    <span>Advanced Analytics</span>
+                </div>
             </div>
             <div class="pricing-action">
                 <div class="pricing-price">₦15,000<span>/month</span></div>
@@ -1228,7 +1289,11 @@
         <div class="pricing-row">
             <div class="pricing-info">
                 <h3>ENTERPRISE</h3>
-                <p>5 branches · 7 staff · 10,000 products</p>
+                <div class="pricing-features">
+                    <span>5 Branches</span>
+                    <span>7 Staff Accounts</span>
+                    <span>Dedicated Manager</span>
+                </div>
             </div>
             <div class="pricing-action">
                 <div class="pricing-price">₦25,000<span>/month</span></div>
@@ -1319,7 +1384,7 @@
     <div class="final-cta-buttons">
         <a href="https://wa.me/2349168140710?text=Hello%20Wise,%20I%20want%20to%20get%20an%20activation%20code%20for%20Wise%20Decision%20POS."
            target="_blank" rel="noopener" class="btn-whatsapp">
-            💬 Contact Wise Decision
+            Contact Wise Decision
         </a>
         <a href="app.html?action=register" class="btn-register action-link">
             Get Started
