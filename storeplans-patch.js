@@ -1,4 +1,4 @@
-// ==================== STOREPLANS-PATCH-FIX (v1) ====================
+// ==================== STOREPLANS-PATCH-FIX (v2) ====================
 // Drop-in fix for storeplans-patch.js v34. Load AFTER storeplans-patch.js (defer).
 //
 //   1. saveBranch wrapper is now null-safe (no throw when #edit-branch-id is
@@ -7,8 +7,10 @@
 //      %, etc. no longer break the shallow count).
 //   3. The planLimits realtime listener is detached on logout / store switch,
 //      so it no longer leaks across login sessions.
+//   4. Injects the "📋 Plans" button directly next to "Billing settings" 
+//      on the Super Admin screen so it's always visible.
 
-console.log("Wise Decision storeplans-patch-fix.js — v1 loaded");
+console.log("Wise Decision storeplans-patch-fix.js — v2 loaded");
 
 (function () {
     'use strict';
@@ -50,7 +52,7 @@ console.log("Wise Decision storeplans-patch-fix.js — v1 loaded");
             if (!currentStoreId || currentStoreId === 'SUPER_ADMIN') return;
             var sid = currentStoreId;
 
-            // Detach any prior listener before attaching a new one (this is the fix)
+            // Detach any prior listener before attaching a new one
             if (_limitsRef) {
                 try { _limitsRef.off(); } catch (e) {}
                 _limitsRef = null;
@@ -93,16 +95,7 @@ console.log("Wise Decision storeplans-patch-fix.js — v1 loaded");
 
     // ================================================================
     // Fix #1 — saveBranch wrapper must be null-safe
-    //
-    // Two install paths, because we don't know whether the base file's
-    // 1200ms wdnAttach timer has fired yet:
-    //   (a) If it hasn't fired yet, override wdnWrap so the fixed factory is
-    //       installed instead of the buggy one.
-    //   (b) If it has already fired, wrap the buggy wrapper with a try/catch
-    //       that repairs the guard's two inputs and retries once.
     // ================================================================
-
-    // (a) Future installs: substitute the fixed factory
     var _origWdnWrap = window.wdnWrap;
     if (typeof _origWdnWrap === 'function') {
         window.wdnWrap = function (name, factory) {
@@ -111,7 +104,6 @@ console.log("Wise Decision storeplans-patch-fix.js — v1 loaded");
         };
     }
 
-    // (b) Install already happened: wrap the buggy wrapper with a safety net
     if (typeof window.saveBranch === 'function' && window.saveBranch.__wdn) {
         var _buggy = window.saveBranch;
         var _retried = false;
@@ -132,11 +124,10 @@ console.log("Wise Decision storeplans-patch-fix.js — v1 loaded");
                 return _buggy.apply(this, arguments);
             }
         };
-        _safe.__wdn = true;                // keep wdnWrap from re-wrapping us
+        _safe.__wdn = true;
         window.saveBranch = _safe;
     }
 
-    // Same limit semantics as the original, but with proper null guards
     function _fixedSaveBranchFactory(prev) {
         return function () {
             var editEl = document.getElementById('edit-branch-id');
@@ -151,4 +142,50 @@ console.log("Wise Decision storeplans-patch-fix.js — v1 loaded");
             return prev.apply(this, arguments);
         };
     }
+
+    // ================================================================
+    // Fix #4 — Inject the "Plans" Button directly into the layout
+    // ================================================================
+    function injectPlansButton() {
+        if (typeof currentUserRole === 'undefined' || currentUserRole !== 'SuperAdmin') return;
+        if (document.getElementById('wdn-btn-plans')) return; // Already exists
+
+        // Find the "Billing settings" button to anchor next to it
+        const allButtons = Array.from(document.querySelectorAll('button, .menu-btn, a, div[onclick]'));
+        const targetBtn = 
+            allButtons.find(b => b.textContent.trim().includes('Billing settings')) ||
+            allButtons.find(b => b.textContent.trim().includes('Reminders'));
+
+        if (!targetBtn) return; // Wait for UI to load
+
+        // Create the button
+        const btn = document.createElement('button');
+        btn.id = 'wdn-btn-plans';
+        btn.className = targetBtn.className; // Match exact styling
+        if (targetBtn.style.cssText) {
+            btn.style.cssText = targetBtn.style.cssText;
+        }
+        btn.style.marginLeft = '6px';
+        btn.textContent = '📋 Plans';
+        
+        btn.onclick = function(e) {
+            e.preventDefault();
+            if (typeof window.wdnOpenPlans === 'function') {
+                window.wdnOpenPlans();
+            } else {
+                alert('Plans module not ready. Check console for errors.');
+            }
+        };
+
+        // Insert it right next to Billing settings
+        if (targetBtn.parentNode) {
+            targetBtn.parentNode.insertBefore(btn, targetBtn.nextSibling);
+            console.log('[plans-button] Successfully injected next to:', targetBtn.textContent.trim());
+        }
+    }
+
+    // Run immediately, then poll every 1 second to catch UI re-renders
+    injectPlansButton();
+    setInterval(injectPlansButton, 1000);
+
 })();
