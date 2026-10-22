@@ -5,18 +5,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!document.getElementById('customer-shop-view')) {
         const shopHTML = `
             <style>
-                /* Force the shop view to sit on top of everything and cover the screen */
-                #customer-shop-view { 
-                    position: fixed !important; 
-                    top: 0 !important; 
-                    left: 0 !important; 
-                    width: 100vw !important; 
-                    height: 100vh !important; 
-                    background: #f8fafc !important; 
-                    z-index: 999999 !important; 
-                    overflow-y: auto !important; 
-                    display: none; 
-                }
+                #customer-shop-view { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; background: #f8fafc !important; z-index: 999999 !important; overflow-y: auto !important; display: none; }
                 .shop-header { background: #0284c7; color: white; padding: 15px 20px; text-align: center; position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
                 .shop-header h2 { margin: 0; font-size: 18px; }
                 .back-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
@@ -101,29 +90,30 @@ document.addEventListener("DOMContentLoaded", function() {
         document.body.insertAdjacentHTML('beforeend', shopHTML);
     }
 
-    // 2. The MutationObserver (Security Guard)
-    const observer = new MutationObserver(function(mutations) {
-        const regBtn = Array.from(document.querySelectorAll('button, a')).find(el => el.innerText.includes('Register New Business'));
-        
-        if (regBtn && !document.getElementById('customer-shop-btn-injected')) {
-            const shopBtn = document.createElement('button');
-            shopBtn.id = 'customer-shop-btn-injected';
-            shopBtn.className = 'menu-btn';
-            shopBtn.style = 'margin-top: 15px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; width: 100%; font-weight: bold; border-radius: 10px; padding: 15px; cursor: pointer; font-size: 14px;';
-            shopBtn.innerHTML = '🛒 Shop as a Customer (Order Ahead)';
+    // 2. The Bulldog Approach: Check every second if the button exists
+    setInterval(function() {
+        const authCard = document.querySelector('.auth-card');
+        if (authCard) {
+            // Look for the Register button inside the auth card
+            const regBtn = Array.from(authCard.querySelectorAll('button, a')).find(el => el.innerText.includes('Register New Business'));
             
-            shopBtn.onclick = function() {
-                document.getElementById('customer-shop-view').style.display = 'block';
-                document.body.style.overflow = 'hidden'; // Stop background scrolling
-            };
+            if (regBtn && !document.getElementById('customer-shop-btn-injected')) {
+                const shopBtn = document.createElement('button');
+                shopBtn.id = 'customer-shop-btn-injected';
+                shopBtn.className = 'menu-btn';
+                shopBtn.style = 'margin-top: 15px; background: #fef3c7; color: #b45309; border: 1px solid #fde68a; width: 100%; font-weight: bold; border-radius: 10px; padding: 15px; cursor: pointer; font-size: 14px; z-index: 99999; position: relative; display: block;';
+                shopBtn.innerHTML = '🛒 Shop as a Customer (Order Ahead)';
+                
+                shopBtn.onclick = function() {
+                    document.getElementById('customer-shop-view').style.display = 'block';
+                    document.body.style.overflow = 'hidden';
+                };
 
-            if (regBtn.parentNode) {
+                // Insert it right after the Register button
                 regBtn.parentNode.insertBefore(shopBtn, regBtn.nextSibling);
             }
         }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
+    }, 1000); // 1000ms = 1 second
 });
 
 
@@ -139,7 +129,6 @@ function loadCustomerStore() {
     if (!storeIdInput) { errorMsg.innerText = "Please enter a Store ID."; errorMsg.style.display = 'block'; return; }
     errorMsg.style.display = 'none';
     
-    // Check if firebase is loaded
     if (typeof firebase === 'undefined') {
         alert("System is still loading. Please wait a moment and try again.");
         return;
