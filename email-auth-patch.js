@@ -1,13 +1,16 @@
-// ==================== WISE DECISION EMAIL AUTH PATCH (v5) ====================
+// ==================== WISE DECISION EMAIL AUTH PATCH (v6) ====================
 // Load LAST, after auth-patch.js (defer).
 //
+// v6: Overdue check at sign-in. A store that is more than "Grace days" (Billing settings, default 3) past its due date
+//     is set to locked in the database and turned away with a pointer to "Renew or pay subscription". The Super Admin
+//     is never blocked. If the due date cannot be read (offline, slow), the sign-in continues.
 // v5: A suspended (locked) store can no longer sign in; it is told to use "Renew or pay subscription" instead.
 // v4: Removed the "First time? Set up email login" button from the login screen (every store is on email login now,
 //     and the database no longer lets signed-out visitors read the PINs it needed).
 // v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful sign-in.
 // v2: Reads store membership via userIndex/{uid} instead of scanning the entire stores/ tree.
 
-console.log("Wise Decision email-auth-patch.js v5 loaded");
+console.log("Wise Decision email-auth-patch.js v6 loaded");
 
 var WDAE_FAKE_DOMAIN = 'wd.invalid';
 var WDAE_SUPER_EMAIL_KEY = 'wd_super_email';
@@ -341,6 +344,29 @@ function wdaeChooseStore(memberships) {
     };
 }
 
+// ---------- Overdue check (v6) ----------
+function wdaeWithTimeout(p, ms) {
+    return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, ms); })]);
+}
+// Days past (due date + grace days). 0 = fine. Any read problem counts as fine, so a paying store is never locked out
+// by a bad connection.
+async function wdaeOverdueDays(storeId) {
+    const db = firebase.database();
+    const r = await wdaeWithTimeout(Promise.all([
+        db.ref('billing/' + storeId + '/dueDate').once('value'),
+        db.ref('billingSettings/graceDays').once('value')
+    ]), 6000);
+    const due = r[0].val();
+    if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return 0;
+    const g = r[1].val();
+    const grace = (g == null || isNaN(Number(g)) || Number(g) < 0) ? 3 : Number(g);
+    const d = new Date();
+    const today = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const p = due.split('-').map(Number);
+    const late = Math.round((today - Date.UTC(p[0], p[1] - 1, p[2])) / 86400000);
+    return late > grace ? late : 0;
+}
+
 async function wdaeCompleteLogin(resolved) {
     // A suspended (locked) store may not sign in. Turn it away with a pointer to the "Renew or pay subscription" link.
     // The Super Admin is never blocked. If the status cannot be read, do not block the sign-in.
@@ -353,6 +379,19 @@ async function wdaeCompleteLogin(resolved) {
                 return;
             }
         } catch (e) { /* could not read the status: let the sign-in continue */ }
+    }
+
+    // Overdue check (v6): past due date + grace days -> lock the store and turn the person away.
+    if (resolved.kind !== 'super') {
+        try {
+            const late = await wdaeOverdueDays(resolved.storeId);
+            if (late > 0) {
+                try { await firebase.database().ref('stores/' + resolved.storeId + '/status').set('suspended'); } catch (e) { /* still turn them away */ }
+                try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
+                wdaeSetLoginMessage('This store is locked because its subscription is ' + late + ' day' + (late === 1 ? '' : 's') + ' past due. Tap "Renew or pay subscription" on this screen to pay and restore access.', false);
+                return;
+            }
+        } catch (e) { /* could not check: let the sign-in continue */ }
     }
 
     // Record login for security analytics (Super Admin Security panel)
