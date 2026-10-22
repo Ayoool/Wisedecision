@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.13) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.14) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,6 +16,7 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v4.14: the Pending payments button now sits right after the "Security" button (falls back to before "Logout / Exit").
 // v4.13 FIX: a stale/hidden static copy of the Pending payments button (data-static="1" in app.html) is now removed and
 //   replaced by a visible one; the debug report no longer depends on #super-admin-view either.
 // v4.12 FIX: the Pending payments button now anchors straight to the visible "Logout / Exit" button and no longer
@@ -52,7 +53,7 @@
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.13 loaded");
+console.log("Wise Decision payments-patch.js — v4.14 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 var wdpAll = null;             // every payment request (Super Admin, kept live)
@@ -712,13 +713,20 @@ function wdpPendingAnchor(view) {
 function wdpAttachPendingButton() {
     const old = document.querySelectorAll('#wdp-btn-pending');
 
+    // Preferred spot: right after the "Security" button. Fallback: right before "Logout / Exit".
+    const security = wdpFindShownButton(document, function (t) { return t.indexOf('security') !== -1; });
     const exit = wdpFindShownButton(document, function (t) { return t.indexOf('logout / exit') !== -1; });
-    if (!exit) { old.forEach(function (b) { b.remove(); }); return; }
+    const anchor = security ? { el: security, where: 'afterend' } : (exit ? { el: exit, where: 'beforebegin' } : null);
+    if (!anchor) { old.forEach(function (b) { b.remove(); }); return; }
 
     wdpStartListener();
 
-    // Already one copy, right before Logout / Exit: just refresh its label and count
-    if (old.length === 1 && old[0].nextElementSibling === exit && wdpIsShown(old[0])) { wdpUpdateBadge(); return; }
+    // Already one copy in the right place and visible: just refresh its label and count
+    if (old.length === 1 && wdpIsShown(old[0]) &&
+        (anchor.where === 'afterend' ? anchor.el.nextElementSibling === old[0] : old[0].nextElementSibling === anchor.el)) {
+        wdpUpdateBadge();
+        return;
+    }
 
     old.forEach(function (b) { b.remove(); });
     const b = document.createElement('button');
@@ -726,7 +734,7 @@ function wdpAttachPendingButton() {
     b.className = 'menu-btn';
     b.style.cssText = 'width:auto; margin:0; padding:8px 12px; font-size:12px; font-weight:bold; border:1px solid #bbf7d0;';
     b.onclick = wdpOpenPending;
-    exit.insertAdjacentElement('beforebegin', b);
+    anchor.el.insertAdjacentElement(anchor.where, b);
     wdpUpdateBadge();
 }
 
@@ -741,7 +749,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.13)\n' +
+            alert('Pending payments button check (payments-patch v4.14)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
