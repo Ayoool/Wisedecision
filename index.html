@@ -1343,6 +1343,14 @@
             }, 650);
         });
     });
+
+    // FIX: Ensure spinner is removed when the page loads or is restored from browser cache (e.g. logging out and coming back)
+    window.addEventListener('pageshow', function(event) {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+    });
 </script>
 
 </body>
