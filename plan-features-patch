@@ -1,0 +1,156 @@
+// ==================== WISE DECISION PLAN FEATURES PATCH (v1) ====================
+// Load AFTER storeplans-patch.js and payments-patch.js (defer), and BEFORE/AFTER the order patches (either order works).
+//
+// Lets the Super Admin decide which stores get the "Customer orders" feature:
+//   * Plans editor: a "🛒 Customer orders" tick box. It is copied into each store's planLimits whenever a plan is
+//     saved, applied, or approved from a payment request.
+//   * Store Details page: a per-store override (Follow plan / Always ON / Always OFF) saved as
+//     stores/{id}/customerOrdersOverride.
+//   * Store side: window.wdfCOState is true / false / null (still checking). The order patches use it to show or
+//     hide the sidebar button, the Settings card and publishing. Database rules enforce it for customers.
+
+console.log("Wise Decision plan-features-patch.js v1 loaded");
+
+// ---------- Copy the flag into a store's planLimits ----------
+window.wdnLimitsOf = function (planId, plan) {
+    return { planId: planId, name: plan.name, maxBranches: wdnNum(plan.maxBranches), maxStaff: wdnNum(plan.maxStaff), maxProducts: wdnNum(plan.maxProducts), customerOrders: plan.customerOrders === true };
+};
+window.wdpLimitsOf = function (planId, plan) {
+    return { planId: planId, name: plan.name, maxBranches: wdpNum(plan.maxBranches), maxStaff: wdpNum(plan.maxStaff), maxProducts: wdpNum(plan.maxProducts), customerOrders: plan.customerOrders === true };
+};
+
+// ---------- Plans editor: tick box ----------
+window.wdnPlanForm = function (id, p) {
+    p = p || {};
+    const field = function (fid, label, value, type, hint) {
+        return '<div><label style="font-size:11px; font-weight:bold;">' + label + '</label>' +
+            '<input id="' + fid + '" type="' + (type || 'text') + '" value="' + wdnEsc(value) + '" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; box-sizing:border-box;">' +
+            (hint ? '<div style="font-size:10px; color:#94a3b8;">' + hint + '</div>' : '') + '</div>';
+    };
+    return '<div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">' +
+        '<div style="font-weight:bold; font-size:13px; margin-bottom:8px;">' + (id ? 'Edit plan' : 'New plan') + '</div>' +
+        '<input id="wdn-plan-id" type="hidden" value="' + wdnEsc(id || '') + '">' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">' +
+        field('wdn-plan-name', 'Plan name', p.name || '', 'text') +
+        field('wdn-plan-fee', 'Monthly fee (₦)', p.monthlyFee === undefined ? '' : p.monthlyFee, 'number', 'Required') +
+        field('wdn-plan-yearly', 'Yearly fee (₦)', p.yearlyFee === undefined || p.yearlyFee === null ? '' : p.yearlyFee, 'number', 'Leave blank = no yearly option') +
+        field('wdn-plan-branches', 'Max branches', p.maxBranches === undefined ? '' : p.maxBranches, 'number', '0 = unlimited') +
+        field('wdn-plan-staff', 'Max staff', p.maxStaff === undefined ? '' : p.maxStaff, 'number', '0 = unlimited') +
+        field('wdn-plan-products', 'Max products', p.maxProducts === undefined ? '' : p.maxProducts, 'number', '0 = unlimited') + '</div>' +
+        '<label style="display:flex; gap:8px; align-items:center; font-size:13px; margin:4px 0 12px; cursor:pointer;"><input id="wdn-plan-co" type="checkbox"' + (p.customerOrders === true ? ' checked' : '') + '> 🛒 Includes Customer orders (order page, tracking IDs, Customer Orders screen)</label>' +
+        '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdnSavePlan()">' + (id ? 'Save changes' : 'Create plan') + '</button></div>';
+};
+
+window.wdnSavePlan = async function () {
+    const v = function (id) { return document.getElementById(id).value.trim(); };
+    const existingId = v('wdn-plan-id');
+    const name = v('wdn-plan-name');
+    const fee = parseFloat(v('wdn-plan-fee')), mb = parseInt(v('wdn-plan-branches')), ms = parseInt(v('wdn-plan-staff')), mp = parseInt(v('wdn-plan-products'));
+    const yearlyRaw = v('wdn-plan-yearly');
+    const yearlyFee = yearlyRaw === '' ? null : parseFloat(yearlyRaw);
+    const coBox = document.getElementById('wdn-plan-co');
+    if (!name) { alert("Give the plan a name."); return; }
+    if (isNaN(fee) || fee < 0) { alert("Enter the monthly fee (0 or more)."); return; }
+    if (yearlyFee !== null && (isNaN(yearlyFee) || yearlyFee < 0)) { alert("Enter the yearly fee (0 or more), or leave it blank to disable yearly billing."); return; }
+    if (yearlyFee !== null && yearlyFee > 0 && yearlyFee < fee * 12 && !confirm('The yearly fee (' + wdnMoney(yearlyFee) + ') is less than 12 × monthly (' + wdnMoney(fee * 12) + ').\n\nThat is a discount — okay?')) return;
+    if ([mb, ms, mp].some(function (x) { return isNaN(x) || x < 0; })) { alert("Enter the limits as whole numbers. Use 0 for unlimited."); return; }
+
+    let id = existingId;
+    if (!id) {
+        id = wdnSlug(name);
+        let base = id, i = 2;
+        while (wdnPlans[id]) { id = base + '-' + i++; }
+    }
+    const plan = { name: name, monthlyFee: fee, maxBranches: mb, maxStaff: ms, maxProducts: mp, customerOrders: !!(coBox && coBox.checked) };
+    if (yearlyFee !== null && yearlyFee > 0) plan.yearlyFee = yearlyFee;
+
+    try {
+        const updates = {};
+        updates['billingSettings/plans/' + id] = plan;
+        wdnStoresOnPlan(id).forEach(function (s) { updates['stores/' + s.id + '/planLimits'] = wdnLimitsOf(id, plan); });
+        await firebase.database().ref().update(updates);
+        const n = wdnStoresOnPlan(id).length;
+        alert(existingId ? ('Plan saved.' + (n ? ' The ' + n + ' store' + (n === 1 ? ' on it now has' : 's on it now have') + ' the new limits and features. Their monthly fees were not changed.' : '')) : 'Plan created. Assign it to a store from the store\'s 👁 Details page.');
+        wdnOpenPlans();
+    } catch (e) { alert("Could not save: " + e.message); }
+};
+
+// ---------- Store Details page: per-store override ----------
+async function wdfInjectOverride(id) {
+    try { if (wdnDetailId !== id) return; } catch (e) { return; }
+    var anchor = document.getElementById('wdn-detail-cycle');
+    if (!anchor || document.getElementById('wdf-co-row')) return;
+    var row = document.createElement('div');
+    row.id = 'wdf-co-row';
+    row.style.cssText = 'margin-top:10px; border-top:1px dashed #e2e8f0; padding-top:8px;';
+    row.innerHTML = '<div style="font-size:12px; color:#94a3b8;">Loading customer orders setting...</div>';
+    anchor.parentElement.insertAdjacentElement('afterend', row);
+    var ov = null, plan = false;
+    try {
+        var db = firebase.database();
+        var r = await Promise.all([db.ref('stores/' + id + '/customerOrdersOverride').once('value'), db.ref('stores/' + id + '/planLimits/customerOrders').once('value')]);
+        ov = r[0].val(); plan = r[1].val() === true;
+    } catch (e) { row.innerHTML = '<div style="font-size:12px; color:#b45309;">Could not read the customer orders setting.</div>'; return; }
+    if (wdnDetailId !== id || !document.getElementById('wdf-co-row')) return;
+    var eff = ov === 'on' ? true : (ov === 'off' ? false : plan);
+    var eid = (typeof wdnEsc === 'function') ? wdnEsc(id) : id;
+    row.innerHTML = '<div style="font-size:12px; font-weight:bold; margin-bottom:2px;">🛒 Customer orders: <span style="color:' + (eff ? '#166534' : '#991b1b') + ';">' + (eff ? 'ON' : 'OFF') + '</span></div>' +
+        '<div style="font-size:11px; color:#64748b; margin-bottom:6px;">This store\'s plan ' + (plan ? 'includes' : 'does not include') + ' it.</div>' +
+        '<div style="display:flex; gap:6px;"><select id="wdf-co-select" style="flex:1; padding:7px; border:1px solid #cbd5e1; border-radius:6px;">' +
+        '<option value="follow"' + (!ov ? ' selected' : '') + '>Follow the plan</option>' +
+        '<option value="on"' + (ov === 'on' ? ' selected' : '') + '>Always ON for this store</option>' +
+        '<option value="off"' + (ov === 'off' ? ' selected' : '') + '>Always OFF for this store</option></select>' +
+        '<button data-id="' + eid + '" onclick="wdfSetOverride(this.dataset.id)" style="padding:7px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; background:#0284c7; color:#fff; border:none;">Set</button></div>';
+}
+async function wdfSetOverride(id) {
+    var sel = document.getElementById('wdf-co-select');
+    var val = sel ? sel.value : 'follow';
+    try {
+        await firebase.database().ref('stores/' + id + '/customerOrdersOverride').set(val === 'follow' ? null : val);
+        alert('Saved. Customer orders is now ' + (val === 'on' ? 'always ON' : (val === 'off' ? 'always OFF' : 'following the plan')) + ' for this store.');
+        var row = document.getElementById('wdf-co-row'); if (row) row.remove();
+        wdfInjectOverride(id);
+    } catch (e) { alert('Failed: ' + ((e && (e.code || e.message)) || 'error')); }
+}
+(function () {
+    var prev = window.wdnFillSlowParts;
+    if (typeof prev !== 'function' || prev.__wdf) return;
+    var wrapped = function (id) {
+        var r = prev.apply(this, arguments);
+        try { wdfInjectOverride(id); } catch (e) { console.warn(e); }
+        return r;
+    };
+    wrapped.__wdf = true;
+    window.wdnFillSlowParts = wrapped;
+})();
+
+// ---------- Store side: is Customer orders on for this store? ----------
+window.wdfCOState = null;      // true = on, false = off, null = still checking / not a store login
+var wdfSid = null, wdfAt = 0;
+async function wdfRefreshCO() {
+    var sid = null;
+    try { sid = currentStoreId; } catch (e) {}
+    if (!sid || sid === 'SUPER_ADMIN') { window.wdfCOState = null; wdfSid = sid; return; }
+    var key = 'wd_co_' + sid;
+    if (wdfSid !== sid) {
+        window.wdfCOState = null;
+        try { var c = localStorage.getItem(key); if (c !== null) window.wdfCOState = (c === '1'); } catch (e) {}   // remembered answer while offline
+    }
+    wdfSid = sid;
+    try {
+        var db = firebase.database();
+        var r = await Promise.all([db.ref('stores/' + sid + '/customerOrdersOverride').once('value'), db.ref('stores/' + sid + '/planLimits/customerOrders').once('value')]);
+        var ov = r[0].val(), plan = r[1].val() === true;
+        var on = ov === 'on' ? true : (ov === 'off' ? false : plan);
+        window.wdfCOState = on;
+        try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {}
+    } catch (e) { if (window.wdfCOState === null) window.wdfCOState = false; }
+    wdfAt = Date.now();
+    try { if (typeof wdsoAttach === 'function') wdsoAttach(); } catch (e) {}
+    try { if (typeof wdcoDrawCard === 'function') wdcoDrawCard(true); } catch (e) {}
+}
+setInterval(function () {
+    var sid = null;
+    try { sid = currentStoreId; } catch (e) {}
+    if (sid !== wdfSid || (sid && sid !== 'SUPER_ADMIN' && Date.now() - wdfAt > 60000)) wdfRefreshCO();
+}, 2000);
