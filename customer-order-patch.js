@@ -12,7 +12,7 @@
 //
 // Needs the database rules for publicCatalog and customerOrders (see the rules snippet).
 
-console.log("Wise Decision customer-order-patch.js v4 loaded");
+console.log("Wise Decision customer-order-patch.js v5 loaded");
 
 var WDCO_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 var wdco = { sid: '', name: '', list: [], byKey: {}, qty: {}, unit: {}, q: '', busy: false };
@@ -295,7 +295,8 @@ async function wdcoPublish() {
 async function wdcoDrawCard(force) {
     if (currentUserRole !== 'Admin' || !currentStoreId || currentStoreId === 'SUPER_ADMIN') return;
     var ws = document.getElementById('workspace-content');
-    if (!ws || !document.getElementById('settings-store-name')) { var gone = document.getElementById('wdco-card'); if (gone) gone.remove(); return; }
+    // Only show on the Settings page itself (the hidden settings template also contains this id)
+    if (!ws || !ws.querySelector('#settings-store-name')) { var gone = document.getElementById('wdco-card'); if (gone) gone.remove(); return; }
     var card = document.getElementById('wdco-card');
     if (card && card.parentElement === ws && !force) return;
     if (!card) {
