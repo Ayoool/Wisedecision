@@ -12,7 +12,7 @@
 //
 // Needs the database rules for publicCatalog and customerOrders (see the rules snippet).
 
-console.log("Wise Decision customer-order-patch.js v5 loaded");
+console.log("Wise Decision customer-order-patch.js v6 loaded");
 
 var WDCO_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 var wdco = { sid: '', name: '', list: [], byKey: {}, qty: {}, unit: {}, q: '', busy: false };
@@ -72,6 +72,7 @@ async function wdcoLoad(raw) {
     var v;
     try { v = (await wdcoTimeout(firebase.database().ref('publicCatalog/' + id).once('value'), 15000)).val(); }
     catch (e) {
+        if (e && e.code === 'PERMISSION_DENIED') { wdcoAsk('Online ordering is not available for this store.', id); return; }
         wdcoModal('🛒 Order goods', '<div style="color:#b91c1c; padding:8px;">Could not load. Check your internet and try again.</div>' +
             '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdcoLoad(\'' + wdcoEsc(id) + '\')">Try again</button>');
         return;
@@ -246,6 +247,7 @@ function wdcoHookLoginBuild() {
 async function wdcoPublish() {
     var sid = currentStoreId;
     if (!sid || currentUserRole !== 'Admin') return;
+    if (typeof window.wdfCOState !== 'undefined' && window.wdfCOState !== true) { alert('Customer orders are not included in your plan.'); return; }
     var btn = document.getElementById('wdco-publish-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Publishing...'; }
     try {
@@ -297,6 +299,8 @@ async function wdcoDrawCard(force) {
     var ws = document.getElementById('workspace-content');
     // Only show on the Settings page itself (the hidden settings template also contains this id)
     if (!ws || !ws.querySelector('#settings-store-name')) { var gone = document.getElementById('wdco-card'); if (gone) gone.remove(); return; }
+    var feat = window.wdfCOState;
+    if (typeof feat !== 'undefined' && feat === null) { var pend = document.getElementById('wdco-card'); if (pend) pend.remove(); return; }
     var card = document.getElementById('wdco-card');
     if (card && card.parentElement === ws && !force) return;
     if (!card) {
@@ -305,6 +309,12 @@ async function wdcoDrawCard(force) {
         card.style.cssText = 'max-width:600px; margin:20px 0; padding:25px; background:#ffffff; border-radius:8px; border:1px solid #e2e8f0; box-shadow:0 4px 6px rgba(0,0,0,0.02);';
     }
     if (card.parentElement !== ws) ws.appendChild(card);
+    if (typeof feat !== 'undefined' && feat === false) {
+        var up = (typeof wdnSupportLink === 'function') ? '<a href="' + wdnSupportLink('features such as customer orders') + '" target="_blank" style="display:block; text-align:center; margin-top:12px; padding:10px; border-radius:6px; background:#dcfce7; border:1px solid #86efac; color:#166534; font-weight:bold; text-decoration:none;">💬 Upgrade on WhatsApp</a>' : '';
+        card.innerHTML = '<h3 style="margin-top:0; margin-bottom:10px; color:#1e293b; border-bottom:2px solid #f1f5f9; padding-bottom:10px; font-size:16px;">🛒 Customer orders</h3>' +
+            '<div style="font-size:13px; color:#475569;">Customer ordering (order page and tracking IDs) is not included in your current plan.</div>' + up;
+        return;
+    }
     var sid = currentStoreId, info = 'Not published yet.';
     try {
         var u = (await wdcoTimeout(firebase.database().ref('publicCatalog/' + sid + '/updatedAt').once('value'), 8000)).val();
