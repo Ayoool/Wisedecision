@@ -11,7 +11,7 @@
 // Each item is charged in the unit the customer chose: Piece (sachet, capsule...) or Pack (carton, box...); Kg/g for items sold by weight.
 // Customers whose phone number matches a SAVED customer (Customers list) get WHOLESALE prices; everyone else pays retail.
 
-console.log("Wise Decision store-orders-patch.js v4 loaded");
+console.log("Wise Decision store-orders-patch.js v5 loaded");
 
 var wdso = { orders: {}, inv: null, invSid: '', invBranch: '', invAt: 0, loading: false, recon: {}, current: null, busy: false };
 
@@ -137,6 +137,7 @@ function wdsoBuild(o, inv, tier) {
 
 // ---------- Main screen: find by ID + open orders ----------
 function wdsoOpen() {
+    if (typeof window.wdfCOState !== 'undefined' && window.wdfCOState !== true) { alert('Customer orders are not included in your plan.'); return; }
     wdso.current = null;
     wdsoModal('📦 Customer Orders',
         '<label style="font-size:12px; font-weight:bold;">Tracking ID</label>' +
@@ -400,6 +401,7 @@ function wdsoAttachSidebar() {
     var wrap = document.getElementById('dashboard-main-wrapper');
     var old = document.querySelectorAll('#wdso-sidebar-btn');
     if (!wrap || !wdsoStoreUser()) { old.forEach(function (b) { b.remove(); }); return; }
+    if (typeof window.wdfCOState !== 'undefined' && window.wdfCOState !== true) { old.forEach(function (b) { b.remove(); }); return; }   // feature not on for this store
     var logout = wdsoFindShownButton(wrap, function (t) { return /logout$/.test(t); });
     if (!logout) return;
     var subs = document.getElementById('wdp-sidebar-btn');
