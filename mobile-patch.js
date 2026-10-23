@@ -1,20 +1,14 @@
-// ==================== WISE DECISION MOBILE LAYOUT PATCH (v1) ====================
-// Phones and small tablets only (screen width 820px or less). Desktop and laptop layouts are NOT changed.
-//
-//   * Top bar with a ☰ button and the store name; the long sidebar becomes a slide-in menu.
-//   * More room for the page: tighter padding, smaller headings, POS columns stacked.
-//   * Tables: smaller text and padding so more fits; they still scroll sideways.
-//   * Inputs at 16px so iPhone Safari does not zoom in when you tap a field.
-//   * Faster taps (no double-tap delay).
-// To undo: remove the <script src="mobile-patch.js"> line from app.html.
+// ==================== WISE DECISION MOBILE LAYOUT PATCH (v2) ====================
+// Phones and small tablets only (screen width 820px or less). Desktop layouts are NOT changed.
+// NEW in v2: Added a loading spinner overlay for menu navigation.
 
-console.log("Wise Decision mobile-patch.js v1 loaded");
+console.log("Wise Decision mobile-patch.js v2 loaded");
 
 (function () {
     var MAX = 820;
 
     var css = [
-        '#wd-mobile-bar, #wd-drawer-backdrop { display: none; }',
+        '#wd-mobile-bar, #wd-drawer-backdrop, #wd-loading-overlay { display: none; }',
         '@media (max-width: ' + MAX + 'px) {',
         '  html, body { overflow-x: hidden; -webkit-text-size-adjust: 100%; }',
         '  button, .menu-btn, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }',
@@ -55,6 +49,12 @@ console.log("Wise Decision mobile-patch.js v1 loaded");
         '  .auth-card { width: 92% !important; max-width: 420px !important; box-sizing: border-box !important; }',
         '  #super-admin-view > div { padding: 14px !important; }',
         '  [id$="-modal"] { padding: 10px !important; }',
+
+        /* Loading Spinner Overlay */
+        '  #wd-loading-overlay { display: flex; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); z-index: 9999; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }',
+        '  #wd-loading-overlay.wd-active { opacity: 1; pointer-events: auto; }',
+        '  .wd-spinner { width: 45px; height: 45px; border: 4px solid #e2e8f0; border-top: 4px solid #14b8a6; border-radius: 50%; animation: wd-spin 0.8s linear infinite; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }',
+        '  @keyframes wd-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }',
         '}'
     ].join('\n');
 
@@ -82,6 +82,16 @@ console.log("Wise Decision mobile-patch.js v1 loaded");
         if (sb && sb.classList.contains('wd-open')) closeDrawer(); else openDrawer();
     }
 
+    // --- Spinner Functions ---
+    function showSpinner() {
+        var loader = document.getElementById('wd-loading-overlay');
+        if (loader && isMobile()) loader.classList.add('wd-active');
+    }
+    function hideSpinner() {
+        var loader = document.getElementById('wd-loading-overlay');
+        if (loader) loader.classList.remove('wd-active');
+    }
+
     function sync() {
         var n = document.getElementById('wd-mb-name'), r = document.getElementById('wd-mb-role');
         var t = document.getElementById('dashboard-store-title'), l = document.getElementById('user-role-label');
@@ -92,6 +102,7 @@ console.log("Wise Decision mobile-patch.js v1 loaded");
     function ensure() {
         var wrap = document.getElementById('dashboard-main-wrapper');
         if (!wrap) return;
+        
         var bar = document.getElementById('wd-mobile-bar');
         if (!bar) {
             bar = document.createElement('div');
@@ -106,18 +117,31 @@ console.log("Wise Decision mobile-patch.js v1 loaded");
             bd.onclick = closeDrawer;
             wrap.appendChild(bd);
         }
+        // Inject spinner if it doesn't exist
+        if (!document.getElementById('wd-loading-overlay')) {
+            var loader = document.createElement('div');
+            loader.id = 'wd-loading-overlay';
+            loader.innerHTML = '<div class="wd-spinner"></div>';
+            document.body.appendChild(loader);
+        }
         sync();
     }
 
-    // Close the menu after any menu button is tapped (the page switch itself is handled by the app).
+    // Intercept menu clicks for drawer close + spinner
     document.addEventListener('click', function (e) {
         var b = e.target && e.target.closest ? e.target.closest('.sidebar .menu-btn') : null;
-        if (b && isMobile()) setTimeout(closeDrawer, 60);
+        if (b && isMobile()) {
+            showSpinner();
+            setTimeout(closeDrawer, 60);
+            // Hide spinner shortly after the DOM swaps views
+            setTimeout(hideSpinner, 450); 
+        }
     });
+    
     window.addEventListener('resize', function () { if (!isMobile()) closeDrawer(); });
 
     function start() { try { ensure(); } catch (e) { console.warn(e); } }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
     window.addEventListener('load', start);
-    setInterval(start, 1500);   // keeps the store name / role in the bar current after login or a sidebar rebuild
+    setInterval(start, 1500);   
 })();
