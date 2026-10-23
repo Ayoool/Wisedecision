@@ -3,21 +3,22 @@
 //
 // CUSTOMER SIDE (login page, no sign-in needed)
 //   * "🛒 Order goods" button on the login screen.
-//   * Customer types the Store ID, picks goods (names only, no prices), enters name + phone, and gets a TRACKING ID.
+//   * Customer types the Store ID, picks goods (sees retail prices, chooses piece or pack), enters name + phone, and gets a TRACKING ID.
 //   * Order is saved to customerOrders/{storeId}/{trackingId} with status "pending".
 //
 // STORE SIDE (Admin)
-//   * Settings page card: "Publish product list" copies product NAMES ONLY (no prices/costs/stock) from
+//   * Settings page card: "Publish product list" copies product NAMES and RETAIL prices only (never cost, wholesale or stock) from
 //     stores/{id}/inventory to publicCatalog/{id}, which customers can read.
 //
 // Needs the database rules for publicCatalog and customerOrders (see the rules snippet).
 
-console.log("Wise Decision customer-order-patch.js v1 loaded");
+console.log("Wise Decision customer-order-patch.js v4 loaded");
 
 var WDCO_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-var wdco = { sid: '', name: '', list: [], byKey: {}, qty: {}, q: '', busy: false };
+var wdco = { sid: '', name: '', list: [], byKey: {}, qty: {}, unit: {}, q: '', busy: false };
 
 function wdcoEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function wdcoMoney(n) { return '₦' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(); }
 function wdcoTimeout(p, ms) {
     return new Promise(function (resolve, reject) {
         var t = setTimeout(function () { reject(new Error('timeout')); }, ms);
@@ -79,10 +80,10 @@ async function wdcoLoad(raw) {
     wdco.sid = id;
     wdco.name = v.name || id;
     wdco.byKey = v.items;
-    wdco.list = Object.keys(v.items).map(function (k) { return { k: k, name: String((v.items[k] || {}).name || '') }; })
+    wdco.list = Object.keys(v.items).map(function (k) { var it = v.items[k] || {}; return { k: k, name: String(it.name || ''), price: Number(it.price) || 0, unit: String(it.unit || '') }; })
         .filter(function (x) { return x.name; })
         .sort(function (a, b) { return a.name.localeCompare(b.name); });
-    wdco.qty = {}; wdco.q = '';
+    wdco.qty = {}; wdco.unit = {}; wdco.q = '';
     try { localStorage.setItem('wdco_last_store', id); } catch (e) {}
     wdcoRenderForm();
 }
@@ -101,6 +102,15 @@ function wdcoRenderForm() {
     wdcoRenderSummary();
 }
 function wdcoSearch(v) { wdco.q = String(v || '').trim().toLowerCase(); wdcoRenderList(); }
+// A product can be sold by the piece (sachet, capsule...) or by the pack (carton, box...) when the shop set it up that way.
+function wdcoSplit(it) { return !!(it && !it.unit && Number(it.upp) > 1 && Number(it.packPrice) > 0); }
+function wdcoUnitOf(k) { var it = wdco.byKey[k] || {}; return wdcoSplit(it) && wdco.unit[k] === 'Pack' ? 'Pack' : 'Piece'; }
+function wdcoPriceOf(it, unit) { return unit === 'Pack' ? (Number(it.packPrice) || 0) : (Number(it.price) || 0); }
+function wdcoLabel(it, unit, qty) {
+    if (it.unit) return String(it.unit);
+    var n = unit === 'Pack' ? (it.bulk || 'Pack') : (it.base || 'Piece');
+    return Number(qty) === 1 ? n : n + 's';
+}
 function wdcoRenderList() {
     var el = document.getElementById('wdco-list');
     if (!el) return;
@@ -108,16 +118,25 @@ function wdcoRenderList() {
     var rows = wdco.list.filter(function (x) { return !q || x.name.toLowerCase().indexOf(q) !== -1; });
     var shown = rows.slice(0, 40);
     if (!shown.length) { el.innerHTML = '<div style="font-size:12px; color:#64748b; padding:6px 0;">' + (wdco.list.length ? 'No match. Try another word.' : 'No products available.') + '</div>'; return; }
-    el.innerHTML = '<div style="border:1px solid #e2e8f0; border-radius:8px; max-height:240px; overflow-y:auto;">' + shown.map(function (x) {
-        var n = wdco.qty[x.k] || 0, k = wdcoEsc(x.k);
-        return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px;">' +
-            '<span style="flex:1;">' + wdcoEsc(x.name) + '</span>' +
+    el.innerHTML = '<div style="border:1px solid #e2e8f0; border-radius:8px; max-height:300px; overflow-y:auto;">' + shown.map(function (x) {
+        var it = wdco.byKey[x.k] || {}, n = wdco.qty[x.k] || 0, k = wdcoEsc(x.k);
+        var split = wdcoSplit(it), unit = wdcoUnitOf(x.k), pr = wdcoPriceOf(it, unit);
+        var priceLine = pr > 0 ? wdcoMoney(pr) + (it.unit ? ' / ' + wdcoEsc(it.unit) : (split ? ' / ' + wdcoEsc(wdcoLabel(it, unit, 1)) : ' each')) : '';
+        var hint = split ? ' <span style="color:#64748b;">(1 ' + wdcoEsc(it.bulk || 'Pack') + ' = ' + Number(it.upp) + ' ' + wdcoEsc((it.base || 'Piece') + 's') + ')</span>' : '';
+        var toggle = split ? '<div style="display:flex; gap:6px; margin-top:5px;">' + ['Piece', 'Pack'].map(function (u) {
+            var on = unit === u;
+            return '<button data-k="' + k + '" data-u="' + u + '" onclick="wdcoSetUnit(this.dataset.k,this.dataset.u)" style="padding:3px 12px; font-size:11px; border-radius:12px; cursor:pointer; border:1px solid ' + (on ? '#0284c7' : '#cbd5e1') + '; background:' + (on ? '#0284c7' : '#fff') + '; color:' + (on ? '#fff' : '#334155') + ';">' + wdcoEsc(wdcoLabel(it, u, 1)) + '</button>';
+        }).join('') + '</div>' : '';
+        return '<div style="padding:7px 10px; border-bottom:1px solid #f1f5f9; font-size:13px;">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
+            '<span style="flex:1;">' + wdcoEsc(x.name) + (priceLine ? '<br><small style="color:#166534;">' + priceLine + '</small>' + hint : '') + '</span>' +
             '<span style="display:flex; align-items:center; gap:4px;">' +
             '<button data-k="' + k + '" onclick="wdcoStep(this.dataset.k,-1)" style="width:28px; height:28px; border-radius:6px; border:1px solid #cbd5e1; background:#f8fafc; cursor:pointer;">−</button>' +
             '<input data-k="' + k + '" type="number" min="0" value="' + n + '" oninput="wdcoSet(this.dataset.k,this.value)" style="width:48px; text-align:center; padding:4px; border:1px solid #cbd5e1; border-radius:6px;">' +
-            '<button data-k="' + k + '" onclick="wdcoStep(this.dataset.k,1)" style="width:28px; height:28px; border-radius:6px; border:none; background:#0284c7; color:#fff; cursor:pointer;">+</button></span></div>';
+            '<button data-k="' + k + '" onclick="wdcoStep(this.dataset.k,1)" style="width:28px; height:28px; border-radius:6px; border:none; background:#0284c7; color:#fff; cursor:pointer;">+</button></span></div>' + toggle + '</div>';
     }).join('') + '</div>' + (rows.length > shown.length ? '<div style="font-size:11px; color:#64748b; margin-top:4px;">Showing ' + shown.length + ' of ' + rows.length + '. Type to narrow down.</div>' : '');
 }
+function wdcoSetUnit(k, u) { wdco.unit[k] = u === 'Pack' ? 'Pack' : 'Piece'; wdcoRenderList(); wdcoRenderSummary(); }
 function wdcoSet(k, v) {
     var n = Math.max(0, Math.min(9999, parseInt(v) || 0));
     if (n > 0) wdco.qty[k] = n; else delete wdco.qty[k];
@@ -129,10 +148,15 @@ function wdcoRenderSummary() {
     if (!el) return;
     var keys = Object.keys(wdco.qty);
     if (!keys.length) { el.innerHTML = '<div style="font-size:12px; color:#64748b;">Nothing chosen yet.</div>'; return; }
-    el.innerHTML = '<div style="font-weight:bold; font-size:13px; margin-bottom:4px;">Your order (' + keys.length + ' item' + (keys.length === 1 ? '' : 's') + ')</div>' +
-        keys.map(function (k) {
-            return '<div style="display:flex; justify-content:space-between; gap:8px; font-size:12px; padding:2px 0;"><span>' + wdcoEsc((wdco.byKey[k] || {}).name || k) + '</span><span>× ' + wdco.qty[k] + '</span></div>';
-        }).join('');
+    var total = 0, unpriced = 0;
+    var rows = keys.map(function (k) {
+        var it = wdco.byKey[k] || {}, qty = wdco.qty[k], unit = wdcoUnitOf(k), pr = wdcoPriceOf(it, unit);
+        if (pr > 0) total += pr * qty; else unpriced++;
+        return '<div style="display:flex; justify-content:space-between; gap:8px; font-size:12px; padding:2px 0;"><span>' + wdcoEsc(it.name || k) + '</span><span style="white-space:nowrap;">× ' + qty + ' ' + wdcoEsc(wdcoLabel(it, unit, qty)) + (pr > 0 ? ' · ' + wdcoMoney(pr * qty) : '') + '</span></div>';
+    }).join('');
+    el.innerHTML = '<div style="font-weight:bold; font-size:13px; margin-bottom:4px;">Your order (' + keys.length + ' item' + (keys.length === 1 ? '' : 's') + ')</div>' + rows +
+        (total > 0 ? '<div style="display:flex; justify-content:space-between; font-weight:bold; border-top:1px solid #e2e8f0; margin-top:6px; padding-top:6px;"><span>Total' + (unpriced ? ' (priced items)' : '') + '</span><span>' + wdcoMoney(total) + '</span></div>' : '') +
+        '<div style="font-size:11px; color:#64748b; margin-top:4px;">Prices shown are retail. Registered customers get the shop\'s special price at the counter.</div>';
 }
 
 // ---------- Step 3: send ----------
@@ -147,7 +171,10 @@ async function wdcoSubmit() {
     if (keys.length > 40) { alert('Please order at most 40 different items at once.'); return; }
 
     var items = {};
-    keys.forEach(function (k) { items[k] = { name: String((wdco.byKey[k] || {}).name || k).slice(0, 190), qty: wdco.qty[k] }; });
+    keys.forEach(function (k) {
+        var it = wdco.byKey[k] || {}, unit = wdcoUnitOf(k);
+        items[k] = { name: String(it.name || k).slice(0, 190), qty: wdco.qty[k], unit: unit, unitName: String(wdcoLabel(it, unit, 1)).slice(0, 40) };
+    });
     var rec = { storeId: wdco.sid, name: name.slice(0, 90), phone: phone.slice(0, 25), items: items, status: 'pending', createdAt: new Date().toISOString() };
 
     wdco.busy = true;
@@ -170,14 +197,16 @@ async function wdcoSubmit() {
 }
 
 function wdcoDone(tid, rec) {
-    var lines = Object.keys(rec.items).map(function (k) { return rec.items[k].name + ' × ' + rec.items[k].qty; });
-    var text = 'My order at ' + wdco.name + '\nTracking ID: ' + tid + '\n' + lines.join('\n');
+    var lines = Object.keys(rec.items).map(function (k) { var r = rec.items[k]; return r.name + ' × ' + r.qty + (r.unitName ? ' ' + r.unitName + (r.qty === 1 || (wdco.byKey[k] || {}).unit ? '' : 's') : ''); });
+    var est = 0;
+    Object.keys(rec.items).forEach(function (k) { est += wdcoPriceOf(wdco.byKey[k] || {}, rec.items[k].unit === 'Pack' ? 'Pack' : 'Piece') * rec.items[k].qty; });
+    var text = 'My order at ' + wdco.name + '\nTracking ID: ' + tid + '\n' + lines.join('\n') + (est > 0 ? '\nTotal (retail): ' + wdcoMoney(est) : '');
     wdcoModal('✅ Order sent',
         '<div style="text-align:center; margin-bottom:12px;">' +
         '<div style="font-size:12px; color:#64748b;">Your tracking ID</div>' +
         '<div style="font-size:30px; font-weight:800; letter-spacing:2px; user-select:all; color:#166534;">' + wdcoEsc(tid) + '</div></div>' +
         '<div style="background:#f0fdf4; border:1px solid #bbf7d0; color:#166534; padding:10px; border-radius:8px; font-size:13px; margin-bottom:10px;">Go to <strong>' + wdcoEsc(wdco.name) + '</strong>, give them this ID and pay there. Take a screenshot or copy it so you do not lose it.</div>' +
-        '<div style="font-size:12px; color:#475569; margin-bottom:10px;">' + lines.map(wdcoEsc).join('<br>') + '</div>' +
+        '<div style="font-size:12px; color:#475569; margin-bottom:10px;">' + lines.map(wdcoEsc).join('<br>') + (est > 0 ? '<br><strong>Total (retail): ' + wdcoMoney(est) + '</strong>' : '') + '</div>' +
         '<button class="menu-btn btn-action-primary" style="justify-content:center; margin:0 0 8px;" data-t="' + wdcoEsc(text) + '" onclick="wdcoCopy(this.dataset.t)">📋 Copy my order details</button>' +
         '<button class="menu-btn" style="margin:0; justify-content:center; background:#f1f5f9; border:1px solid #cbd5e1;" onclick="wdcoClose()">Close</button>');
 }
@@ -222,7 +251,7 @@ async function wdcoPublish() {
     try {
         var db = firebase.database();
         var r = await Promise.all([db.ref('stores/' + sid + '/inventory').once('value'), db.ref('stores/' + sid + '/businessName').once('value')]);
-        var items = {}, seen = 0, sample = null, count = 0;
+        var items = {}, seen = 0, sample = null, count = 0, names = {};
         r[0].forEach(function (branch) {
             branch.forEach(function (pc) {
                 var p = pc.val();
@@ -230,8 +259,22 @@ async function wdcoPublish() {
                 seen++;
                 if (!sample) sample = Object.keys(p).join(', ');
                 var nm = String(p.name || p.productName || p.title || p.itemName || '').trim();
-                if (!nm || items[pc.key] || count >= 3000) return;
-                items[pc.key] = { name: nm.slice(0, 150) };
+                var nk = nm.toLowerCase().replace(/\s+/g, ' ');
+                if (!nm || names[nk] || items[pc.key] || count >= 3000) return;
+                names[nk] = true;
+                var price = 0, unit = '';
+                if (p.soldByWeight) { price = Number(p.price != null ? p.price : p.retailPrice) || 0; unit = String(p.weightUnit || 'Kg').toLowerCase(); }
+                else if (typeof getPiecePrice === 'function') { price = Number(getPiecePrice(p, 'Retail')) || 0; }
+                else { price = Number(p.price != null ? p.price : p.retailPrice) || 0; }
+                var entry = { name: nm.slice(0, 150), price: price, unit: unit };
+                var upp = p.soldByWeight ? 1 : (Number(p.unitsPerPack) || 1);
+                if (upp > 1) {
+                    entry.upp = upp;
+                    entry.packPrice = Number(p.price != null ? p.price : p.retailPrice) || 0;
+                    entry.base = String(p.baseUnitName || '').trim().slice(0, 30);
+                    entry.bulk = String(p.bulkUnitName || '').trim().slice(0, 30);
+                }
+                items[pc.key] = entry;
                 count++;
             });
         });
@@ -240,7 +283,7 @@ async function wdcoPublish() {
             return;
         }
         await db.ref('publicCatalog/' + sid).set({ name: r[1].val() || sid, updatedAt: new Date().toISOString(), count: count, items: items });
-        alert('Published ' + count + ' products (names only). Customers can now order from the login page with Store ID: ' + sid);
+        alert('Published ' + count + ' products (names and retail prices only). Customers can now order from the login page with Store ID: ' + sid);
     } catch (e) {
         alert('Could not publish: ' + ((e && (e.code || e.message)) || 'unknown error'));
     } finally {
@@ -269,7 +312,7 @@ async function wdcoDrawCard(force) {
     } catch (e) { info = 'Could not check status.'; }
     if (sid !== currentStoreId) return;
     card.innerHTML = '<h3 style="margin-top:0; margin-bottom:10px; color:#1e293b; border-bottom:2px solid #f1f5f9; padding-bottom:10px; font-size:16px;">🛒 Customer orders</h3>' +
-        '<div style="font-size:13px; color:#475569; margin-bottom:6px;">Customers pick goods from the login page (names only, no prices) and get a tracking ID to bring to the shop.</div>' +
+        '<div style="font-size:13px; color:#475569; margin-bottom:6px;">Customers pick goods from the login page (they see names and retail prices only) and get a tracking ID to bring to the shop.</div>' +
         '<div style="font-size:12px; color:#64748b; margin-bottom:10px;">Store ID to give customers: <strong>' + wdcoEsc(sid) + '</strong><br>' + wdcoEsc(info) + '</div>' +
         '<button id="wdco-publish-btn" class="menu-btn btn-action-primary" style="justify-content:center; margin:0;" onclick="wdcoPublish()">📤 Publish / refresh product list</button>';
 }
