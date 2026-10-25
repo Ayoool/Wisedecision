@@ -61,7 +61,7 @@ window.wdpEnsureBanner = async function () {
         // debug: logged in to a store but not counted as Admin -> say why, once
         if (wdbDebug && inApp && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdbDebugShown['guard:' + currentStoreId]) {
             wdbDebugShown['guard:' + currentStoreId] = true;
-            alert('Banner stopped early (v3)\nrole: ' + currentUserRole + '\nstore: ' + currentStoreId + '\nadmin: ' + !!isAdmin + '\ndismissed: ' + wdpBannerDismissed);
+            alert('Banner stopped early (v3)\nrole: ' + currentUserRole + '\nstore: ' + currentStoreId + '\nadmin: ' + !!isAdmin + '\ndismissed: n/a (v4.1 — banner not dismissible)');
         }
         return;
     }
