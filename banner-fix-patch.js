@@ -174,3 +174,16 @@ if (wdbDebug) {
             '\n' + info);
     }, 2000);
 }
+
+// ==================== THE SELF-POLLING FIX ====================
+// Keep checking for the banner every 5 seconds, regardless of the URL.
+// This fixes the issue where the main app forgets to call wdpEnsureBanner after login.
+if (!window._wdbSelfPoller) {
+    window._wdbSelfPoller = setInterval(function () {
+        if (typeof window.wdpEnsureBanner === 'function') {
+            window.wdpEnsureBanner().catch(function(e){
+                // Silently ignore errors so it doesn't break the app
+            });
+        }
+    }, 5000); // 5000ms = 5 seconds
+}
