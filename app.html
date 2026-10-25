@@ -1888,35 +1888,8 @@ window.addEventListener('load', function () {
     return result;
   };
 });
-</script>
-
-    <!-- Hide the extra dashboard cards (Payment type & Plan) -->
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var observer = new MutationObserver(function() {
-            var dash = document.getElementById('main-dashboard-view');
-            if (!dash) return;
-
-            var headings = dash.querySelectorAll('h3, h4, strong, b');
-            headings.forEach(function(el) {
-                if (el.textContent.includes('How do you take payment?') || el.textContent.includes('Your plan:')) {
-                    var card = el.closest('div[style*="background"]');
-                    if (card) {
-                        card.style.display = 'none';
-                    } else {
-                        el.parentElement.style.display = 'none';
-                    }
-                }
-            });
-        });
-
-        var dashContainer = document.getElementById('workspace-content') || document.body;
-        observer.observe(dashContainer, { childList: true, subtree: true });
-    });
-    </script>
-
-    <!-- Mobile layout patch (top bar + slide-in drawer, phones only) -->
-    <script src="mobile-patch.js?v=1" defer></script>
-
+ </script>
+   <!-- Mobile layout patch (top bar + slide-in drawer, phones only) -->
+    
 </body>
 </html>
