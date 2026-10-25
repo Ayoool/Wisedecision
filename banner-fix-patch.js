@@ -8,6 +8,7 @@
 //       of the screen (so it never fights the mobile top bar).
 //     * Each database read is separate; if "due soon days" cannot be read, 7 is used.
 //     * ?wdbanner=1 shows an on-screen report (phone has no console).
+// v4.1: the banner can no longer be closed. It goes away by itself once the payment is recorded and the due date moves out of the "due soon" window.
 console.log("Wise Decision banner-fix-patch.js — v4 loaded");
 
 var wdbDebugShown = {};
@@ -55,7 +56,7 @@ window.wdpEnsureBanner = async function () {
     const isAdmin = role === 'admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
     const inApp = wdbInApp();
 
-    if (!isAdmin || wdpBannerDismissed || !inApp) {
+    if (!isAdmin || !inApp) {
         if (old) old.remove();
         // debug: logged in to a store but not counted as Admin -> say why, once
         if (wdbDebug && inApp && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdbDebugShown['guard:' + currentStoreId]) {
@@ -107,7 +108,7 @@ window.wdpEnsureBanner = async function () {
     }
 
     const newHtml = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
-        '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
+        '</span>';
 
     const host = wdbFindHost();
     const inline = host.how !== 'fixed-bottom';
