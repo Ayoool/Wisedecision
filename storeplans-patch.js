@@ -1,4 +1,7 @@
-// ==================== WISE DECISION STORE DETAIL & PLANS (v38) ====================
+// ==================== WISE DECISION STORE DETAIL & PLANS (v39) ====================
+// v39: the "Your plan" card showed on the Dashboard after every login. wdnShowPlanCard checked for the settings screen
+//      with document.getElementById('settings-store-name'), which also matches the hidden Settings template in
+//      app.html. It now looks only inside #workspace-content.
 // v38: fixes typos that stopped the Super Admin Plans editor and card injection from working:
 //   * wdnModal0 -> wdnModal (typo). "SuperfAdmin" -> isSuperAdmin() (role string typo).
 //   * style;= typo, `.(value')` -> `.once('value')`, `||once count` -> `|| count`.
@@ -6,7 +9,7 @@
 //   * wdsExtraCardHtml wrap only replaces a real base function (no longer wipes out a patch that loads later).
 //   * wdnLoadPlans failures are logged and no longer block the store list from rendering.
 //   * MutationObserver added; setInterval slowed to 3s (matches payments-patch behaviour).
-console.log("✅ MASTER PLANS CODE LOADED (v38)");
+console.log("✅ MASTER PLANS CODE LOADED (v39)");
 
 var wdnPlans = {};
 var wdnLimits = null;
@@ -491,7 +494,8 @@ function wdnLoadLimits() {
 async function wdnShowPlanCard() {
     if (currentUserRole !== 'Admin') return;
     const ws = document.getElementById('workspace-content');
-    if (!ws || !document.getElementById('settings-store-name')) return;
+    // v39: look inside the workspace only (the hidden template in app.html also has this id)
+    if (!ws || !ws.querySelector('#settings-store-name')) return;
     let card = document.getElementById('wdn-plan-card');
     if (!wdnLimits) { if (card) card.style.display = 'none'; return; }
     if (!card) {
