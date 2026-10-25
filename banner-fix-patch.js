@@ -9,6 +9,9 @@
 console.log("Wise Decision banner-fix-patch.js — v2 loaded");
 
 var wdbDebugShown = {};
+if (/[?&]wdbanner=1/.test(location.search)) {
+    window.addEventListener('load', function () { alert('banner-fix-patch.js v2 is loaded'); });
+}
 
 function wdbDebugReport(sid, extra) {
     if (!/[?&]wdbanner=1/.test(location.search) || wdbDebugShown[sid]) return;
@@ -34,7 +37,15 @@ window.wdpEnsureBanner = async function () {
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
     const wrap = document.getElementById('dashboard-main-wrapper');
     const ws = document.getElementById('workspace-content');
-    if (!isAdmin || wdpBannerDismissed || !wrap || !wdpIsShown(wrap)) { if (old) old.remove(); return; }
+    if (!isAdmin || wdpBannerDismissed || !wrap || !wdpIsShown(wrap)) {
+        if (old) old.remove();
+        // debug mode: say once why we stopped, but only for a logged-in store (not on the login screen)
+        if (/[?&]wdbanner=1/.test(location.search) && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdbDebugShown['guard:' + currentStoreId] && wrap && wdpIsShown(wrap)) {
+            wdbDebugShown['guard:' + currentStoreId] = true;
+            alert('Banner stopped early (v2)\nrole: ' + currentUserRole + '\nstore: ' + currentStoreId + '\nadmin: ' + isAdmin + '\ndismissed: ' + wdpBannerDismissed);
+        }
+        return;
+    }
 
     if (wdpBanner.id !== currentStoreId || Date.now() - wdpBanner.at > 2 * 60 * 1000) {
         if (wdpBanner.loading) return;
