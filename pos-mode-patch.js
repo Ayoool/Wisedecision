@@ -1,5 +1,9 @@
-// ==================== WISE DECISION POS MODE PATCH (v31) ====================
+// ==================== WISE DECISION POS MODE PATCH (v32) ====================
 // Load LAST (after all the other patches), with `defer`.
+//
+// v32 FIX: the "How do you take payment?" card showed on the Dashboard after every login.
+//   The settings-screen check used document.getElementById('settings-store-name'), which also matches the hidden
+//   Settings template in app.html. It now looks only inside #workspace-content.
 //
 // Lets a store choose how payment is taken:
 //   • "With an Accountant" (default, exactly as before): staff send orders to the Accountant.
@@ -8,7 +12,7 @@
 // Admin and Accountant always get the Pay & Print button. The choice is saved per store
 // (Business Settings → "How do you take payment?") and applies to every device of that store.
 
-console.log("Wise Decision pos-mode-patch.js — v31 loaded");
+console.log("Wise Decision pos-mode-patch.js — v32 loaded");
 
 var wdpMode = 'accountant';      // 'accountant' | 'direct'
 var wdpLoadedFor = null;
@@ -59,7 +63,8 @@ function wdpApplyToPos() {
 function wdpApplyToSettings() {
     if (currentUserRole !== 'Admin') return;
     var ws = document.getElementById('workspace-content');
-    if (!ws || !document.getElementById('settings-store-name')) return;   // not the settings screen
+    // v32: look inside the workspace only (the hidden template in app.html also has this id)
+    if (!ws || !ws.querySelector('#settings-store-name')) return;   // not the settings screen
 
     var card = document.getElementById('wdp-settings-card');
     if (!card) {
