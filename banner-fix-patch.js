@@ -1,48 +1,66 @@
-// ==================== WISE DECISION BANNER FIX (v2) ====================
-// Load AFTER payments-patch.js. Replaces wdpEnsureBanner so the subscription reminder banner
-// shows on every dashboard type (inline in the workspace, or as a fixed bar when the workspace is hidden).
+// ==================== WISE DECISION BANNER FIX (v3) ====================
+// Load AFTER payments-patch.js. Replaces wdpEnsureBanner so the subscription reminder banner shows on every
+// dashboard type, including the mobile layout.
 //
-// v2: * Each database read is separate. If "due soon days" cannot be read (blocked by the rules), the banner
-//       uses 7 days instead of failing silently.
-//     * Failures are logged and retried after a pause (no more silent retry every 2 seconds).
-//     * Open the app with ?wdbanner=1 to get an on-screen report (phone has no console).
-console.log("Wise Decision banner-fix-patch.js — v2 loaded");
+// v3: * No longer depends on #dashboard-main-wrapper being visible (the mobile layout can hide/move it).
+//       "In the app" now means: the login, register and Super Admin screens are all hidden.
+//     * Banner goes at the top of the visible content area; if none is found it is a fixed bar at the BOTTOM
+//       of the screen (so it never fights the mobile top bar).
+//     * Each database read is separate; if "due soon days" cannot be read, 7 is used.
+//     * ?wdbanner=1 shows an on-screen report (phone has no console).
+console.log("Wise Decision banner-fix-patch.js — v3 loaded");
 
 var wdbDebugShown = {};
-if (/[?&]wdbanner=1/.test(location.search)) {
-    window.addEventListener('load', function () { alert('banner-fix-patch.js v2 is loaded'); });
+var wdbDebug = /[?&]wdbanner=1/.test(location.search);
+if (wdbDebug) window.addEventListener('load', function () { alert('banner-fix-patch.js v3 is loaded'); });
+
+function wdbVisible(el) { return !!(el && el.getClientRects().length > 0); }
+
+function wdbInApp() {
+    var ids = ['login-view', 'register-view', 'super-admin-view'];
+    for (var i = 0; i < ids.length; i++) if (wdbVisible(document.getElementById(ids[i]))) return false;
+    return true;
 }
 
-function wdbDebugReport(sid, extra) {
-    if (!/[?&]wdbanner=1/.test(location.search) || wdbDebugShown[sid]) return;
+// Where does the banner go? Top of the visible content area, else a fixed bar at the bottom.
+function wdbFindHost() {
+    var ws = document.getElementById('workspace-content');
+    if (wdbVisible(ws)) return { el: ws, how: 'workspace' };
+    var alt = document.querySelector('.main-content-area');
+    if (wdbVisible(alt)) return { el: alt, how: 'main-content-area' };
+    return { el: document.body, how: 'fixed-bottom' };
+}
+
+function wdbReport(sid, host) {
+    if (!wdbDebug || wdbDebugShown[sid]) return;
     wdbDebugShown[sid] = true;
     var b = wdpBanner || {};
     var s = wdpSubState(b.billing, wdpToday(), b.soon);
-    var wrap = document.getElementById('dashboard-main-wrapper');
-    var ws = document.getElementById('workspace-content');
-    alert('Banner check (v2)\n' +
+    alert('Banner check (v3)\n' +
         'role: ' + currentUserRole + '\nstore: ' + sid +
         '\ndueDate: ' + (b.billing ? b.billing.dueDate : 'not loaded') +
-        '\ntrial: ' + (b.billing ? b.billing.trial : '-') +
         '\ndue-soon days: ' + b.soon +
         '\nstate: ' + s.state + (s.days !== undefined ? ' (' + s.days + ' days)' : '') +
-        '\ndashboard shown: ' + wdpIsShown(wrap) + '\nworkspace shown: ' + wdpIsShown(ws) +
+        '\nin app: ' + wdbInApp() +
+        '\nwrapper shown: ' + wdbVisible(document.getElementById('dashboard-main-wrapper')) +
+        '\nworkspace shown: ' + wdbVisible(document.getElementById('workspace-content')) +
+        '\nbanner goes in: ' + host.how +
         '\ndueDate read error: ' + (b.error || 'none') +
-        '\ndue-soon read error: ' + (b.soonErr || 'none') +
-        (extra ? '\n' + extra : ''));
+        '\ndue-soon read error: ' + (b.soonErr || 'none'));
 }
 
 window.wdpEnsureBanner = async function () {
     const old = document.getElementById('wdp-banner');
-    const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
-    const wrap = document.getElementById('dashboard-main-wrapper');
-    const ws = document.getElementById('workspace-content');
-    if (!isAdmin || wdpBannerDismissed || !wrap || !wdpIsShown(wrap)) {
+    const role = String(currentUserRole || '').toLowerCase();
+    const isAdmin = role === 'admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
+    const inApp = wdbInApp();
+
+    if (!isAdmin || wdpBannerDismissed || !inApp) {
         if (old) old.remove();
-        // debug mode: say once why we stopped, but only for a logged-in store (not on the login screen)
-        if (/[?&]wdbanner=1/.test(location.search) && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdbDebugShown['guard:' + currentStoreId] && wrap && wdpIsShown(wrap)) {
+        // debug: logged in to a store but not counted as Admin -> say why, once
+        if (wdbDebug && inApp && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdbDebugShown['guard:' + currentStoreId]) {
             wdbDebugShown['guard:' + currentStoreId] = true;
-            alert('Banner stopped early (v2)\nrole: ' + currentUserRole + '\nstore: ' + currentStoreId + '\nadmin: ' + isAdmin + '\ndismissed: ' + wdpBannerDismissed);
+            alert('Banner stopped early (v3)\nrole: ' + currentUserRole + '\nstore: ' + currentStoreId + '\nadmin: ' + !!isAdmin + '\ndismissed: ' + wdpBannerDismissed);
         }
         return;
     }
@@ -52,7 +70,6 @@ window.wdpEnsureBanner = async function () {
         wdpBanner.loading = true;
         const sid = currentStoreId;
         const db = firebase.database();
-        // Each read on its own: one blocked path must not stop the others.
         const get = function (path) {
             return wdpTimeout(db.ref(path).once('value'), 10000).then(
                 function (snap) { return { ok: true, val: snap.val() }; },
@@ -63,18 +80,17 @@ window.wdpEnsureBanner = async function () {
             get('billing/' + sid + '/trial'),
             get('billingSettings/dueSoonDays')
         ]);
-        if (sid !== currentStoreId) { wdpBanner.loading = false; return; }   // store changed meanwhile
+        if (sid !== currentStoreId) { wdpBanner.loading = false; return; }
 
         const soon = (r[2].ok && r[2].val != null) ? wdpNum(r[2].val) : 7;
         if (!r[0].ok) {
             console.warn('Banner: cannot read billing/' + sid + '/dueDate —', r[0].err);
-            // remember the failure for 2 minutes instead of retrying every 2 seconds
             wdpBanner = { id: sid, at: Date.now(), loading: false, billing: null, soon: soon, error: r[0].err, soonErr: r[2].ok ? null : r[2].err };
         } else {
             if (!r[2].ok) console.warn('Banner: cannot read billingSettings/dueSoonDays (using 7) —', r[2].err);
             wdpBanner = { id: sid, at: Date.now(), loading: false, billing: { dueDate: r[0].val, trial: !!(r[1].ok && r[1].val) }, soon: soon, error: null, soonErr: r[2].ok ? null : r[2].err };
         }
-        wdbDebugReport(sid);
+        wdbReport(sid, wdbFindHost());
     }
     if (wdpBanner.id !== currentStoreId || !wdpBanner.billing) { if (old) old.remove(); return; }
 
@@ -93,21 +109,22 @@ window.wdpEnsureBanner = async function () {
     const newHtml = '<span>⏰ ' + wdpEsc(text) + '</span><span style="display:flex; gap:6px;"><button onclick="wdpOpenRenew(currentStoreId)" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:none; background:#0284c7; color:#fff;">💳 Renew now</button>' +
         '<button onclick="wdpBannerDismissed=true; this.closest(\'#wdp-banner\').remove();" style="padding:6px 10px; font-size:12px; border-radius:6px; cursor:pointer; border:1px solid ' + bd + '; background:#fff; color:' + col + ';">✕</button></span>';
 
-    const inline = !!(ws && wdpIsShown(ws));
-    const parent = inline ? ws : document.body;
-    const mode = inline ? 'inline' : 'fixed';
+    const host = wdbFindHost();
+    const inline = host.how !== 'fixed-bottom';
 
     let el = old;
     if (!el) { el = document.createElement('div'); el.id = 'wdp-banner'; }
-    if (el.parentElement !== parent || (inline && parent.firstChild !== el)) {
-        if (inline) parent.insertBefore(el, parent.firstChild); else parent.appendChild(el);
+    if (el.parentElement !== host.el || (inline && host.el.firstChild !== el)) {
+        if (inline) host.el.insertBefore(el, host.el.firstChild); else host.el.appendChild(el);
     }
 
     const base = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; background:' + bg + '; border:1px solid ' + bd + '; color:' + col + '; padding:10px 14px; border-radius:10px; font-size:13px; font-weight:bold;';
-    const newStyle = base + (inline ? 'margin-bottom:14px;' : 'position:fixed; top:8px; left:8px; right:8px; z-index:1200; box-shadow:0 6px 20px rgba(15,23,42,0.18);');
+    const newStyle = base + (inline
+        ? 'margin-bottom:14px;'
+        : 'position:fixed; left:10px; right:10px; bottom:calc(env(safe-area-inset-bottom, 0px) + 16px); z-index:1200; box-shadow:0 6px 20px rgba(15,23,42,0.22);');
 
-    if (el.dataset.sig !== text + '|' + bg + '|' + mode) {
-        el.dataset.sig = text + '|' + bg + '|' + mode;
+    if (el.dataset.sig !== text + '|' + bg + '|' + host.how) {
+        el.dataset.sig = text + '|' + bg + '|' + host.how;
         el.style.cssText = newStyle;
         el.innerHTML = newHtml;
     } else if (el.style.cssText !== newStyle) {
