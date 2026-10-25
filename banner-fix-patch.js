@@ -1,4 +1,4 @@
-// ==================== WISE DECISION BANNER FIX (v3) ====================
+// ==================== WISE DECISION BANNER FIX (v4) ====================
 // Load AFTER payments-patch.js. Replaces wdpEnsureBanner so the subscription reminder banner shows on every
 // dashboard type, including the mobile layout.
 //
@@ -8,11 +8,11 @@
 //       of the screen (so it never fights the mobile top bar).
 //     * Each database read is separate; if "due soon days" cannot be read, 7 is used.
 //     * ?wdbanner=1 shows an on-screen report (phone has no console).
-console.log("Wise Decision banner-fix-patch.js — v3 loaded");
+console.log("Wise Decision banner-fix-patch.js — v4 loaded");
 
 var wdbDebugShown = {};
 var wdbDebug = /[?&]wdbanner=1/.test(location.search);
-if (wdbDebug) window.addEventListener('load', function () { alert('banner-fix-patch.js v3 is loaded'); });
+if (wdbDebug) window.addEventListener('load', function () { alert('banner-fix-patch.js v4 is loaded'); });
 
 function wdbVisible(el) { return !!(el && el.getClientRects().length > 0); }
 
@@ -131,3 +131,45 @@ window.wdpEnsureBanner = async function () {
         el.style.cssText = newStyle;
     }
 };
+
+// ---------- v4 probe (only with ?wdbanner=1) ----------
+// 8 seconds after you are inside a store it runs the banner itself, then reports what it finds:
+// is our function still the active one, did it crash, does the banner exist, and is something hiding it.
+var wdbOurFn = window.wdpEnsureBanner;
+if (wdbDebug) {
+    var wdbProbeDone = false, wdbSince = 0;
+    setInterval(async function () {
+        if (wdbProbeDone) return;
+        if (!currentStoreId || currentStoreId === 'SUPER_ADMIN' || !wdbInApp()) { wdbSince = 0; return; }
+        if (!wdbSince) wdbSince = Date.now();
+        if (Date.now() - wdbSince < 8000) return;
+        wdbProbeDone = true;
+
+        var err = 'none';
+        try { await wdbOurFn(); } catch (e) { err = String((e && e.message) || e); }
+
+        var el = document.getElementById('wdp-banner');
+        var info = 'no banner element in the page';
+        if (el) {
+            var cs = getComputedStyle(el), r = el.getBoundingClientRect();
+            info = 'banner element EXISTS' +
+                '\nparent: ' + (el.parentElement ? (el.parentElement.id || el.parentElement.className || el.parentElement.tagName) : 'none') +
+                '\nshown on screen: ' + (el.getClientRects().length > 0) +
+                '\ndisplay: ' + cs.display + ' / visibility: ' + cs.visibility + ' / opacity: ' + cs.opacity +
+                '\nsize: ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' at top ' + Math.round(r.top);
+        }
+        var b = wdpBanner || {};
+        var s = wdpSubState(b.billing, wdpToday(), b.soon);
+        var same = (window.wdpEnsureBanner === wdbOurFn);
+        alert('Banner probe (v4)' +
+            '\nour function still active: ' + same +
+            (same ? '' : '\nREPLACED BY: ' + String(window.wdpEnsureBanner).replace(/\s+/g, ' ').slice(0, 70)) +
+            '\nwdpAttach: ' + (typeof wdpAttach) +
+            '\nrun error: ' + err +
+            '\nrole: ' + currentUserRole + ' / store: ' + currentStoreId +
+            '\ndueDate: ' + (b.billing ? b.billing.dueDate : 'not loaded') + ' / soon: ' + b.soon +
+            '\nstate: ' + s.state + (s.days !== undefined ? ' (' + s.days + 'd)' : '') +
+            '\nread errors: ' + (b.error || 'none') + ' / ' + (b.soonErr || 'none') +
+            '\n' + info);
+    }, 2000);
+}
