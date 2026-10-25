@@ -1,7 +1,33 @@
-// ==================== WISE DECISION BANNER FIX (v1) ====================
-// Load AFTER payments-patch.js (v4.18). Replaces wdpEnsureBanner so the subscription reminder banner
+// ==================== WISE DECISION BANNER FIX (v2) ====================
+// Load AFTER payments-patch.js. Replaces wdpEnsureBanner so the subscription reminder banner
 // shows on every dashboard type (inline in the workspace, or as a fixed bar when the workspace is hidden).
-console.log("Wise Decision banner-fix-patch.js — v1 loaded");
+//
+// v2: * Each database read is separate. If "due soon days" cannot be read (blocked by the rules), the banner
+//       uses 7 days instead of failing silently.
+//     * Failures are logged and retried after a pause (no more silent retry every 2 seconds).
+//     * Open the app with ?wdbanner=1 to get an on-screen report (phone has no console).
+console.log("Wise Decision banner-fix-patch.js — v2 loaded");
+
+var wdbDebugShown = {};
+
+function wdbDebugReport(sid, extra) {
+    if (!/[?&]wdbanner=1/.test(location.search) || wdbDebugShown[sid]) return;
+    wdbDebugShown[sid] = true;
+    var b = wdpBanner || {};
+    var s = wdpSubState(b.billing, wdpToday(), b.soon);
+    var wrap = document.getElementById('dashboard-main-wrapper');
+    var ws = document.getElementById('workspace-content');
+    alert('Banner check (v2)\n' +
+        'role: ' + currentUserRole + '\nstore: ' + sid +
+        '\ndueDate: ' + (b.billing ? b.billing.dueDate : 'not loaded') +
+        '\ntrial: ' + (b.billing ? b.billing.trial : '-') +
+        '\ndue-soon days: ' + b.soon +
+        '\nstate: ' + s.state + (s.days !== undefined ? ' (' + s.days + ' days)' : '') +
+        '\ndashboard shown: ' + wdpIsShown(wrap) + '\nworkspace shown: ' + wdpIsShown(ws) +
+        '\ndueDate read error: ' + (b.error || 'none') +
+        '\ndue-soon read error: ' + (b.soonErr || 'none') +
+        (extra ? '\n' + extra : ''));
+}
 
 window.wdpEnsureBanner = async function () {
     const old = document.getElementById('wdp-banner');
@@ -14,17 +40,32 @@ window.wdpEnsureBanner = async function () {
         if (wdpBanner.loading) return;
         wdpBanner.loading = true;
         const sid = currentStoreId;
-        try {
-            const db = firebase.database();
-            const r = await Promise.all([
-                wdpTimeout(db.ref('billing/' + sid + '/dueDate').once('value'), 10000),
-                wdpTimeout(db.ref('billing/' + sid + '/trial').once('value'), 10000),
-                wdpTimeout(db.ref('billingSettings/dueSoonDays').once('value'), 10000)
-            ]);
-            wdpBanner = { id: sid, at: Date.now(), loading: false, billing: { dueDate: r[0].val(), trial: !!r[1].val() }, soon: r[2].val() == null ? 7 : wdpNum(r[2].val()) };
-        } catch (e) { wdpBanner.loading = false; wdpBanner.at = Date.now() - 100 * 1000; return; }
+        const db = firebase.database();
+        // Each read on its own: one blocked path must not stop the others.
+        const get = function (path) {
+            return wdpTimeout(db.ref(path).once('value'), 10000).then(
+                function (snap) { return { ok: true, val: snap.val() }; },
+                function (e) { return { ok: false, err: String((e && (e.code || e.message)) || 'error') }; });
+        };
+        const r = await Promise.all([
+            get('billing/' + sid + '/dueDate'),
+            get('billing/' + sid + '/trial'),
+            get('billingSettings/dueSoonDays')
+        ]);
+        if (sid !== currentStoreId) { wdpBanner.loading = false; return; }   // store changed meanwhile
+
+        const soon = (r[2].ok && r[2].val != null) ? wdpNum(r[2].val) : 7;
+        if (!r[0].ok) {
+            console.warn('Banner: cannot read billing/' + sid + '/dueDate —', r[0].err);
+            // remember the failure for 2 minutes instead of retrying every 2 seconds
+            wdpBanner = { id: sid, at: Date.now(), loading: false, billing: null, soon: soon, error: r[0].err, soonErr: r[2].ok ? null : r[2].err };
+        } else {
+            if (!r[2].ok) console.warn('Banner: cannot read billingSettings/dueSoonDays (using 7) —', r[2].err);
+            wdpBanner = { id: sid, at: Date.now(), loading: false, billing: { dueDate: r[0].val, trial: !!(r[1].ok && r[1].val) }, soon: soon, error: null, soonErr: r[2].ok ? null : r[2].err };
+        }
+        wdbDebugReport(sid);
     }
-    if (wdpBanner.id !== currentStoreId) return;
+    if (wdpBanner.id !== currentStoreId || !wdpBanner.billing) { if (old) old.remove(); return; }
 
     const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
     if (s.state !== 'overdue' && s.state !== 'due-soon') { if (old) old.remove(); return; }
