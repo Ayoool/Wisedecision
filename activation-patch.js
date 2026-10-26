@@ -1,4 +1,4 @@
-// ==================== WISE DECISION ACTIVATION CODES PATCH (v32) ====================
+// ==================== WISE DECISION ACTIVATION CODES PATCH (v33) ====================
 // Loads AFTER script.js and all other patches, with `defer`.
 // Overrides registerBusinessAccount() with:
 //   - Email + Password (creates Firebase Auth account)
@@ -6,6 +6,9 @@
 //   - Free trial billing setup
 //   - Super Admin 🎟 Activation codes screen
 //
+// v33: SAVE THE BUSINESS TYPE AT REGISTRATION. The chosen type (phone_vendor, hardware, fashion, ...) is now
+//      written to stores/<id>/storeType in the same atomic update that creates the store, so a new Phone Vendor
+//      (or Building Materials) store sees its own dashboard from the very first login.
 // v32: FIX permission_denied on registration. The old order read stores/<id>/businessName and
 //      claimed the code BEFORE the Firebase Auth account existed, but the rules need auth != null
 //      for both. New order: check code (public read) -> create auth account -> check Store ID ->
@@ -14,7 +17,7 @@
 //      which is where email login looks. They are NO LONGER written to admins/ (that list is
 //      Super Admin only) or to the old staff/<id>/main/<uid> "Manager" record.
 
-console.log("Wise Decision activation-patch.js — v32 loaded");
+console.log("Wise Decision activation-patch.js — v33 loaded");
 
 // ---------- Helpers ----------
 var WDA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -108,6 +111,12 @@ async function registerBusinessAccount() {
     const adminEmail = document.getElementById('reg-admin-email').value.trim();
     const adminPassword = document.getElementById('reg-admin-password').value;
     const adminPin = document.getElementById('reg-admin-pin').value.trim();
+
+    // v33: the business type picked on the registration screen (phone_vendor, hardware, fashion, ...)
+    const typeSel = document.getElementById('reg-store-type');
+    const typeOther = document.getElementById('reg-store-type-other');
+    let storeType = typeSel ? String(typeSel.value || '').trim() : '';
+    if (storeType === 'other' && typeOther && typeOther.value.trim()) storeType = 'other:' + typeOther.value.trim();
 
     // --- Validation ---
     if (!storeId || !businessName || !adminEmail || !adminPassword || !adminPin) {
@@ -206,6 +215,7 @@ async function registerBusinessAccount() {
             [`stores/${storeId}/address`]: address,
             [`stores/${storeId}/adminPin`]: adminPin,
             [`stores/${storeId}/status`]: 'active',
+            [`stores/${storeId}/storeType`]: storeType || null,
             [`stores/${storeId}/ownerUid`]: createdUid,
             [`stores/${storeId}/ownerEmail`]: adminEmail,
             [`stores/${storeId}/activationCode`]: wdaNormalize(entered),
