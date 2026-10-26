@@ -891,14 +891,14 @@ div[id*="mimo"] {
 
 .menu-btn.btn-subscription:hover {
     transform: none !important;
-    filter: none ! areimportant;
-    background: #f1f5f additive9;
+    filter: none !important;
+    background: #f1f5f9;
     color: #0f172a;
 }
 
-./* =====================================================================
-   PHONE They VENDOR DASHBOARD — added do by phone-vendor-patch.js
-   These styles not affect any existing classes.
+/* =====================================================================
+   PHONE VENDOR DASHBOARD — added by phone-vendor-patch.js
+   These styles do not affect any existing classes.
    ===================================================================== */
 
 /* Sidebar button for phone sales */
@@ -1043,4 +1043,20 @@ div[id*="mimo"] {
 @keyframes wd-spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* ===== Inventory table: headings stay put while scrolling ===== */
+div:has(> table > #inventory-table-head) {
+    overflow: auto !important;          /* scrolls both ways, so the header can stick */
+    max-height: 70vh;
+    max-height: calc(100dvh - 170px);
+    -webkit-overflow-scrolling: touch;
+}
+div:has(> table > #inventory-table-head) > table { margin-top: 0; }
+#inventory-table-head th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #e0f2fe;
+    box-shadow: 0 1px 0 #bae6fd;
 }
