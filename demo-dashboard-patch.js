@@ -1,20 +1,28 @@
-// ==================== WISE DECISION DEMO DASHBOARD PATCH (v1) ====================
+// ==================== WISE DECISION DEMO DASHBOARD PATCH (v2) ====================
 // Load AFTER superadmin-patch.js and AFTER email-auth-patch.js.
 //
 // Lets the Super Admin preview any business-type dashboard (Fashion, Phone Vendor,
 // Water, Materials, Pharmacy, etc.) without registering a real store for each.
 //
 // How it works:
-//   • Creates one hidden demo store at stores/ on first use
+//   • Creates one hidden demo store at stores/__demo__ on first use
 //   • When you pick a type, the demo store's storeType is set, then the app
 //     switches into it — the same way a real login would
-//   • A red banner stays on top with a dropdown to switch types instantly
+//   • A purple banner stays on top with a dropdown to switch types instantly
 //   • Click "Exit demo" to return to the Super Admin dashboard
+//
+// v2 FIXES
+//   * Waits for the Firebase sign-in to be ready (no more "null is not an object ... currentUser.uid").
+//   * Checks that the signed-in account is listed under admins/ BEFORE touching stores/__demo__, and says
+//     exactly which account is signed in if it is not (instead of a bare "permission_denied").
+//   * The "switch type" dropdown in the banner works again (inside the demo you are the store's Admin, so the
+//     old "Only Super Admin" check blocked it).
+//   * "Wipe demo data" also clears the phone paths your database rules actually use.
 //
 // Nothing is written to your real stores. Demo data lives only under
 // stores/__demo__ and can be wiped any time with the "Wipe demo data" button.
 
-console.log("Wise Decision demo-dashboard-patch.js — v1 loaded");
+console.log("Wise Decision demo-dashboard-patch.js — v2 loaded");
 
 var wddemo = {
     active: false,
@@ -40,8 +48,56 @@ var WDDEMO_VERTICALS = [
 
 function wddemoEl(id) { return document.getElementById(id); }
 function wddemoEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Inside a demo you are signed in as the demo store's Admin, so "Super Admin" also means "a demo is running".
+// (Writes are still protected by the database rules, which only allow admins/ accounts to touch stores/__demo__.)
 function wddemoIsSuper() {
+    if (wddemo.active) return true;
     return typeof currentUserRole !== 'undefined' && currentUserRole === 'SuperAdmin';
+}
+
+// =====================================================================
+// SIGN-IN HELPERS (v2)
+// =====================================================================
+// Wait (up to 4 seconds) for Firebase to restore the signed-in user.
+function wddemoWaitUser() {
+    return new Promise(function (resolve) {
+        var a;
+        try { a = firebase.auth(); } catch (e) { resolve(null); return; }
+        if (a.currentUser) { resolve(a.currentUser); return; }
+        var done = false, off = null;
+        function finish(u) {
+            if (done) return;
+            done = true;
+            try { if (off) off(); } catch (e) {}
+            resolve(u || a.currentUser || null);
+        }
+        off = a.onAuthStateChanged(function (u) { if (u) finish(u); });
+        setTimeout(function () { finish(null); }, 4000);
+    });
+}
+
+// True only if this account is listed as true under admins/<uid>
+async function wddemoIsAdminUser(user) {
+    try {
+        var snap = await firebase.database().ref('admins/' + user.uid).once('value');
+        return snap.val() === true;
+    } catch (e) { return false; }
+}
+
+// Returns the signed-in Super Admin user, or null after telling the person what is wrong.
+async function wddemoRequireAdmin() {
+    var user = await wddemoWaitUser();
+    if (!user) {
+        alert('You are not signed in with Firebase right now.\n\nTap "Logout / Exit", then sign in again with your Super Admin email and password.');
+        return null;
+    }
+    var ok = await wddemoIsAdminUser(user);
+    if (!ok) {
+        alert('This sign-in (' + (user.email || user.uid) + ') is not listed as a Super Admin in the database, so Firebase blocks the demo store.\n\nTap "Logout / Exit" and sign in with your own Super Admin email and password.');
+        return null;
+    }
+    return user;
 }
 
 // =====================================================================
@@ -83,6 +139,9 @@ window.wddemoEnter = async function (storeType, label, icon) {
     if (!type) return;
 
     try {
+        var user = await wddemoRequireAdmin();
+        if (!user) return;
+
         var businessName = 'DEMO — ' + (label || type);
         await wddemoEnsureStore(type, businessName);
 
@@ -94,8 +153,8 @@ window.wddemoEnter = async function (storeType, label, icon) {
         if (typeof wdaeCompleteLogin === 'function') {
             wdaeCompleteLogin({
                 kind: 'member',
-                uid: firebase.auth().currentUser.uid,
-                email: firebase.auth().currentUser.email,
+                uid: user.uid,
+                email: user.email,
                 storeId: wddemo.storeId,
                 storeName: businessName,
                 role: 'Admin',
@@ -103,6 +162,7 @@ window.wddemoEnter = async function (storeType, label, icon) {
                 name: 'Super Admin (demo)'
             });
         } else {
+            wddemo.active = false;
             alert('Cannot enter demo mode — email-auth-patch.js is not loaded.');
             return;
         }
@@ -115,7 +175,11 @@ window.wddemoEnter = async function (storeType, label, icon) {
         setTimeout(wddemoShowBanner, 250);
 
     } catch (e) {
-        alert('Could not enter demo mode: ' + (e.message || e));
+        var msg = (e && e.message) || String(e);
+        if (/permission_denied/i.test(msg)) {
+            msg += '\n\nThe database rules refused this. Make sure you are signed in with your Super Admin email (listed under admins/).';
+        }
+        alert('Could not enter demo mode: ' + msg);
     }
 };
 
@@ -141,11 +205,12 @@ window.wddemoExit = async function () {
     wddemo.currentType = null;
     wddemo.currentLabel = null;
 
-    if (typeof wdaeCompleteLogin === 'function') {
+    var user = await wddemoWaitUser();
+    if (typeof wdaeCompleteLogin === 'function' && user) {
         wdaeCompleteLogin({
             kind: 'super',
-            uid: firebase.auth().currentUser.uid,
-            email: firebase.auth().currentUser.email
+            uid: user.uid,
+            email: user.email
         });
     } else {
         window.location.reload();
@@ -172,20 +237,16 @@ window.wddemoWipe = async function () {
     if (!wddemoIsSuper()) return;
     if (!confirm('Delete ALL demo data? This clears everything under the hidden demo store.\n\nReal stores are not affected.')) return;
     try {
-        await firebase.database().ref('stores/' + wddemo.storeId).remove();
-        await firebase.database().ref('fashionItems/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('fashionSales/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('fashionLayaways/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('fashionCategories/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('fashionStockLog/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('phoneItems/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('phoneSales/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('materialsItems/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('materialsSales/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('waterItems/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('waterSales/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('waterCustomers/' + wddemo.storeId).remove().catch(function () {});
-        await firebase.database().ref('waterCounters/' + wddemo.storeId).remove().catch(function () {});
+        var db = firebase.database();
+        var id = wddemo.storeId;
+        await db.ref('stores/' + id).remove();
+        // Per-store data nodes (a node that does not exist, or is not allowed by the rules, is simply skipped)
+        var nodes = ['fashionItems', 'fashionSales', 'fashionLayaways', 'fashionCategories', 'fashionStockLog', 'fashionCounters',
+                     'phoneInventory', 'phoneSales', 'phoneCounters', 'phoneRepairs', 'phoneItems',
+                     'materialsItems', 'materialsSales', 'waterItems', 'waterSales', 'waterCustomers', 'waterCounters'];
+        for (var i = 0; i < nodes.length; i++) {
+            try { await db.ref(nodes[i] + '/' + id).remove(); } catch (e) { /* skip */ }
+        }
         alert('✅ Demo data wiped.');
     } catch (e) {
         alert('Could not wipe demo data: ' + (e.message || e));
@@ -287,6 +348,7 @@ window.wddemoEnterCustom = function () {
 // =====================================================================
 function wddemoInjectHeaderButton() {
     if (!wddemoIsSuper()) return;
+    if (wddemo.active) return;   // inside a demo there is no Super Admin header to put it in
     if (wddemoEl('wddemo-header-btn')) return;
 
     var anchor = null;
