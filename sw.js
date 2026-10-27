@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v126';
+const CACHE = 'wd-shell-v127';
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -48,6 +48,7 @@ const PRECACHE = [
     './logout-patch.js',
     './mobile-patch.js',
     './bulk-product-patch.js',
+    './nav-spinner-patch.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
     'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
     'https://unpkg.com/qrcode-generator@1.4.4/qrcode.min.js',
