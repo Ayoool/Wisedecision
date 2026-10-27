@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.21) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.22) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,14 +16,18 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v4.21: FIXED BLANK PAYSTACK SCREEN. Removed 'async' from wdpSubmit so the browser doesn't lose
-//   the user click gesture, added callback_url, and tightened email validation.
-// v4.20: FORCED PAYSTACK PAYMENT. Removed manual bank details and forced all payments to go through 
+// v4.22: PAYSTACK FIXES. No callback_url (it could redirect the page and skip onSuccess), amount rounded to
+//   whole kobo, email from the signed-in account (prompt only as a fallback, validated), unique reference +
+//   metadata sent to Paystack, an "initiated" record saved before the popup opens, double-tap guard, and a
+//   "Retry saving my payment" path if saving fails AFTER a successful payment (never charges twice).
+//   Removed unused wdpCopyAccount(). Needs index.html to load https://js.paystack.co/v2/inline.js
+// v4.21: Removed 'async' from wdpSubmit so the browser doesn't lose the user click gesture.
+// v4.20: FORCED PAYSTACK PAYMENT. Removed manual bank details and forced all payments to go through
 //   the Paystack popup. The user can still pay via Bank Transfer inside the Paystack modal.
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.21 loaded");
+console.log("Wise Decision payments-patch.js — v4.22 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
@@ -271,7 +275,7 @@ function wdpRenderRenew() {
         '<input type="hidden" id="wdp-ref" value="Paystack Auto">' +
         
         wdpField('wdp-note', 'Note (optional)', 'text', '', '') +
-        '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7; color:white;" onclick="wdpSubmit()">💳 Pay with Paystack</button></div>';
+        '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7; color:white;" onclick="wdpSubmit()">' + (wdpUnsaved ? '💾 Retry saving my payment' : '💳 Pay with Paystack') + '</button></div>';
 
     const pendingNote = pending.length
         ? '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px; border-radius:8px; font-size:13px; margin-bottom:10px;">⏳ Your payment of <strong>' + wdpMoney(pending[pending.length - 1].amount) + '</strong> is waiting for approval. We usually confirm within a few hours.' +
@@ -297,14 +301,6 @@ function wdpRenderRenew() {
     const cy = document.getElementById('wdp-cycle');
     if (cy && b.cycle === 'yearly') cy.value = 'yearly';
     wdpRecalc();
-}
-
-function wdpCopyAccount() {
-    const c = wdpCtx;
-    if (!c) return;
-    const n = String(c.settings.accountNumber || '');
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(n).then(function () { alert('Account number copied: ' + n); }, function () { prompt('Copy the account number:', n); });
-    else prompt('Copy the account number:', n);
 }
 
 function wdpRecalc() {
@@ -340,72 +336,134 @@ function wdpRecalc() {
     } else { hint.textContent = 'Enter exactly what you want to pay.'; }
 }
 
-// v4.21: Removed 'async' to fix the blank Paystack popup issue (loss of user gesture)
-function wdpSubmit() {
-    const c = wdpCtx;
-    if (!c || wdpBusy) return;
-    
-    const amount = parseFloat(document.getElementById('wdp-amount').value);
-    const cycleEl = document.getElementById('wdp-cycle');
-    const cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
-    const months = cycle === 'yearly' ? 12 : (parseInt(document.getElementById('wdp-months').value) || 1);
-    const method = 'Online link'; // Hardcoded
-    const note = document.getElementById('wdp-note').value.trim();
-    const sel = document.getElementById('wdp-plan');
-    const planId = sel ? sel.value : '';
+// ==================== v4.22 PAYSTACK PAYMENT (store side) ====================
+var wdpUnsaved = null;   // a paid-but-not-yet-saved record, kept so the store can retry saving
 
-    if (!(amount > 0)) { alert('Enter the amount you want to pay.'); return; }
+function wdpValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim()); }
 
-    // --- PAYSTACK POPUP LOGIC ---
-    if (typeof PaystackPop === 'undefined') {
-        alert("Paystack is still loading. Please wait a few seconds and try again.");
-        return;
-    }
-    
-    const email = prompt("Please enter your email address for the payment receipt:", "");
-    if (!email || email.indexOf('@') === -1 || email.indexOf('.') === -1) {
-        alert("A valid email is required to pay online.");
-        return;
-    }
-
-    const paystack = new PaystackPop();
-    paystack.newTransaction({
-        key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c', // Your Live Public Key
-        email: email,
-        amount: amount * 100, // Paystack uses Kobo (multiply by 100)
-        callback_url: window.location.href, // v4.21: Added this to help the iframe load properly
-        onSuccess: (transaction) => {
-            // Payment successful! Auto-fill the reference and save it.
-            document.getElementById('wdp-ref').value = transaction.reference;
-            alert("Payment successful! Saving your record now...");
-            wdpSaveRecord(c, amount, cycle, months, method, transaction.reference, note, planId);
-        },
-        onCancel: () => {
-            alert("Payment window closed.");
+function wdpGetEmail(storeId) {
+    var email = '';
+    try {
+        if (typeof firebase.auth === 'function') {
+            var u = firebase.auth().currentUser;
+            if (u && u.email) email = u.email;
         }
-    });
+    } catch (e) { /* auth may not be loaded on the login screen */ }
+    if (!wdpValidEmail(email)) {
+        try { email = localStorage.getItem('wdp_email_' + storeId) || ''; } catch (e) { email = ''; }
+    }
+    if (!wdpValidEmail(email)) {
+        email = (prompt('Enter your email address for the payment receipt:', '') || '').trim();
+        if (!wdpValidEmail(email)) { alert('A valid email address is required to pay online.'); return ''; }
+    }
+    try { localStorage.setItem('wdp_email_' + storeId, email); } catch (e) { }
+    return email;
 }
 
-// Helper function to save the record to Firebase (used by Paystack)
-async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId) {
+// Kept synchronous (no async/await before newTransaction) so the popup opens straight from the tap.
+function wdpSubmit() {
+    var c = wdpCtx;
+    if (!c || wdpBusy) return;
+
+    // A payment already went through but saving failed: retry the save only, never charge again.
+    if (wdpUnsaved) {
+        var u = wdpUnsaved;
+        wdpSaveRecord(u.c, u.amount, u.cycle, u.months, u.method, u.reference, u.note, u.planId, null);
+        return;
+    }
+
+    var amount = Math.round((parseFloat(document.getElementById('wdp-amount').value) || 0) * 100) / 100;
+    var cycleEl = document.getElementById('wdp-cycle');
+    var cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
+    var months = cycle === 'yearly' ? 12 : (parseInt(document.getElementById('wdp-months').value) || 1);
+    var method = 'Online link';
+    var note = document.getElementById('wdp-note').value.trim();
+    var sel = document.getElementById('wdp-plan');
+    var planId = sel ? sel.value : '';
+
+    if (!(amount > 0)) { alert('Enter the amount you want to pay.'); return; }
+    if (typeof PaystackPop === 'undefined') {
+        alert('Paystack is still loading. Please wait a few seconds and try again.');
+        return;
+    }
+
+    var email = wdpGetEmail(c.id);
+    if (!email) return;
+
+    var reference = 'WD-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+
+    // Best-effort "initiated" record, so a payment is never completely untraceable.
+    var pendingRef = null;
+    try {
+        pendingRef = firebase.database().ref('paymentRequests/' + c.id).push();
+        pendingRef.set({ storeId: c.id, storeName: c.name, amount: amount, months: months, cycle: cycle, planId: planId || null, method: method, reference: reference, note: note, status: 'initiated', createdAt: new Date().toISOString() }).catch(function () { });
+    } catch (e) { pendingRef = null; }
+    var dropInitiated = function () { if (pendingRef) { try { pendingRef.remove().catch(function () { }); } catch (e) { } } };
+
     wdpBusy = true;
-    const btn = document.getElementById('wdp-submit');
+    try {
+        var paystack = new PaystackPop();
+        paystack.newTransaction({
+            key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c',   // public key (safe in the browser)
+            email: email,
+            amount: Math.round(amount * 100),                          // whole kobo
+            currency: 'NGN',
+            ref: reference,
+            metadata: {
+                storeId: c.id, storeName: c.name, planId: planId || '', cycle: cycle, months: months,
+                custom_fields: [
+                    { display_name: 'Store ID', variable_name: 'store_id', value: c.id },
+                    { display_name: 'Store name', variable_name: 'store_name', value: c.name },
+                    { display_name: 'Plan / cycle', variable_name: 'plan_cycle', value: (planId || 'current') + ' / ' + cycle + ' / ' + months + ' mo' }
+                ]
+            },
+            onSuccess: function (transaction) {
+                wdpBusy = false;
+                alert('Payment successful! Saving your record now...');
+                wdpSaveRecord(c, amount, cycle, months, method, (transaction && transaction.reference) || reference, note, planId, pendingRef);
+            },
+            onCancel: function () {
+                wdpBusy = false;
+                dropInitiated();
+                alert('Payment window closed.');
+            },
+            onError: function (err) {
+                wdpBusy = false;
+                dropInitiated();
+                alert('Could not start the payment: ' + ((err && err.message) || 'please try again.'));
+            }
+        });
+    } catch (e) {
+        wdpBusy = false;
+        dropInitiated();
+        alert('Could not open Paystack: ' + e.message);
+    }
+}
+
+// Saves the PAID record for the Super Admin to approve. pendingRef is the "initiated" record to upgrade (or null).
+async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId, pendingRef) {
+    wdpBusy = true;
+    var btn = document.getElementById('wdp-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
-    const rec = { storeId: c.id, storeName: c.name, amount: amount, months: months, cycle: cycle, planId: planId || null, method: method, reference: reference, note: note, status: 'pending', createdAt: new Date().toISOString() };
-    
+    var rec = { storeId: c.id, storeName: c.name, amount: amount, months: months, cycle: cycle, planId: planId || null, method: method, reference: reference, note: note, status: 'pending', createdAt: new Date().toISOString() };
+
     try {
-        const ref = firebase.database().ref('paymentRequests/' + c.id).push();
+        var ref = pendingRef || firebase.database().ref('paymentRequests/' + c.id).push();
         await ref.set(rec);
         wdpNotifyEmail(rec);
         c.requests[ref.key] = rec;
+        wdpUnsaved = null;
         wdpBusy = false;
         wdpRenderRenew();
-        alert("Successfully submitted for approval!");
+        alert('Successfully submitted for approval!');
     } catch (e) {
         wdpBusy = false;
-        if (btn) { btn.disabled = false; btn.textContent = '💳 Pay with Paystack'; }
-        alert('Could not send: ' + e.message + '\n\nPlease check your internet and try again.');
+        // Money has already been taken: keep the details so the next tap only retries the save.
+        wdpUnsaved = { c: c, amount: amount, cycle: cycle, months: months, method: method, reference: reference, note: note, planId: planId };
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Retry saving my payment'; }
+        alert('Your payment went through (reference ' + reference + ') but we could not save it: ' + e.message +
+              '\n\nTap "Retry saving my payment". Do NOT pay again. If it keeps failing, send this reference to support.');
     }
 }
 
@@ -1023,7 +1081,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.21)\n' +
+            alert('Pending payments button check (payments-patch v4.22)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
