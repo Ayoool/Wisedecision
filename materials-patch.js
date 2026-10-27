@@ -1,17 +1,28 @@
-// ==================== WISE DECISION MATERIALS PATCH (v1) ====================
+// ==================== WISE DECISION MATERIALS PATCH (v2) ====================
 // Loads AFTER every other patch. Adds a dedicated Building Materials / Hardware
 // dashboard with delivery charges, wastage log, and materials-aware selling.
 //
 // Nothing existing is touched. Materials stores are detected via
 // stores/{storeId}/storeType === 'hardware' OR starts with 'hardware:'.
+//
+// v2 FIXES
+//   * DELIVERY CHARGE now really reaches the sale. Before, the "Delivery Charge" line was added to the cart
+//     AFTER the order had already been sent, so it never made it into the order or the receipt. Now the line is
+//     put into the cart as soon as a delivery amount is typed (and updated or removed when it changes), so every
+//     way of taking the order (accountant order, POS payment) includes it, and the cart total shows it.
+//     The delivery box clears itself when the sale is done and the cart is empty again.
+//   * The store type is watched per store: after leaving a demo (or logging into another store) the sidebar
+//     follows the new store instead of keeping the old store's type.
 
-console.log("Wise Decision materials-patch.js — v1 loaded");
+console.log("Wise Decision materials-patch.js — v2 loaded");
 
 // =====================================================================
 // STATE
 // =====================================================================
 var wdmStoreType = null;
 var wdmListenerAttached = false;
+var wdmWatchedStore = null;
+var wdmTypeRef = null;
 
 // =====================================================================
 // HELPERS
@@ -547,8 +558,79 @@ async function wdmLoadWastageHistory() {
 }
 
 // =====================================================================
-// DELIVERY CHARGE ON POS — inject a checkbox into the POS screen
+// DELIVERY CHARGE ON POS (v2)
+// The "Delivery Charge" line lives IN the cart while a delivery amount is set, so it is part of the order however
+// the sale is taken (accountant order or direct POS payment), and the cart total shows it.
+// State is kept in these variables (not read back from the screen), so a re-draw of the POS never loses it.
 // =====================================================================
+window.wdmDeliveryOn = false;
+window.wdmDeliveryChargeValue = 0;
+var wdmDeliveryAdded = false;   // true once the delivery line has been put in the cart for the current sale
+
+function wdmCartOk() { return typeof currentCart !== 'undefined' && Array.isArray(currentCart); }
+function wdmRealItemCount() {
+    if (!wdmCartOk()) return 0;
+    return currentCart.filter(function (i) { return i && i.id !== '__delivery__'; }).length;
+}
+function wdmDeliveryLine(charge) {
+    return {
+        id: '__delivery__',
+        name: 'Delivery Charge',
+        qty: 1,
+        saleUnit: 'Piece',
+        unitsPerPack: 1,
+        piecesNeeded: 1,
+        price: charge,
+        total: charge,
+        customerType: 'Retail',
+        baseUnitName: '',
+        bulkUnitName: ''
+    };
+}
+
+// Make the box on screen match the saved state
+function wdmSyncDeliveryUI() {
+    var cb = document.getElementById('wdm-delivery-check');
+    var amt = document.getElementById('wdm-delivery-amount');
+    if (!cb || !amt) return;
+    cb.checked = !!window.wdmDeliveryOn;
+    amt.style.display = window.wdmDeliveryOn ? 'inline-block' : 'none';
+    var v = window.wdmDeliveryOn && window.wdmDeliveryChargeValue ? String(window.wdmDeliveryChargeValue) : '';
+    if (document.activeElement !== amt && amt.value !== v) amt.value = v;
+}
+
+// Put the delivery line in the cart / update it / take it out so the cart matches the saved state.
+// Safe to call as often as needed: it only touches the cart (and re-draws it) when something has changed.
+window.wdmSyncDelivery = function () {
+    if (!wdmCartOk()) return;
+    var real = wdmRealItemCount();
+    var idx = -1;
+    for (var i = 0; i < currentCart.length; i++) { if (currentCart[i] && currentCart[i].id === '__delivery__') { idx = i; break; } }
+    var charge = window.wdmDeliveryOn ? wdmNum(window.wdmDeliveryChargeValue) : 0;
+    var changed = false;
+
+    if (real === 0) {
+        // Nothing to deliver. If a delivery line was in the cart, the sale is finished (or the cart was cleared): reset.
+        if (idx !== -1) { currentCart.splice(idx, 1); changed = true; }
+        if (wdmDeliveryAdded) {
+            wdmDeliveryAdded = false;
+            window.wdmDeliveryOn = false;
+            window.wdmDeliveryChargeValue = 0;
+            wdmSyncDeliveryUI();
+        }
+    } else if (charge > 0) {
+        if (idx === -1) { currentCart.push(wdmDeliveryLine(charge)); changed = true; }
+        else if (wdmNum(currentCart[idx].price) !== charge || wdmNum(currentCart[idx].total) !== charge) {
+            currentCart[idx].price = charge; currentCart[idx].total = charge; currentCart[idx].qty = 1; changed = true;
+        }
+        wdmDeliveryAdded = true;
+    } else if (idx !== -1) {
+        currentCart.splice(idx, 1); changed = true;
+    }
+
+    if (changed && typeof renderCart === 'function') { try { renderCart(); } catch (e) { console.warn('[materials-patch] renderCart:', e); } }
+};
+
 function wdmInjectDeliveryCharge() {
     var posView = document.getElementById('pos-view');
     if (!posView) return;
@@ -573,65 +655,49 @@ function wdmInjectDeliveryCharge() {
     // Insert before the cart total row
     var cartContainer = cartHeader.parentNode;
     if (cartContainer) cartContainer.insertBefore(box, cartHeader.nextSibling);
+    wdmSyncDeliveryUI();   // restore the saved state if the POS was re-drawn
 }
 
 window.wdmDeliveryToggle = function () {
     var cb = document.getElementById('wdm-delivery-check');
     var amt = document.getElementById('wdm-delivery-amount');
     if (!cb || !amt) return;
+    window.wdmDeliveryOn = !!cb.checked;
+    if (!cb.checked) { amt.value = ''; window.wdmDeliveryChargeValue = 0; }
     amt.style.display = cb.checked ? 'inline-block' : 'none';
-    if (!cb.checked) amt.value = '';
-    wdmApplyDeliveryCharge();
+    wdmSyncDelivery();
 };
 
 window.wdmApplyDeliveryCharge = function () {
-    if (typeof window.wdmDeliveryChargeValue === 'undefined') window.wdmDeliveryChargeValue = 0;
     var cb = document.getElementById('wdm-delivery-check');
     var amt = document.getElementById('wdm-delivery-amount');
-    var val = (cb && cb.checked && amt) ? (parseFloat(amt.value) || 0) : 0;
-    window.wdmDeliveryChargeValue = val;
-    // Note: this value is read by the submitOrderForAccountant patch below
+    window.wdmDeliveryOn = !!(cb && cb.checked);
+    window.wdmDeliveryChargeValue = (window.wdmDeliveryOn && amt) ? Math.max(0, parseFloat(amt.value) || 0) : 0;
+    wdmSyncDelivery();
 };
 
-// Wrap submitOrderForAccountant to add the delivery charge to the order
-window.addEventListener('load', function () {
-    if (typeof window.submitOrderForAccountant === 'function' && !window.__wdmDeliveryHooked) {
-        window.__wdmDeliveryHooked = true;
-        var orig = window.submitOrderForAccountant;
-        window.submitOrderForAccountant = function () {
-            var result = orig.apply(this, arguments);
-            try {
-                var charge = wdmNum(window.wdmDeliveryChargeValue);
-                if (charge > 0 && typeof currentCart !== 'undefined' && Array.isArray(currentCart)) {
-                    // Add a synthetic "Delivery Charge" line item
-                    currentCart.push({
-                        id: '__delivery__',
-                        name: 'Delivery Charge',
-                        qty: 1,
-                        saleUnit: 'Piece',
-                        unitsPerPack: 1,
-                        piecesNeeded: 1,
-                        price: charge,
-                        total: charge,
-                        customerType: 'Retail',
-                        baseUnitName: '',
-                        bulkUnitName: ''
-                    });
-                    if (typeof renderCart === 'function') renderCart();
-                }
-            } catch (e) { console.warn('[materials-patch] delivery charge hook error:', e); }
-            return result;
-        };
-    }
-});
-
 // =====================================================================
-// DETECT STORE TYPE ON LOGIN — same pattern as phone vendor patch
+// DETECT STORE TYPE ON LOGIN — watched per store (v2)
 // =====================================================================
 function wdmWatchStoreType() {
-    if (!currentStoreId || currentStoreId === 'SUPER_ADMIN') return;
+    var sid = (typeof currentStoreId !== 'undefined') ? currentStoreId : null;
+
+    if (!sid || sid === 'SUPER_ADMIN') {
+        if (wdmWatchedStore) {
+            try { if (wdmTypeRef) wdmTypeRef.off(); } catch (e) { /* ignore */ }
+            wdmTypeRef = null; wdmWatchedStore = null; wdmStoreType = null;
+            wdmApplySidebar();
+        }
+        return;
+    }
+    if (wdmWatchedStore === sid) return;
+
+    try { if (wdmTypeRef) wdmTypeRef.off(); } catch (e) { /* ignore */ }
+    wdmStoreType = null;
+    wdmWatchedStore = sid;
     try {
-        firebase.database().ref('stores/' + currentStoreId + '/storeType').on('value', function (snap) {
+        wdmTypeRef = firebase.database().ref('stores/' + sid + '/storeType');
+        wdmTypeRef.on('value', function (snap) {
             wdmStoreType = snap.val() || 'general';
             wdmApplySidebar();
         });
@@ -642,11 +708,10 @@ function wdmWatchStoreType() {
 // MAIN ATTACH — runs on every DOM change (idempotent)
 // =====================================================================
 function wdmAttach() {
-    if (typeof currentStoreId !== 'undefined' && currentStoreId && currentStoreId !== 'SUPER_ADMIN' && !wdmStoreType) {
-        wdmWatchStoreType();
-    }
+    wdmWatchStoreType();
     wdmApplySidebar();
     wdmInjectDeliveryCharge();
+    if (wdmIsMaterialsStore()) wdmSyncDelivery();
 }
 
 window.addEventListener('load', function () {
