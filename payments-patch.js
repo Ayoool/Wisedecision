@@ -1,11 +1,11 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.19) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.20) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
 //   * "💳 Subscription" button in the Admin's sidebar, and a "Renew or pay subscription" link on the login
 //     screen (so a LOCKED store can still pay and send its proof)
-//   * Shows plan, due date, your bank details (and an optional online payment link)
-//   * The store picks a plan + billing cycle (Monthly or Yearly), pays by transfer, then taps "I've Paid" with its reference
+//   * Shows plan, due date.
+//   * The store picks a plan + billing cycle (Monthly or Yearly) and pays strictly via Paystack.
 //   * A banner reminds the Admin when the subscription is due soon / overdue / the trial is ending
 //
 // SUPER ADMIN
@@ -16,26 +16,16 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
-// v4.19: PAYSTACK INLINE INTEGRATION. Added automatic Paystack payment popup.
-//   * When a user selects "Online link", a prompt asks for their email, and the Paystack modal opens.
-//   * On success, the transaction reference is automatically saved and the request is sent for approval.
-//   * To use this, add <script src="https://js.paystack.co/v2/inline.js"></script> to your app.html/index.html <head>.
-//
-// v4.18: YEARLY PLANS. Plans may now include a `yearlyFee` (fallback = monthlyFee × 12).
-//   * Renew form has a "Billing cycle" picker (Monthly / Yearly). Yearly = 12 months upfront at the yearly rate,
-//     with a live "save ₦X" note when the plan is cheaper yearly.
-//   * Requests carry a `cycle` field, shown in the Super Admin review and the pending list.
-//   * On approval, `billing/<store>/cycle` is saved so the form defaults to the store's last choice.
-//   * Plan cards show "₦X/month · or ₦Y/year (save ₦Z)" when a yearly rate exists.
+// v4.20: FORCED PAYSTACK PAYMENT. Removed manual bank details and forced all payments to go through 
+//   the Paystack popup. The user can still pay via Bank Transfer inside the Paystack modal.
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.19 loaded");
+console.log("Wise Decision payments-patch.js — v4.20 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
 // Email alert to the owner when a store sends a payment request (Google Apps Script web app).
-// Paste your Web app URL between the quotes. Leave it empty to turn email alerts off.
 var WDP_ALERT_URL = 'https://script.google.com/macros/s/AKfycbz5bacSu21DjL82yXSt5zr9KsD7CcjL44nIrWh0kpPRvSNIwp4dLfvMrkGNJhq4yNLt/exec';
 function wdpNotifyEmail(rec) {
     if (!/^https:\/\/script\.google\.com\//.test(WDP_ALERT_URL)) return;
@@ -171,9 +161,6 @@ function wdpAskStoreId(message) {
 
 async function wdpLoadStore(id) {
     const db = firebase.database();
-    // Each read is separate, so one blocked/slow node cannot break the whole screen.
-    // The billing record is read field by field (due date, trial, plan, fee, cycle) so the database rules can keep the
-    // payment history inside it private.
     const read = function (path) { return db.ref(path).once('value').then(function (snap) { return snap.val(); }); };
     const safe = function (label, promise) {
         return wdpTimeout(promise, 15000).then(
@@ -199,7 +186,6 @@ async function wdpLoadStore(id) {
         throw err;
     }
     const settings = Object.assign(typeof wdsDefaults === 'function' ? wdsDefaults() : {}, (r[2].ok && r[2].val) || {});
-    // If the name could not be read (blocked), carry on with the ID the person typed; null means "no such store".
     const name = r[0].ok ? (r[0].val || '') : id;
     return {
         id: id, name: name,
@@ -220,7 +206,7 @@ async function wdpOpenRenew(presetId) {
     const id = String(presetId || '').trim().toLowerCase();
     if (!id) { wdpAskStoreId(''); return; }
     wdpLastId = id;
-    wdpBanner.at = 0;   // refresh the reminder banner after this
+    wdpBanner.at = 0;
     wdpModal('💳 Subscription', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
     let data;
     try { data = await wdpLoadStore(id); }
@@ -251,18 +237,9 @@ function wdpRenderRenew() {
     const req = wdpFlatten({ x: c.requests });
     const pending = req.filter(function (r) { return r.status === 'pending' && r.type !== 'plan-change'; });
 
-    const bank = '<div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:12px; margin-bottom:12px;">' +
-        '<div style="font-size:11px; font-weight:bold; color:#0369a1; text-transform:uppercase; margin-bottom:6px;">Pay to</div>' +
-        '<div style="font-size:13px;"><strong>' + wdpEsc(c.settings.bankName) + '</strong></div>' +
-        '<div style="font-size:20px; font-weight:800; letter-spacing:1px; user-select:all;">' + wdpEsc(c.settings.accountNumber) + '</div>' +
-        '<div style="font-size:12px; color:#475569;">' + wdpEsc(c.settings.accountName) + '</div>' +
-        '<div style="font-size:11px; color:#0369a1; margin-top:6px;">Use <strong>' + wdpEsc(c.id) + '</strong> as the transfer narration/reference.</div>' +
-        '<div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">' +
-        '<button onclick="wdpCopyAccount()" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; cursor:pointer; border:1px solid #bae6fd; background:#fff;">📋 Copy account number</button>' +
-        (link ? '<a href="' + wdpEsc(link) + '" target="_blank" rel="noopener" style="padding:6px 12px; font-size:12px; font-weight:bold; border-radius:6px; background:#0284c7; color:#fff; text-decoration:none;">🔗 Pay online</a>' : '') +
-        '</div></div>';
+    // REMOVED MANUAL BANK DETAILS
+    const bank = ''; 
 
-    // v4.18: cycle + months. Yearly = 12 months upfront, amount = yearlyFee (or monthlyFee × 12 fallback).
     const planSelect = planIds.length === 0 ? '' :
         '<label style="font-size:12px; font-weight:bold;">Plan</label><select id="wdp-plan" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
         (currentPlan ? '' : '<option value="">Keep my current arrangement</option>') +
@@ -282,13 +259,17 @@ function wdpRenderRenew() {
 
     const yearlyNote = '<div id="wdp-yearly-note" style="display:none; font-size:12px; color:#166534; background:#f0fdf4; border:1px solid #bbf7d0; padding:8px; border-radius:6px; margin:4px 0 10px;">You are paying for 12 months upfront at the yearly rate.</div>';
 
+    // UPDATED FORM: Forced Paystack, removed manual reference & method fields
     const form = '<div id="wdp-form" style="' + (pending.length ? 'display:none;' : '') + '">' + planSelect + cycleSelect + monthSelect + yearlyNote +
-        wdpField('wdp-amount', 'Amount you paid (₦)', 'number', '', 'min="0"') +
+        wdpField('wdp-amount', 'Amount to pay (₦)', 'number', '', 'min="0"') +
         '<div id="wdp-amount-hint" style="font-size:11px; color:#64748b; margin:-6px 0 10px;"></div>' +
-        '<label style="font-size:12px; font-weight:bold;">How did you pay?</label><select id="wdp-method" style="' + WDP_INPUT + '"><option>Transfer</option><option>POS</option><option>Cash deposit</option><option>Online link</option></select>' +
-        wdpField('wdp-ref', 'Sender name or transfer reference', 'text', '', 'placeholder="So we can find your payment"') +
+        
+        // Hidden inputs automatically force Paystack
+        '<input type="hidden" id="wdp-method" value="Online link">' +
+        '<input type="hidden" id="wdp-ref" value="Paystack Auto">' +
+        
         wdpField('wdp-note', 'Note (optional)', 'text', '', '') +
-        '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#16a34a;" onclick="wdpSubmit()">✔ I\'ve Paid — send for approval</button></div>';
+        '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7; color:white;" onclick="wdpSubmit()">💳 Pay with Paystack</button></div>';
 
     const pendingNote = pending.length
         ? '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px; border-radius:8px; font-size:13px; margin-bottom:10px;">⏳ Your payment of <strong>' + wdpMoney(pending[pending.length - 1].amount) + '</strong> is waiting for approval. We usually confirm within a few hours.' +
@@ -308,10 +289,9 @@ function wdpRenderRenew() {
     wdpModal('💳 Subscription — ' + c.name,
         '<div style="margin-bottom:12px;"><div style="font-size:12px; color:#64748b;">Store ID: ' + wdpEsc(c.id) + (currentPlan ? ' · Plan: <strong>' + wdpEsc(currentPlan.name) + '</strong>' : '') + '</div>' +
         '<div style="font-size:15px; font-weight:bold; color:' + statusColor + ';">' + statusText + '</div></div>' +
-        wdpFailNote(c) + bank + pendingNote + form + histHtml +
+        wdpFailNote(c) + pendingNote + form + histHtml +
         '<div style="text-align:center; margin-top:12px;"><a href="https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent('Hello, I need help with my Wise Decision subscription. Store ID: ' + c.id) + '" target="_blank" rel="noopener" style="font-size:12px; color:#166534; font-weight:bold;">💬 Need help? Chat with support</a></div>');
 
-    // Default cycle to the store's last choice (persisted on approval), falling back to monthly.
     const cy = document.getElementById('wdp-cycle');
     if (cy && b.cycle === 'yearly') cy.value = 'yearly';
     wdpRecalc();
@@ -355,7 +335,7 @@ function wdpRecalc() {
         } else {
             hint.textContent = wdpMoney(fee) + ' × ' + months + ' month' + (months === 1 ? '' : 's') + ' = ' + wdpMoney(fee * months) + '. Change it if you paid a different amount.';
         }
-    } else { hint.textContent = 'Enter exactly what you paid.'; }
+    } else { hint.textContent = 'Enter exactly what you want to pay.'; }
 }
 
 async function wdpSubmit() {
@@ -366,54 +346,43 @@ async function wdpSubmit() {
     const cycleEl = document.getElementById('wdp-cycle');
     const cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
     const months = cycle === 'yearly' ? 12 : (parseInt(document.getElementById('wdp-months').value) || 1);
-    const method = document.getElementById('wdp-method').value;
+    const method = 'Online link'; // Hardcoded
     const note = document.getElementById('wdp-note').value.trim();
     const sel = document.getElementById('wdp-plan');
     const planId = sel ? sel.value : '';
 
-    if (!(amount > 0)) { alert('Enter the amount you paid.'); return; }
+    if (!(amount > 0)) { alert('Enter the amount you want to pay.'); return; }
 
     // --- PAYSTACK POPUP LOGIC ---
-    if (method === 'Online link') {
-        if (typeof PaystackPop === 'undefined') {
-            alert("Paystack is still loading. Please wait a few seconds and try again.");
-            return;
-        }
-        
-        // Paystack requires an email.
-        const email = prompt("Please enter your email address for the payment receipt:", "");
-        if (!email || email.indexOf('@') === -1) {
-            alert("A valid email is required to pay online.");
-            return;
-        }
-
-        const paystack = new PaystackPop();
-        paystack.newTransaction({
-            key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c', // Your Live Public Key
-            email: email,
-            amount: amount * 100, // Paystack uses Kobo (multiply by 100)
-            onSuccess: (transaction) => {
-                // Payment successful! Auto-fill the reference and save it.
-                document.getElementById('wdp-ref').value = transaction.reference;
-                alert("Payment successful! Saving your record now...");
-                wdpSaveRecord(c, amount, cycle, months, method, transaction.reference, note, planId);
-            },
-            onCancel: () => {
-                alert("Payment window closed.");
-            }
-        });
-        return; // Stop here so it doesn't run the manual save
+    if (typeof PaystackPop === 'undefined') {
+        alert("Paystack is still loading. Please wait a few seconds and try again.");
+        return;
     }
-    // --- END PAYSTACK LOGIC ---
-
-    // Manual payment flow (Transfer, POS, Cash)
-    const reference = document.getElementById('wdp-ref').value.trim();
-    if (reference.length < 3) { alert('Please enter the sender name or transfer reference, so we can find your payment.'); return; }
     
-    wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId);
+    const email = prompt("Please enter your email address for the payment receipt:", "");
+    if (!email || email.indexOf('@') === -1) {
+        alert("A valid email is required to pay online.");
+        return;
+    }
+
+    const paystack = new PaystackPop();
+    paystack.newTransaction({
+        key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c', // Your Live Public Key
+        email: email,
+        amount: amount * 100, // Paystack uses Kobo (multiply by 100)
+        onSuccess: (transaction) => {
+            // Payment successful! Auto-fill the reference and save it.
+            document.getElementById('wdp-ref').value = transaction.reference;
+            alert("Payment successful! Saving your record now...");
+            wdpSaveRecord(c, amount, cycle, months, method, transaction.reference, note, planId);
+        },
+        onCancel: () => {
+            alert("Payment window closed.");
+        }
+    });
 }
 
-// Helper function to save the record to Firebase (used by both Paystack and Manual)
+// Helper function to save the record to Firebase (used by Paystack)
 async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId) {
     wdpBusy = true;
     const btn = document.getElementById('wdp-submit');
@@ -428,19 +397,10 @@ async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, 
         c.requests[ref.key] = rec;
         wdpBusy = false;
         wdpRenderRenew();
-        
-        // Only show the WhatsApp prompt for manual transfers, not Paystack
-        if (method !== 'Online link') {
-            if (confirm('✅ Sent! We will confirm your payment shortly.\n\nTap OK to also message Wise Decision on WhatsApp so it is confirmed faster.')) {
-                const msg = 'Hello, I have paid my Wise Decision subscription.\n\nStore ID: ' + c.id + '\nAmount: ' + wdpMoney(amount) + ' (' + (cycle === 'yearly' ? '1 year — 12 months' : months + ' month' + (months === 1 ? '' : 's')) + ')\nPaid by: ' + method + '\nReference: ' + reference + '\n\nPlease approve it. Thank you!';
-                window.open('https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent(msg), '_blank');
-            }
-        } else {
-            alert("Successfully submitted for approval!");
-        }
+        alert("Successfully submitted for approval!");
     } catch (e) {
         wdpBusy = false;
-        if (btn) { btn.disabled = false; btn.textContent = '✔ I\'ve Paid — send for approval'; }
+        if (btn) { btn.disabled = false; btn.textContent = '💳 Pay with Paystack'; }
         alert('Could not send: ' + e.message + '\n\nPlease check your internet and try again.');
     }
 }
@@ -477,7 +437,7 @@ function wdpOpenPending() {
     if (wdpAll === null) {
         wdpModal('💳 Pending payments', '<div style="text-align:center; color:#64748b; padding:24px;">Loading...</div>');
         const lm = document.getElementById('wdp-modal');
-        if (lm) lm.dataset.view = 'pending';   // the listener redraws this screen as soon as data arrives
+        if (lm) lm.dataset.view = 'pending';   
         return;
     }
     const all = wdpFlatten(wdpAll);
@@ -540,7 +500,7 @@ async function wdpReview(sid, key) {
         'Billing cycle: <strong>' + cycleText + '</strong><br>' +
         'Reference: <strong>' + wdpEsc(rec.reference || '—') + '</strong>' + (rec.note ? '<br>Note: ' + wdpEsc(rec.note) : '') + '<br>' +
         'Sent: ' + wdpPretty(rec.createdAt) + (plan ? '<br>Plan chosen: <strong>' + wdpEsc(plan.name) + '</strong> (' + wdpMoney(plan.monthlyFee) + '/month' + (rec.cycle === 'yearly' ? ' · ' + wdpMoney(wdpYearlyFee(plan)) + '/year' : '') + ')' : '') + '</div>' +
-        '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">⚠ First check your bank/Moniepoint app and confirm this money really arrived.' +
+        '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px; border-radius:6px; font-size:12px; margin-bottom:10px;">⚠ First check your Paystack dashboard and confirm this money really arrived.' +
         (mismatch ? '<br>The expected amount is ' + wdpMoney(expected) + ', but they say they paid ' + wdpMoney(rec.amount) + '.' : '') + '</div>' +
         wdpField('wdp-ra-amount', 'Amount received (₦)', 'number', rec.amount, 'min="0"') +
         '<label style="font-size:12px; font-weight:bold;">Months to extend</label><select id="wdp-ra-months" style="' + WDP_INPUT + '">' +
@@ -573,7 +533,6 @@ async function wdpApprove(sid, key) {
     const statusRef = db.ref('paymentRequests/' + sid + '/' + key + '/status');
     let claimed = false;
     try {
-        // Claim the request so it can never be approved twice (even from two phones at once)
         const tx = await statusRef.transaction(function (cur) { return cur === 'pending' ? 'approved' : (cur === null ? cur : undefined); });
         if (!tx.committed || tx.snapshot.val() !== 'approved') { wdpBusy = false; alert('Someone has already handled this request.'); wdpOpenPending(); return; }
         claimed = true;
@@ -588,7 +547,6 @@ async function wdpApprove(sid, key) {
         u['billing/' + sid + '/lastPaidDate'] = today;
         u['billing/' + sid + '/lastPaidAmount'] = amount;
         u['billing/' + sid + '/trial'] = null;
-        // v4.18: remember the store's chosen cycle so the form defaults to it next time
         u['billing/' + sid + '/cycle'] = rec.cycle === 'yearly' ? 'yearly' : 'monthly';
         u['billing/' + sid + '/payments/' + pk] = { amount: amount, months: months, cycle: rec.cycle || 'monthly', method: rec.method || 'Transfer', note: 'Ref: ' + (rec.reference || '') + (rec.note ? ' — ' + rec.note : ''), paidDate: today, at: nowIso, dueBefore: dueBefore, dueAfter: dueAfter, recordedBy: 'Super Admin (approved request)' };
 
@@ -675,7 +633,6 @@ function wdcLimitText(p) {
     return u(p.maxBranches) + ' branch' + (wdpNum(p.maxBranches) === 1 ? '' : 'es') + ' · ' + u(p.maxStaff) + ' staff · ' + u(p.maxProducts) + ' products';
 }
 
-// Counts use storeplans-patch.js helpers. Fails quietly (null) when the person is not signed in as this store.
 async function wdcUsage(sid) {
     if (typeof wdnShallow !== 'function' || typeof wdnCountProducts !== 'function') return null;
     try {
@@ -698,7 +655,6 @@ function wdcUsageHtml(u) {
     return u ? '<div style="font-size:12px; color:#475569; margin-bottom:8px;">Now using: ' + u.branches + ' branch(es) · ' + u.staff + ' staff · ' + u.products + ' products</div>' : '';
 }
 
-// ---- Store side ----
 (function () {
     var orig = window.wdpRenderRenew;
     window.wdpRenderRenew = function () {
@@ -739,7 +695,6 @@ function wdcOpenPicker() {
         var p = c.plans[pid], isCur = pid === cur, up = wdpNum(p.monthlyFee) > curFee;
         var tag = isCur ? '<span style="background:#dcfce7; color:#166534; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">CURRENT</span>'
             : '<span style="background:' + (up ? '#dbeafe' : '#fef3c7') + '; color:' + (up ? '#1e40af' : '#92400e') + '; font-size:10px; font-weight:bold; padding:2px 8px; border-radius:10px;">' + (up ? 'UPGRADE' : 'SWITCH DOWN') + '</span>';
-        // v4.18: show yearly rate (with savings) alongside monthly
         var yf = wdpNum(p.yearlyFee), save = wdpNum(p.monthlyFee) * 12 - yf;
         var yearlyHtml = yf > 0
             ? '<div style="font-size:12px; color:#475569;">or <strong>' + wdpMoney(yf) + '</strong>/year' + (save > 0 ? ' <span style="color:#16a34a;">(save ' + wdpMoney(save) + ')</span>' : '') + '</div>'
@@ -807,7 +762,6 @@ async function wdcSend(pid) {
     }
 }
 
-// ---- Super Admin side ----
 (function () {
     var origReview = window.wdpReview;
     window.wdpReview = function (sid, key) {
@@ -884,12 +838,11 @@ async function wdcApprove(sid, key) {
     }
 }
 
-// After a normal payment is approved, offer to apply a saved nextPlan
 async function wdcApplyNext(sid, key) {
     var db = firebase.database();
     var node = (await db.ref('paymentRequests/' + sid + '/' + key).once('value')).val();
     if (!node || node.status !== 'approved' || node.type === 'plan-change') return;
-    if (!(Date.now() - Date.parse(node.decidedAt) < 120000)) return;   // only for the approval just made
+    if (!(Date.now() - Date.parse(node.decidedAt) < 120000)) return;
     var np = (await db.ref('billing/' + sid + '/nextPlan').once('value')).val();
     if (!np) return;
     var cur = (await db.ref('billing/' + sid + '/plan').once('value')).val();
@@ -907,9 +860,6 @@ async function wdcApplyNext(sid, key) {
     if (typeof wdsReload === 'function') { try { await wdsReload(); } catch (e) { } }
 }
 
-// =====================================================================
-// STORE SIDE — reminder banner, sidebar button, login link
-// =====================================================================
 async function wdpEnsureBanner() {
     const old = document.getElementById('wdp-banner');
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
@@ -925,7 +875,7 @@ async function wdpEnsureBanner() {
             const db = firebase.database();
             const r = await Promise.all([wdpTimeout(db.ref('billing/' + sid + '/dueDate').once('value'), 10000), wdpTimeout(db.ref('billing/' + sid + '/trial').once('value'), 10000), wdpTimeout(db.ref('billingSettings/dueSoonDays').once('value'), 10000)]);
             wdpBanner = { id: sid, at: Date.now(), loading: false, billing: { dueDate: r[0].val(), trial: !!r[1].val() }, soon: r[2].val() == null ? 7 : wdpNum(r[2].val()) };
-        } catch (e) { wdpBanner.loading = false; wdpBanner.at = Date.now() - 4 * 60 * 1000; return; }   // try again in a minute
+        } catch (e) { wdpBanner.loading = false; wdpBanner.at = Date.now() - 4 * 60 * 1000; return; }
     }
 
     const s = wdpSubState(wdpBanner.billing, wdpToday(), wdpBanner.soon);
@@ -965,13 +915,6 @@ async function wdpEnsureBanner() {
     }
 }
 
-// =====================================================================
-// SIDEBAR BUTTON — global hook, insert-only, idempotent.
-// Called by wdpAttach AND (recommended) by any patch that rebuilds
-// the sidebar (e.g. staff-sidebar-patch.js, manager-preorder-patch.js).
-// Other patches should add, right after their sidebar rebuild:
-//     if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
-// =====================================================================
 function wdpIsShown(el) { return !!(el && el.getClientRects().length > 0); }
 function wdpFindShownButton(root, test) {
     const btns = root.querySelectorAll('button');
@@ -986,38 +929,27 @@ window.wdpAttachSidebar = function () {
     const wrap = document.getElementById('dashboard-main-wrapper');
     const isAdmin = currentUserRole === 'Admin' && currentStoreId && currentStoreId !== 'SUPER_ADMIN';
     const old = document.querySelectorAll('#wdp-sidebar-btn');
-    // A button written straight into app.html (data-static="1") is handled by adjustSidebarForRole: shown for the
-    // Admin, hidden for other roles. Nothing to insert or remove then.
     if (old.length === 1 && old[0].dataset.static === '1') return;
     if (!wrap || !isAdmin) { old.forEach(function (b) { b.remove(); }); return; }
 
-    // The VISIBLE Logout button marks the sidebar the person is actually looking at
-    // (other patches rebuild/copy the sidebar, so ".sidebar" alone can point at a hidden one).
     const logout = wdpFindShownButton(wrap, function (t) { return /logout$/.test(t); });
     if (!logout) return;
 
-    // Already one copy, right before Logout: do nothing (flicker fix)
     if (old.length === 1 && logout.previousElementSibling === old[0]) return;
 
-    // Otherwise drop any stale copy (e.g. left in a hidden sidebar) and insert a fresh one
     old.forEach(function (b) { b.remove(); });
     const sb = document.createElement('button');
     sb.id = 'wdp-sidebar-btn';
-    sb.className = 'menu-btn btn-subscription';   // stable class, no CSS transition
+    sb.className = 'menu-btn btn-subscription';   
     sb.textContent = '💳 Subscription';
     sb.onclick = function () { wdpOpenRenew(currentStoreId); };
     logout.parentNode.insertBefore(sb, logout);
 };
 
-// =====================================================================
-// MAIN ATTACH
-// =====================================================================
-// Login link: sits inside the login card, right under "Register New Business". The card is rebuilt by
-// email-auth-patch.js, so it is re-inserted after every rebuild (see wdpHookLoginBuild) and on every re-check.
 function wdpInsertLoginLink() {
     const regBtn = wdpFindShownButton(document, function (t) { return t.indexOf('register new business') !== -1; });
     const old = document.querySelectorAll('#wdp-login-wrap');
-    if (regBtn && old.length === 1 && regBtn.nextElementSibling === old[0]) return;   // already in place
+    if (regBtn && old.length === 1 && regBtn.nextElementSibling === old[0]) return;   
     old.forEach(function (w) { w.remove(); });
     if (!regBtn) return;
     const wrap = document.createElement('div');
@@ -1028,7 +960,6 @@ function wdpInsertLoginLink() {
     regBtn.insertAdjacentElement('afterend', wrap);
 }
 
-// email-auth-patch.js loads after this file, so hook its card builder as soon as it exists.
 function wdpHookLoginBuild() {
     const prev = window.wdaeBuildLoginScreen;
     if (typeof prev !== 'function' || prev.__wdp) return;
@@ -1041,9 +972,6 @@ function wdpHookLoginBuild() {
     window.wdaeBuildLoginScreen = hooked;
 }
 
-// Super Admin "Pending payments" button (v4.12). It anchors to the VISIBLE "Logout / Exit" button in the dark header
-// (a button written in app.html, so it is always there on the Super Admin screen) and does not depend on
-// #super-admin-view having an "active" class. On store screens "Logout / Exit" is not shown, so the button is removed.
 function wdpPendingAnchor(view) {
     const exit = wdpFindShownButton(view, function (t) { return t.indexOf('logout / exit') !== -1; });
     if (exit) return { el: exit, where: 'beforebegin' };
@@ -1055,15 +983,13 @@ function wdpPendingAnchor(view) {
 function wdpAttachPendingButton() {
     const all = document.querySelectorAll('#wdp-btn-pending');
     let btn = all[0] || null;
-    for (let i = 1; i < all.length; i++) all[i].remove();   // never more than one copy
+    for (let i = 1; i < all.length; i++) all[i].remove();   
 
-    // Preferred spot: right after the "Security" button. Fallback: right before "Logout / Exit".
     const security = wdpFindShownButton(document, function (t) { return t.indexOf('security') !== -1; });
     const exit = wdpFindShownButton(document, function (t) { return t.indexOf('logout / exit') !== -1; });
     const anchor = security ? { el: security, where: 'afterend' } : (exit ? { el: exit, where: 'beforebegin' } : null);
 
     if (!anchor) {
-        // Not on the Super Admin screen. A button written into app.html (data-static="1") stays where it is.
         if (btn && btn.dataset.static !== '1') btn.remove();
         return;
     }
@@ -1080,12 +1006,10 @@ function wdpAttachPendingButton() {
     btn.style.display = '';
 
     const inPlace = anchor.where === 'afterend' ? anchor.el.nextElementSibling === btn : btn.nextElementSibling === anchor.el;
-    if (!inPlace) anchor.el.insertAdjacentElement(anchor.where, btn);   // moves an existing button, or adds a new one
+    if (!inPlace) anchor.el.insertAdjacentElement(anchor.where, btn);   
     wdpUpdateBadge();
 }
 
-// Opt-in diagnostic: open the app with ?wdpdebug=1 and, after signing in, an alert reports why the sidebar button is or
-// is not showing (there is no console on a phone).
 var wdpDebugDone = false;
 function wdpDebugReport() {
     if (wdpDebugDone || !/[?&]wdpdebug=1/.test(location.search)) return;
@@ -1095,7 +1019,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.19)\n' +
+            alert('Pending payments button check (payments-patch v4.20)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
@@ -1120,35 +1044,19 @@ function wdpDebugReport() {
 }
 
 function wdpAttach() {
-    // Each part is guarded on its own, so one failing can never stop the others.
-
-    // Super Admin: live listener + the "Pending payments" button
     try { wdpAttachPendingButton(); } catch (e) { console.warn(e); }
-
-    // Store Admin: sidebar button via the shared hook
     try { wdpAttachSidebar(); } catch (e) { console.warn(e); }
     try { wdpDebugReport(); } catch (e) { console.warn(e); }
-
-    // Login screen link (so a locked store can still pay)
     try { wdpHookLoginBuild(); } catch (e) { console.warn(e); }
     try { wdpInsertLoginLink(); } catch (e) { console.warn(e); }
-
     wdpEnsureBanner().catch(function (e) { console.warn(e); });
 }
 
-// =====================================================================
-// OBSERVER — fires only when the DOM actually changes.
-// Replaces the old setInterval(1200) which caused the sidebar race.
-// =====================================================================
 (function () {
-    // Initial paint once the page settles
     window.addEventListener('load', function () {
         setTimeout(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 300);
     });
 
-    // Watch for any DOM change on the body and re-run wdpAttach.
-    // Cheap because wdpAttach itself is idempotent (does nothing if
-    // everything is already there). No more racing with other patches.
     var wdpObserver = new MutationObserver(function () {
         try { wdpAttach(); } catch (e) { console.warn(e); }
     });
@@ -1161,8 +1069,6 @@ function wdpAttach() {
     }
 })();
 
-// Safety net: re-check every 2 seconds (idempotent and cheap), in case a patch changes the page in a way the
-// observer does not see.
 (function () {
     setInterval(function () { try { wdpAttach(); } catch (e) { console.warn(e); } }, 2000);
 })();
