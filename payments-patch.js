@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.20) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.21) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,12 +16,14 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v4.21: FIXED BLANK PAYSTACK SCREEN. Removed 'async' from wdpSubmit so the browser doesn't lose
+//   the user click gesture, added callback_url, and tightened email validation.
 // v4.20: FORCED PAYSTACK PAYMENT. Removed manual bank details and forced all payments to go through 
 //   the Paystack popup. The user can still pay via Bank Transfer inside the Paystack modal.
 //
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.20 loaded");
+console.log("Wise Decision payments-patch.js — v4.21 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
@@ -338,7 +340,8 @@ function wdpRecalc() {
     } else { hint.textContent = 'Enter exactly what you want to pay.'; }
 }
 
-async function wdpSubmit() {
+// v4.21: Removed 'async' to fix the blank Paystack popup issue (loss of user gesture)
+function wdpSubmit() {
     const c = wdpCtx;
     if (!c || wdpBusy) return;
     
@@ -360,7 +363,7 @@ async function wdpSubmit() {
     }
     
     const email = prompt("Please enter your email address for the payment receipt:", "");
-    if (!email || email.indexOf('@') === -1) {
+    if (!email || email.indexOf('@') === -1 || email.indexOf('.') === -1) {
         alert("A valid email is required to pay online.");
         return;
     }
@@ -370,6 +373,7 @@ async function wdpSubmit() {
         key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c', // Your Live Public Key
         email: email,
         amount: amount * 100, // Paystack uses Kobo (multiply by 100)
+        callback_url: window.location.href, // v4.21: Added this to help the iframe load properly
         onSuccess: (transaction) => {
             // Payment successful! Auto-fill the reference and save it.
             document.getElementById('wdp-ref').value = transaction.reference;
@@ -1019,7 +1023,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.20)\n' +
+            alert('Pending payments button check (payments-patch v4.21)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
