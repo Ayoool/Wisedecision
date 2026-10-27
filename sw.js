@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v130'; // Bumped to v128 to force an update
+const CACHE = 'wd-shell-v131'; // Bumped to v128 to force an update
 const PRECACHE = [
     './app.html',
     './verify.html',
