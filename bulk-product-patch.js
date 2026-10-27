@@ -281,7 +281,7 @@
     window.wdbpSave = async function () {
         var err = el('wdbp-error');
         err.style.display = 'none';
-        var fail = function (msg) { err.textContent = msg; err.style.display = 'block'; };
+        var fail = function (msg) { try { if (window.wdnavHide) wdnavHide(); } catch (e) {} err.textContent = msg; err.style.display = 'block'; };
 
         var sid = (typeof currentStoreId !== 'undefined') ? currentStoreId : null;
         if (!sid || sid === 'SUPER_ADMIN') return fail('No store is open.');
@@ -337,6 +337,7 @@
 
         var btn = el('wdbp-save');
         btn.disabled = true; btn.textContent = 'Saving...';
+        try { if (window.wdnavShow) wdnavShow('Saving products...', { mode: 'manual', maxMs: 30000 }); } catch (e) { /* spinner is optional */ }
         try {
             var db = firebase.database();
             var ref = db.ref('stores/' + sid + '/inventory/' + branchId);
@@ -393,6 +394,7 @@
             });
             await ref.update(batch);
 
+            try { if (window.wdnavHide) wdnavHide(); } catch (e) {}
             wdbpClose();
             alert('✅ Added ' + fresh.length + ' product' + (fresh.length === 1 ? '' : 's') + '.' +
                 (skipped.length ? '\n\nSkipped (already exist or repeated): ' + skipped.slice(0, 15).join(', ') + (skipped.length > 15 ? '...' : '') : ''));
