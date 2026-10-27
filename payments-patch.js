@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.18) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.19) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,6 +16,11 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v4.19: PAYSTACK INLINE INTEGRATION. Added automatic Paystack payment popup.
+//   * When a user selects "Online link", a prompt asks for their email, and the Paystack modal opens.
+//   * On success, the transaction reference is automatically saved and the request is sent for approval.
+//   * To use this, add <script src="https://js.paystack.co/v2/inline.js"></script> to your app.html/index.html <head>.
+//
 // v4.18: YEARLY PLANS. Plans may now include a `yearlyFee` (fallback = monthlyFee × 12).
 //   * Renew form has a "Billing cycle" picker (Monthly / Yearly). Yearly = 12 months upfront at the yearly rate,
 //     with a live "save ₦X" note when the plan is cheaper yearly.
@@ -23,56 +28,9 @@
 //   * On approval, `billing/<store>/cycle` is saved so the form defaults to the store's last choice.
 //   * Plan cards show "₦X/month · or ₦Y/year (save ₦Z)" when a yearly rate exists.
 //
-// v4.17: CHANGE PLAN. A "🔄 Change my plan" button on the Subscription screen.
-//   * Upgrade: the pay form opens with the chosen plan selected (switches on approval, as before).
-//   * Downgrade / same-price switch: a no-payment request (type 'plan-change', amount 0). When the store is signed in,
-//     its branches/staff/products are checked against the new limits first. The Super Admin reviews it (usage vs new
-//     limits) and approves: the plan is saved as billing/<store>/nextPlan and applies at the next renewal, or right
-//     away if "Switch now" is ticked. After approving a normal payment, the Super Admin is offered to apply a saved
-//     nextPlan. The store's pay form defaults to its nextPlan.
-//   * Needs two rules changes (paymentRequests .validate allows amount 0 for plan-change; billing/$storeId/nextPlan
-//     is publicly readable).
-// v4.16: emails the owner when a store sends a payment request (set WDP_ALERT_URL to the Apps Script web app URL).
-// v4.15: works with a Pending payments button written into app.html (it is reused and moved after "Security", never
-//   deleted); opening it starts the live listener itself, so it can never show a false "nothing pending".
-// v4.14: the Pending payments button now sits right after the "Security" button (falls back to before "Logout / Exit").
-// v4.13 FIX: a stale/hidden static copy of the Pending payments button (data-static="1" in app.html) is now removed and
-//   replaced by a visible one; the debug report no longer depends on #super-admin-view either.
-// v4.12 FIX: the Pending payments button now anchors straight to the visible "Logout / Exit" button and no longer
-//   depends on #super-admin-view having the "active" class. wdpOpenPending no longer exits early for the same reason.
-// v4 FIXES (sidebar shake):
-//   * New global hook wdpAttachSidebar() — insert-only, idempotent, no reflows.
-//   * setInterval() replaced with MutationObserver — only reacts when sidebar actually changes.
-//   * Sidebar button uses btn-subscription (no CSS transition) so it never visually pops.
-//   * Other patches (staff-sidebar-patch.js, manager-preorder-patch.js) should call
-//       if (typeof wdpAttachSidebar === 'function') wdpAttachSidebar();
-//     immediately after they rebuild the sidebar, to eliminate the race entirely.
-//
-// v4.1 FIX (login link): the login screen no longer uses .auth-card / "login to store", so the
-//   "Renew or pay subscription" link is now anchored under the "Register New Business" button.
-//
-// v4.2 FIX: the login link and the sidebar button now anchor to the VISIBLE "Register New Business" / "Logout"
-//   buttons and replace any stale copy left in a hidden card/sidebar (other patches rebuild those).
-//
-// v4.11: the Pending payments button can be written straight into app.html (data-static="1"); this file then only keeps
-//   its label and count up to date.
-// v4.10: the Pending payments button no longer depends on the currentUserRole value; it appears whenever the Super Admin
-//   screen is on screen.
-// v4.9: the Super Admin "Pending payments" button now goes in the dark header, before "Logout / Exit" (a button that is
-//   written in app.html, so it is always there). ?wdpdebug=1 also reports on the Super Admin screen.
-// v4.8: the Super Admin "Pending payments" button is placed next to the visible "Billing settings" / "Load usage" button.
-// v4.7: the sidebar button can be written straight into app.html (data-static="1"); adjustSidebarForRole then shows it
-//   for the Admin and hides it for other roles. The old JS insertion stays as a fallback. Open the app with ?wdpdebug=1
-//   for an on-screen report if the button is missing.
-// v4.6: the Subscription screen reads the billing record field by field (so the rules can keep payment history private).
-// v4.5: NOTHING FLOATS. The login link sits inside the login card again (re-inserted after every rebuild of the card),
-//   and the sidebar button is forced visible with a CSS rule so adjustSidebarForRole cannot hide it.
-// v4.4 FIX: the Subscription screen reads each database node separately (one blocked node no longer breaks it),
-//   falls back to the default bank details, and shows the real reason when loading fails.
-//
 // Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.18 loaded");
+console.log("Wise Decision payments-patch.js — v4.19 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
@@ -403,22 +361,66 @@ function wdpRecalc() {
 async function wdpSubmit() {
     const c = wdpCtx;
     if (!c || wdpBusy) return;
+    
     const amount = parseFloat(document.getElementById('wdp-amount').value);
     const cycleEl = document.getElementById('wdp-cycle');
     const cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
     const months = cycle === 'yearly' ? 12 : (parseInt(document.getElementById('wdp-months').value) || 1);
     const method = document.getElementById('wdp-method').value;
-    const reference = document.getElementById('wdp-ref').value.trim();
     const note = document.getElementById('wdp-note').value.trim();
     const sel = document.getElementById('wdp-plan');
     const planId = sel ? sel.value : '';
-    if (!(amount > 0)) { alert('Enter the amount you paid.'); return; }
-    if (reference.length < 3) { alert('Please enter the sender name or transfer reference, so we can find your payment.'); return; }
 
-    const rec = { storeId: c.id, storeName: c.name, amount: amount, months: months, cycle: cycle, planId: planId || null, method: method, reference: reference, note: note, status: 'pending', createdAt: new Date().toISOString() };
+    if (!(amount > 0)) { alert('Enter the amount you paid.'); return; }
+
+    // --- PAYSTACK POPUP LOGIC ---
+    if (method === 'Online link') {
+        if (typeof PaystackPop === 'undefined') {
+            alert("Paystack is still loading. Please wait a few seconds and try again.");
+            return;
+        }
+        
+        // Paystack requires an email.
+        const email = prompt("Please enter your email address for the payment receipt:", "");
+        if (!email || email.indexOf('@') === -1) {
+            alert("A valid email is required to pay online.");
+            return;
+        }
+
+        const paystack = new PaystackPop();
+        paystack.newTransaction({
+            key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c', // Your Live Public Key
+            email: email,
+            amount: amount * 100, // Paystack uses Kobo (multiply by 100)
+            onSuccess: (transaction) => {
+                // Payment successful! Auto-fill the reference and save it.
+                document.getElementById('wdp-ref').value = transaction.reference;
+                alert("Payment successful! Saving your record now...");
+                wdpSaveRecord(c, amount, cycle, months, method, transaction.reference, note, planId);
+            },
+            onCancel: () => {
+                alert("Payment window closed.");
+            }
+        });
+        return; // Stop here so it doesn't run the manual save
+    }
+    // --- END PAYSTACK LOGIC ---
+
+    // Manual payment flow (Transfer, POS, Cash)
+    const reference = document.getElementById('wdp-ref').value.trim();
+    if (reference.length < 3) { alert('Please enter the sender name or transfer reference, so we can find your payment.'); return; }
+    
+    wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId);
+}
+
+// Helper function to save the record to Firebase (used by both Paystack and Manual)
+async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId) {
     wdpBusy = true;
     const btn = document.getElementById('wdp-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+
+    const rec = { storeId: c.id, storeName: c.name, amount: amount, months: months, cycle: cycle, planId: planId || null, method: method, reference: reference, note: note, status: 'pending', createdAt: new Date().toISOString() };
+    
     try {
         const ref = firebase.database().ref('paymentRequests/' + c.id).push();
         await ref.set(rec);
@@ -426,9 +428,15 @@ async function wdpSubmit() {
         c.requests[ref.key] = rec;
         wdpBusy = false;
         wdpRenderRenew();
-        if (confirm('✅ Sent! We will confirm your payment shortly.\n\nTap OK to also message Wise Decision on WhatsApp so it is confirmed faster.')) {
-            const msg = 'Hello, I have paid my Wise Decision subscription.\n\nStore ID: ' + c.id + '\nAmount: ' + wdpMoney(amount) + ' (' + (cycle === 'yearly' ? '1 year — 12 months' : months + ' month' + (months === 1 ? '' : 's')) + ')\nPaid by: ' + method + '\nReference: ' + reference + '\n\nPlease approve it. Thank you!';
-            window.open('https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent(msg), '_blank');
+        
+        // Only show the WhatsApp prompt for manual transfers, not Paystack
+        if (method !== 'Online link') {
+            if (confirm('✅ Sent! We will confirm your payment shortly.\n\nTap OK to also message Wise Decision on WhatsApp so it is confirmed faster.')) {
+                const msg = 'Hello, I have paid my Wise Decision subscription.\n\nStore ID: ' + c.id + '\nAmount: ' + wdpMoney(amount) + ' (' + (cycle === 'yearly' ? '1 year — 12 months' : months + ' month' + (months === 1 ? '' : 's')) + ')\nPaid by: ' + method + '\nReference: ' + reference + '\n\nPlease approve it. Thank you!';
+                window.open('https://wa.me/' + WDP_SUPPORT_WA + '?text=' + encodeURIComponent(msg), '_blank');
+            }
+        } else {
+            alert("Successfully submitted for approval!");
         }
     } catch (e) {
         wdpBusy = false;
@@ -1087,7 +1095,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.18)\n' +
+            alert('Pending payments button check (payments-patch v4.19)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
