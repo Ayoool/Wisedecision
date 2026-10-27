@@ -9,7 +9,7 @@
 //
 // Each product row asks: "Sold in small units (pieces)?"  No / Yes
 //   * No  -> the product is one whole unit (pack size 1), with one price.
-//   * Yes -> they enter pieces per pack, pack and piece names, the price per piece, and the stock as
+//   * Yes -> they enter pieces per pack, pack and piece names, the retail and wholesale price per piece, and the stock as
 //            packs + loose pieces. Stock is saved in pieces (packs x pieces per pack + loose pieces).
 //
 // Bulk adds go into the branch currently selected in Inventory, skip names that already exist there,
@@ -97,9 +97,10 @@
             '</div>' +
             '<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">' +
                 '<input class="wdbp-cost" type="number" inputmode="decimal" min="0" step="any" placeholder="Cost ₦" style="' + IN + '">' +
-                '<input class="wdbp-price" type="number" inputmode="decimal" min="0" step="any" placeholder="Price ₦" style="' + IN + '">' +
+                '<input class="wdbp-price" type="number" inputmode="decimal" min="0" step="any" placeholder="Retail ₦" style="' + IN + '">' +
                 '<input class="wdbp-stock" type="number" inputmode="decimal" min="0" step="any" placeholder="Stock" style="' + IN + '">' +
             '</div>' +
+            '<input class="wdbp-wh" type="number" inputmode="decimal" min="0" step="any" placeholder="Wholesale ₦ (blank = same as retail)" style="' + IN + ' margin-top:6px;">' +
             '<div style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">' +
                 '<span style="font-size:12px; font-weight:bold; color:#334155;">Sold in small units (pieces)?</span>' +
                 '<button type="button" class="wdbp-no" onclick="wdbpSetSmall(this, false)" style="padding:6px 14px; border-radius:8px; cursor:pointer; font-weight:bold;">No</button>' +
@@ -109,24 +110,21 @@
                 '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">' +
                     '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Pieces in 1 pack</label>' +
                         '<input class="wdbp-upp" type="number" inputmode="numeric" min="2" step="1" placeholder="e.g. 10" style="' + IN + '"></div>' +
-                    '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Price per piece ₦</label>' +
+                    '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Retail price per piece ₦</label>' +
                         '<input class="wdbp-pp" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 150" style="' + IN + '"></div>' +
                     '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Pack name</label>' +
                         '<input class="wdbp-packname" type="text" value="Pack" style="' + IN + '"></div>' +
                     '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Piece name</label>' +
                         '<input class="wdbp-piecename" type="text" value="Piece" style="' + IN + '"></div>' +
-                    '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Wholesale per piece ₦ (optional)</label>' +
-                        '<input class="wdbp-pwh" type="number" inputmode="decimal" min="0" step="any" style="' + IN + '"></div>' +
+                    '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Wholesale price per piece ₦</label>' +
+                        '<input class="wdbp-pwh" type="number" inputmode="decimal" min="0" step="any" placeholder="blank = same as retail" style="' + IN + '"></div>' +
                     '<div><label style="display:block; font-size:11px; color:#0369a1; margin-bottom:2px;">Extra loose pieces in stock</label>' +
                         '<input class="wdbp-extra" type="number" inputmode="numeric" min="0" step="1" placeholder="0" style="' + IN + '"></div>' +
                 '</div>' +
-                '<div style="font-size:11px; color:#475569; margin-top:6px;">Cost, Price and Stock above are then <strong>per pack</strong> (Stock = number of packs).</div>' +
+                '<div style="font-size:11px; color:#475569; margin-top:6px;">Cost, Retail, Wholesale and Stock above are then <strong>per pack</strong> (Stock = number of packs). The two piece prices are per single piece.</div>' +
             '</div>' +
             '<details style="margin-top:6px;"><summary style="font-size:12px; color:#0369a1; cursor:pointer;">More options</summary>' +
-                '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">' +
-                    '<input class="wdbp-cat" type="text" placeholder="Category" style="' + IN + '">' +
-                    '<input class="wdbp-wh" type="number" inputmode="decimal" min="0" step="any" placeholder="Wholesale ₦" style="' + IN + '">' +
-                '</div>' +
+                '<input class="wdbp-cat" type="text" placeholder="Category" style="' + IN + ' margin-top:6px;">' +
                 '<label style="display:block; font-size:11px; color:#64748b; margin:6px 0 2px;">Expiry date (optional)</label>' +
                 '<input class="wdbp-exp" type="date" style="' + IN + '">' +
             '</details>' +
@@ -144,9 +142,9 @@
         noB.style.cssText = base + (yes ? offStyle : 'background:#475569; color:#fff; border:1px solid #475569;');
         yesB.style.cssText = base + (yes ? on : offStyle);
         row.querySelector('.wdbp-cost').placeholder = yes ? 'Pack cost ₦' : 'Cost ₦';
-        row.querySelector('.wdbp-price').placeholder = yes ? 'Pack price ₦' : 'Price ₦';
+        row.querySelector('.wdbp-price').placeholder = yes ? 'Pack retail ₦' : 'Retail ₦';
         row.querySelector('.wdbp-stock').placeholder = yes ? 'Packs' : 'Stock';
-        row.querySelector('.wdbp-wh').placeholder = yes ? 'Pack wholesale ₦' : 'Wholesale ₦';
+        row.querySelector('.wdbp-wh').placeholder = yes ? 'Pack wholesale ₦ (blank = same as retail)' : 'Wholesale ₦ (blank = same as retail)';
     }
 
     window.wdbpSetSmall = function (btn, yes) {
@@ -226,6 +224,7 @@
                 applySmall(r, true);
                 r.querySelector('.wdbp-upp').value = Math.round(num(p[4]));
                 if (p[5]) r.querySelector('.wdbp-pp').value = num(p[5]);
+                if (p[6]) r.querySelector('.wdbp-pwh').value = num(p[6]);
             }
         });
         if (ta) ta.value = '';
@@ -243,13 +242,13 @@
             '<div style="background:#f8fafc; color:#0f172a; border-radius:14px; width:100%; max-width:560px; max-height:94vh; display:flex; flex-direction:column; box-sizing:border-box;">' +
                 '<div style="padding:16px 16px 8px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">' +
                     '<div><h3 style="margin:0; font-size:17px;">📚 Add products in bulk</h3>' +
-                    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">Name and selling price are needed. Cost and stock are optional. Tap Yes on a row if it is also sold in pieces.</p></div>' +
+                    '<p style="margin:4px 0 0; font-size:12px; color:#64748b;">Name and retail price are needed. Cost and stock are optional. Tap Yes on a row if it is also sold in pieces.</p></div>' +
                     '<button type="button" onclick="wdbpClose()" style="padding:6px 12px; border:none; background:#e2e8f0; border-radius:8px; cursor:pointer;">✕</button>' +
                 '</div>' +
                 '<div style="padding:0 16px; overflow-y:auto; flex:1;">' +
                     '<details style="background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:10px; margin-bottom:10px;">' +
                         '<summary style="font-size:13px; font-weight:bold; color:#0369a1; cursor:pointer;">📋 Paste a list instead</summary>' +
-                        '<p style="font-size:11px; color:#64748b; margin:8px 0 6px;">One product per line: <strong>Name, Cost, Price, Stock</strong><br>Example: <em>Peak Milk 400g, 1200, 1500, 24</em><br>Sold in pieces too? Add <strong>pieces per pack, price per piece</strong> at the end:<br><em>Paracetamol, 800, 1200, 10, 10, 150</em><br>Do not use commas inside numbers.</p>' +
+                        '<p style="font-size:11px; color:#64748b; margin:8px 0 6px;">One product per line: <strong>Name, Cost, Retail price, Stock</strong><br>Example: <em>Peak Milk 400g, 1200, 1500, 24</em><br>Sold in pieces too? Add <strong>pieces per pack, retail per piece, wholesale per piece</strong> at the end:<br><em>Paracetamol, 800, 1200, 10, 10, 150, 130</em><br>Do not use commas inside numbers.</p>' +
                         '<textarea id="wdbp-paste" rows="5" style="' + IN + ' font-family:monospace;" placeholder="Peak Milk 400g, 1200, 1500, 24"></textarea>' +
                         '<button type="button" onclick="wdbpApplyPaste()" style="margin-top:8px; padding:9px 14px; border-radius:8px; border:none; background:#0284c7; color:#fff; font-weight:bold; cursor:pointer;">Fill rows from list</button>' +
                     '</details>' +
@@ -308,7 +307,7 @@
             var n = idx + 1;
             if (!name) { problems.push('Row ' + n + ': type the product name.'); return; }
             var cost = num(costRaw), price = num(priceRaw), stock = num(stockRaw), wh = num(whRaw);
-            if (!(price > 0)) { problems.push('Row ' + n + ' (' + name + '): enter the ' + (small ? 'pack ' : 'selling ') + 'price.'); return; }
+            if (!(price > 0)) { problems.push('Row ' + n + ' (' + name + '): enter the ' + (small ? 'pack ' : '') + 'retail price.'); return; }
             if (cost < 0 || stock < 0 || wh < 0) { problems.push('Row ' + n + ' (' + name + '): numbers cannot be negative.'); return; }
 
             var upp = 1, piecePrice = price, pieceWh = 0, packName = 'Pack', pieceName = 'Piece', totalStock = stock;
@@ -317,7 +316,7 @@
                 piecePrice = num(ppRaw); pieceWh = num(pwhRaw);
                 var extra = Math.max(0, Math.round(num(extraRaw)));
                 if (upp < 2) { problems.push('Row ' + n + ' (' + name + '): enter how many pieces are in one pack (2 or more).'); return; }
-                if (!(piecePrice > 0)) { problems.push('Row ' + n + ' (' + name + '): enter the price per piece.'); return; }
+                if (!(piecePrice > 0)) { problems.push('Row ' + n + ' (' + name + '): enter the retail price per piece.'); return; }
                 if (pieceWh < 0) { problems.push('Row ' + n + ' (' + name + '): numbers cannot be negative.'); return; }
                 packName = r.querySelector('.wdbp-packname').value.trim() || 'Pack';
                 pieceName = r.querySelector('.wdbp-piecename').value.trim() || 'Piece';
@@ -330,7 +329,7 @@
                          upp: upp, piecePrice: piecePrice, pieceWh: pieceWh, packName: packName, pieceName: pieceName, small: small });
         });
         if (problems.length) return fail(problems.slice(0, 6).join('\n') + (problems.length > 6 ? '\n...and ' + (problems.length - 6) + ' more.' : ''));
-        if (!items.length) return fail('Add at least one product (name and selling price).');
+        if (!items.length) return fail('Add at least one product (name and retail price).');
 
         var branchId = (typeof currentInventoryBranchFilter !== 'undefined' && currentInventoryBranchFilter && currentInventoryBranchFilter !== 'all')
             ? currentInventoryBranchFilter
