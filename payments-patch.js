@@ -1,4 +1,4 @@
-// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.22) ====================
+// ==================== WISE DECISION SUBSCRIPTION PAYMENTS PATCH (v4.23) ====================
 // Load LAST, after storeplans-patch.js and every other patch (defer).
 //
 // STORE SIDE
@@ -16,18 +16,18 @@
 //
 // ALSO FIXES: saving "Billing settings" used to wipe your Plans (it replaced the whole billingSettings node).
 //
+// v4.23: HYBRID PAYSTACK FIX. If an online payment link is set in the Super Admin, the app displays a 
+//   direct "Open Paystack Page" link + a reference input box. This bypasses mobile Safari's iframe blocking.
+//   If no link is set, it falls back to the inline popup.
 // v4.22: PAYSTACK FIXES. No callback_url (it could redirect the page and skip onSuccess), amount rounded to
 //   whole kobo, email from the signed-in account (prompt only as a fallback, validated), unique reference +
 //   metadata sent to Paystack, an "initiated" record saved before the popup opens, double-tap guard, and a
 //   "Retry saving my payment" path if saving fails AFTER a successful payment (never charges twice).
-//   Removed unused wdpCopyAccount(). Needs index.html to load https://js.paystack.co/v2/inline.js
 // v4.21: Removed 'async' from wdpSubmit so the browser doesn't lose the user click gesture.
 // v4.20: FORCED PAYSTACK PAYMENT. Removed manual bank details and forced all payments to go through
 //   the Paystack popup. The user can still pay via Bank Transfer inside the Paystack modal.
-//
-// Data: paymentRequests/{storeId}/{requestId}. Phase 2 (fully automatic via Paystack) only replaces the Approve tap.
 
-console.log("Wise Decision payments-patch.js — v4.22 loaded");
+console.log("Wise Decision payments-patch.js — v4.23 loaded");
 
 var WDP_SUPPORT_WA = (typeof WDN_SUPPORT_WA !== 'undefined' && WDN_SUPPORT_WA) || '2349168140710';
 
@@ -243,9 +243,6 @@ function wdpRenderRenew() {
     const req = wdpFlatten({ x: c.requests });
     const pending = req.filter(function (r) { return r.status === 'pending' && r.type !== 'plan-change'; });
 
-    // REMOVED MANUAL BANK DETAILS
-    const bank = ''; 
-
     const planSelect = planIds.length === 0 ? '' :
         '<label style="font-size:12px; font-weight:bold;">Plan</label><select id="wdp-plan" onchange="wdpRecalc()" style="' + WDP_INPUT + '">' +
         (currentPlan ? '' : '<option value="">Keep my current arrangement</option>') +
@@ -265,17 +262,29 @@ function wdpRenderRenew() {
 
     const yearlyNote = '<div id="wdp-yearly-note" style="display:none; font-size:12px; color:#166534; background:#f0fdf4; border:1px solid #bbf7d0; padding:8px; border-radius:6px; margin:4px 0 10px;">You are paying for 12 months upfront at the yearly rate.</div>';
 
-    // UPDATED FORM: Forced Paystack, removed manual reference & method fields
+    // v4.23: Dynamic Form Generation. If a link is set, show the link and a manual reference box.
+    const buttonHtml = link 
+        ? '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7; color:white;" onclick="wdpSubmitManual()">' + (wdpUnsaved ? '💾 Retry saving my payment' : '✔ I have paid (Submit Reference)') + '</button>'
+        : '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7; color:white;" onclick="wdpSubmit()">' + (wdpUnsaved ? '💾 Retry saving my payment' : '💳 Pay with Paystack') + '</button>';
+
+    const refField = link ? wdpField('wdp-ref', 'Paystack Reference (Paste here)', 'text', '', 'placeholder="e.g. WD-123456"') : '<input type="hidden" id="wdp-ref" value="Paystack Auto">';
+
+    const linkHtml = link ? 
+        '<div style="margin-bottom:15px; padding:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; text-align:center;">' +
+        '<div style="font-size:12px; font-weight:bold; color:#166534; margin-bottom:8px;">Pay on the secure Paystack Page:</div>' +
+        '<a href="' + link + '" target="_blank" style="display:inline-block; padding:10px 20px; background:#16a34a; color:white; font-weight:bold; text-decoration:none; border-radius:6px;">🔗 Open Paystack Page</a>' +
+        '<div style="font-size:11px; color:#64748b; margin-top:8px;">After paying, copy the reference and paste it in the box below.</div></div>' : '';
+
     const form = '<div id="wdp-form" style="' + (pending.length ? 'display:none;' : '') + '">' + planSelect + cycleSelect + monthSelect + yearlyNote +
         wdpField('wdp-amount', 'Amount to pay (₦)', 'number', '', 'min="0"') +
         '<div id="wdp-amount-hint" style="font-size:11px; color:#64748b; margin:-6px 0 10px;"></div>' +
         
-        // Hidden inputs automatically force Paystack
         '<input type="hidden" id="wdp-method" value="Online link">' +
-        '<input type="hidden" id="wdp-ref" value="Paystack Auto">' +
         
+        linkHtml +
+        refField +
         wdpField('wdp-note', 'Note (optional)', 'text', '', '') +
-        '<button id="wdp-submit" class="menu-btn btn-action-primary" style="justify-content:center; margin:0; background:#0284c7; color:white;" onclick="wdpSubmit()">' + (wdpUnsaved ? '💾 Retry saving my payment' : '💳 Pay with Paystack') + '</button></div>';
+        buttonHtml + '</div>';
 
     const pendingNote = pending.length
         ? '<div style="background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px; border-radius:8px; font-size:13px; margin-bottom:10px;">⏳ Your payment of <strong>' + wdpMoney(pending[pending.length - 1].amount) + '</strong> is waiting for approval. We usually confirm within a few hours.' +
@@ -336,9 +345,35 @@ function wdpRecalc() {
     } else { hint.textContent = 'Enter exactly what you want to pay.'; }
 }
 
-// ==================== v4.22 PAYSTACK PAYMENT (store side) ====================
+// ==================== v4.23 MANUAL PAYMENT SUBMISSION (used when a link is set) ====================
 var wdpUnsaved = null;   // a paid-but-not-yet-saved record, kept so the store can retry saving
 
+function wdpSubmitManual() {
+    var c = wdpCtx;
+    if (!c || wdpBusy) return;
+    
+    if (wdpUnsaved) {
+        var u = wdpUnsaved;
+        wdpSaveRecord(u.c, u.amount, u.cycle, u.months, u.method, u.reference, u.note, u.planId, null);
+        return;
+    }
+
+    var amount = Math.round((parseFloat(document.getElementById('wdp-amount').value) || 0) * 100) / 100;
+    var cycleEl = document.getElementById('wdp-cycle');
+    var cycle = cycleEl && cycleEl.value === 'yearly' ? 'yearly' : 'monthly';
+    var months = cycle === 'yearly' ? 12 : (parseInt(document.getElementById('wdp-months').value) || 1);
+    var note = document.getElementById('wdp-note').value.trim();
+    var sel = document.getElementById('wdp-plan');
+    var planId = sel ? sel.value : '';
+    var reference = document.getElementById('wdp-ref').value.trim();
+
+    if (!(amount > 0)) { alert('Enter the amount you want to pay.'); return; }
+    if (reference.length < 3) { alert('Please enter the Paystack Reference so we can verify your payment.'); return; }
+
+    wdpSaveRecord(c, amount, cycle, months, 'Online link', reference, note, planId, null);
+}
+
+// ==================== v4.22 PAYSTACK POPUP (Fallback if no link is set) ====================
 function wdpValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(e || '').trim()); }
 
 function wdpGetEmail(storeId) {
@@ -360,12 +395,10 @@ function wdpGetEmail(storeId) {
     return email;
 }
 
-// Kept synchronous (no async/await before newTransaction) so the popup opens straight from the tap.
 function wdpSubmit() {
     var c = wdpCtx;
     if (!c || wdpBusy) return;
 
-    // A payment already went through but saving failed: retry the save only, never charge again.
     if (wdpUnsaved) {
         var u = wdpUnsaved;
         wdpSaveRecord(u.c, u.amount, u.cycle, u.months, u.method, u.reference, u.note, u.planId, null);
@@ -392,7 +425,6 @@ function wdpSubmit() {
 
     var reference = 'WD-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 
-    // Best-effort "initiated" record, so a payment is never completely untraceable.
     var pendingRef = null;
     try {
         pendingRef = firebase.database().ref('paymentRequests/' + c.id).push();
@@ -404,9 +436,9 @@ function wdpSubmit() {
     try {
         var paystack = new PaystackPop();
         paystack.newTransaction({
-            key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c',   // public key (safe in the browser)
+            key: 'pk_live_bb20f66f101c80dd0f566b79d8c0e3772476a91c',
             email: email,
-            amount: Math.round(amount * 100),                          // whole kobo
+            amount: Math.round(amount * 100),
             currency: 'NGN',
             ref: reference,
             metadata: {
@@ -440,7 +472,6 @@ function wdpSubmit() {
     }
 }
 
-// Saves the PAID record for the Super Admin to approve. pendingRef is the "initiated" record to upgrade (or null).
 async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, planId, pendingRef) {
     wdpBusy = true;
     var btn = document.getElementById('wdp-submit');
@@ -459,7 +490,6 @@ async function wdpSaveRecord(c, amount, cycle, months, method, reference, note, 
         alert('Successfully submitted for approval!');
     } catch (e) {
         wdpBusy = false;
-        // Money has already been taken: keep the details so the next tap only retries the save.
         wdpUnsaved = { c: c, amount: amount, cycle: cycle, months: months, method: method, reference: reference, note: note, planId: planId };
         if (btn) { btn.disabled = false; btn.textContent = '💾 Retry saving my payment'; }
         alert('Your payment went through (reference ' + reference + ') but we could not save it: ' + e.message +
@@ -1081,7 +1111,7 @@ function wdpDebugReport() {
         setTimeout(function () {
             const pb = document.getElementById('wdp-btn-pending');
             const an = wdpPendingAnchor(sv);
-            alert('Pending payments button check (payments-patch v4.22)\n' +
+            alert('Pending payments button check (payments-patch v4.23)\n' +
                 'role: ' + currentUserRole +
                 '\nanchor found: ' + (an ? an.el.textContent.trim() : 'NO') +
                 '\nbutton exists: ' + !!pb + '\nbutton shown: ' + wdpIsShown(pb) +
