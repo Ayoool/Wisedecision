@@ -50,7 +50,7 @@ const PRECACHE = [
     './mobile-patch.js',
     './bulk-product-patch.js',
     './nav-spinner-patch.js',
-    './materials-dashboard-patch.js'
+    './materials-dashboard-patch.js',
     'https://js.paystack.co/v2/inline.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
     'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
