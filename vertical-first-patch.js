@@ -1,5 +1,8 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.12) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.13) ====================
 // Load LAST — after every other vertical patch.
+//
+// v3.13: Building-materials stores now also keep the Credit Book, Suppliers, Customers,
+//        Expenses and Accountant buttons in the sidebar (see the 'keep' lists below).
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
 //     - Every sidebar button is hidden except the Phone Sales button (and Logout).
@@ -11,7 +14,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.12 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.13 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -47,13 +50,16 @@ var WDV_MAP = {
     'drinks':       { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     // Building materials (materials-patch.js adds these 3 sidebar buttons for the Admin):
     //   🏗️ Materials Dashboard (main), 🛒 New Sale, 🔨 Damaged / Wastage.
+    // materials-credit-patch.js adds 🧾 Credit Book.
     // New Sale opens the normal POS screen, so we must NOT redirect away from it (redirectOn).
-    // Inventory and Suppliers are reached from buttons on the Materials Dashboard.
-    // To bring back more sidebar buttons, add their text to keep, e.g. 'reports', 'expenses', 'staff'.
+    // Inventory stays hidden on purpose: "Manage Stock" on the Materials Dashboard replaces it.
+    // To bring back more sidebar buttons, add their text to keep.
     'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers', 'reports'], redirectOn: ['Store Overview'], restyle: false },
+                      keep: ['new sale', 'damaged', 'wastage', 'credit', 'staff', 'branches', 'stock transfers', 'reports',
+                             'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false },
     'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'staff', 'branches', 'stock transfers', 'reports'], redirectOn: ['Store Overview'], restyle: false }
+                      keep: ['new sale', 'damaged', 'wastage', 'credit', 'staff', 'branches', 'stock transfers', 'reports',
+                             'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false }
 };
 
 // Buttons that stay visible for exclusive verticals (lower-case text match)
@@ -132,7 +138,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.12] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.13] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -179,7 +185,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.12] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.13] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
