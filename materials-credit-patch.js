@@ -364,7 +364,7 @@ console.log("Wise Decision materials-credit-patch.js — v1 loaded");
         if ($('wcr-sidebar-css')) return;
         var st = document.createElement('style');
         st.id = 'wcr-sidebar-css';
-        st.textContent = 'body.wdd-mat #dashboard-main-wrapper .sidebar #wcr-sidebar-btn{background:#fafaf9 !important;color:#78350f !important;border-color:#e7e5e4 !important;border-left-color:#b45309 !important;}';
+        st.textContent = 'body.wdd-mat #dashboard-main-wrapper .sidebar #wcr-sidebar-btn{background:#ecfdf5 !important;color:#047857 !important;border-color:#a7f3d0 !important;border-left-color:#10b981 !important;}';
         document.head.appendChild(st);
     }
 
