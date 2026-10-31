@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v142'; // Bumped to add payments-auto-patch.js
+const CACHE = 'wd-shell-v143'; // Bumped to add payments-auto-patch.js
 const PRECACHE = [
     './app.html',
     './verify.html',
