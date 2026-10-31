@@ -1,7 +1,7 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.13) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.15) ====================
 // Load LAST — after every other vertical patch.
 //
-// v3.13: Building-materials stores now also keep the Credit Book, Suppliers, Customers,
+// v3.15: Building-materials stores now also keep the Manage Stock, Common Materials, Credit Book, Quotations, Suppliers, Customers,
 //        Expenses and Accountant buttons in the sidebar (see the 'keep' lists below).
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -14,7 +14,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.13 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.15 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -55,10 +55,10 @@ var WDV_MAP = {
     // Inventory stays hidden on purpose: "Manage Stock" on the Materials Dashboard replaces it.
     // To bring back more sidebar buttons, add their text to keep.
     'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'credit', 'staff', 'branches', 'stock transfers', 'reports',
+                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'staff', 'branches', 'stock transfers', 'reports',
                              'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false },
     'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'credit', 'staff', 'branches', 'stock transfers', 'reports',
+                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'staff', 'branches', 'stock transfers', 'reports',
                              'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false }
 };
 
@@ -138,7 +138,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.13] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.15] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -185,7 +185,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.13] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.15] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
