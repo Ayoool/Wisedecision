@@ -263,6 +263,15 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
         S + '#wdm-sidebar-materials-btn:hover{background:#9a3412 !important;border-left-color:#9a3412 !important;}' +
         S + '#wdm-sidebar-newsale-btn{background:#f0fdf4 !important;color:#15803d !important;border-color:#bbf7d0 !important;border-left-color:#22c55e !important;font-weight:700 !important;}' +
         S + '#wdm-sidebar-wastage-btn{border-left-color:#ef4444 !important;}' +
+        S + '.menu-btn[data-wdd="reports"]{background:#eff6ff !important;color:#1d4ed8 !important;border-color:#bfdbfe !important;border-left-color:#3b82f6 !important;}' +
+        S + '.menu-btn[data-wdd="staff"]{background:#ecfeff !important;color:#0e7490 !important;border-color:#a5f3fc !important;border-left-color:#06b6d4 !important;}' +
+        S + '.menu-btn[data-wdd="transfer"]{background:#f0fdfa !important;color:#0f766e !important;border-color:#99f6e4 !important;border-left-color:#14b8a6 !important;}' +
+        S + '.menu-btn[data-wdd="branch"]{background:#fefce8 !important;color:#a16207 !important;border-color:#fef08a !important;border-left-color:#eab308 !important;}' +
+        S + '.menu-btn[data-wdd="supplier"]{background:#f0f9ff !important;color:#0369a1 !important;border-color:#bae6fd !important;border-left-color:#0ea5e9 !important;}' +
+        S + '.menu-btn[data-wdd="customer"]{background:#fff1f2 !important;color:#be123c !important;border-color:#fecdd3 !important;border-left-color:#f43f5e !important;}' +
+        S + '.menu-btn[data-wdd="expense"]{background:#f7fee7 !important;color:#4d7c0f !important;border-color:#d9f99d !important;border-left-color:#84cc16 !important;}' +
+        S + '.menu-btn[data-wdd="accountant"]{background:#f1f5f9 !important;color:#334155 !important;border-color:#cbd5e1 !important;border-left-color:#64748b !important;}' +
+        S + '.menu-btn[data-wdd]:hover{filter:brightness(.95);}' +
         S + '.btn-logout{color:#b91c1c !important;border-color:#fecaca !important;background:#fff !important;}' +
         S + '.btn-logout:hover{background:#fef2f2 !important;border-left-color:#ef4444 !important;}' +
         // Phones: one swipeable row of buttons so the dashboard shows straight away
@@ -275,8 +284,22 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
         document.head.appendChild(st);
     }
 
+    var TAGS = [['report','reports'],['staff','staff'],['transfer','transfer'],['branch','branch'],['supplier','supplier'],['customer','customer'],['expense','expense'],['accountant','accountant']];
+    function tagSidebarButtons() {
+        var side = document.querySelector('#dashboard-main-wrapper .sidebar');
+        if (!side) return;
+        side.querySelectorAll('button').forEach(function (b) {
+            if (b.getAttribute('data-wdd')) return;
+            var t = (b.textContent || '').toLowerCase();
+            for (var i = 0; i < TAGS.length; i++) {
+                if (t.indexOf(TAGS[i][0]) !== -1) { b.setAttribute('data-wdd', TAGS[i][1]); return; }
+            }
+        });
+    }
+
     function syncSidebarClass() {
         if (!document.body) return;
+        tagSidebarButtons();
         var on = (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore();
         if (document.body.classList.contains('wdd-mat') !== on) document.body.classList.toggle('wdd-mat', on);
     }
