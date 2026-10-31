@@ -530,7 +530,8 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
         st.id = 'wdd-extra-side-css';
         st.textContent =
             S + '#wdd-sb-stock{background:#fff7ed !important;color:#c2410c !important;border-color:#fed7aa !important;border-left-color:#f97316 !important;}' +
-            S + '#wdd-sb-common{background:#fafaf9 !important;color:#44403c !important;border-color:#e7e5e4 !important;border-left-color:#78716c !important;}';
+            S + '#wdd-sb-common{background:#ecfeff !important;color:#0e7490 !important;border-color:#a5f3fc !important;border-left-color:#06b6d4 !important;}' +
+            S + '#wdm-sidebar-wastage-btn{background:#fef2f2 !important;color:#b91c1c !important;border-color:#fecaca !important;border-left-color:#ef4444 !important;}';
         document.head.appendChild(st);
     }
 
