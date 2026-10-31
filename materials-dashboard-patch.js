@@ -514,3 +514,54 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
         wdmOpenAddMaterial();
     }, true);
 })();
+
+// ==================== EXTRA SIDEBAR BUTTONS: Manage Stock + Common Materials ====================
+// Puts the two dashboard quick buttons into the sidebar too, right under New Sale.
+// (Credit Book and Quotations add their own sidebar buttons from their own patch files.)
+(function () {
+    function $(id) { return document.getElementById(id); }
+    function sid() { return (typeof currentStoreId !== 'undefined') ? currentStoreId : null; }
+    function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
+
+    function addCss() {
+        if ($('wdd-extra-side-css')) return;
+        var S = 'body.wdd-mat #dashboard-main-wrapper .sidebar ';
+        var st = document.createElement('style');
+        st.id = 'wdd-extra-side-css';
+        st.textContent =
+            S + '#wdd-sb-stock{background:#fff7ed !important;color:#c2410c !important;border-color:#fed7aa !important;border-left-color:#f97316 !important;}' +
+            S + '#wdd-sb-common{background:#fafaf9 !important;color:#44403c !important;border-color:#e7e5e4 !important;border-left-color:#78716c !important;}';
+        document.head.appendChild(st);
+    }
+
+    function make(id, text, fn, after) {
+        if ($(id) || !after) return after;
+        var b = document.createElement('button');
+        b.id = id; b.className = 'menu-btn'; b.textContent = text; b.onclick = fn;
+        after.parentNode.insertBefore(b, after.nextSibling);
+        return b;
+    }
+
+    function attach() {
+        try {
+            var side = document.querySelector('#dashboard-main-wrapper .sidebar');
+            if (!side) return;
+            var admin = (typeof currentUserRole !== 'undefined') && currentUserRole === 'Admin' && sid() && sid() !== 'SUPER_ADMIN';
+            if (!isMat() || !admin) {
+                ['wdd-sb-stock', 'wdd-sb-common'].forEach(function (i) { var e = $(i); if (e) e.remove(); });
+                return;
+            }
+            addCss();
+            var anchor = $('wdm-sidebar-newsale-btn') || $('wdm-sidebar-materials-btn');
+            if (!anchor) return;
+            var a = make('wdd-sb-stock', '📦 Manage Stock', function () { switchView('inventory-view'); }, $('wdd-sb-stock') || anchor);
+            if (!$('wdd-sb-common')) make('wdd-sb-common', '📚 Common Materials', function () { if (typeof wdpOpenQuickAddModal === 'function') wdpOpenQuickAddModal(); }, $('wdd-sb-stock') || a);
+        } catch (e) { console.warn('[dashboard-patch sidebar]', e); }
+    }
+
+    window.addEventListener('load', function () {
+        setTimeout(attach, 1300);
+        var obs = new MutationObserver(function () { attach(); });
+        if (document.body) obs.observe(document.body, { childList: true, subtree: true });
+    });
+})();
