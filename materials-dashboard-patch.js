@@ -11,6 +11,14 @@
 
 console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
 
+// Who gets the full back-office tools (dashboard, stock, credit book, quotations, reorder list)?
+// Role names are matched ignoring upper/lower case. Anyone else (e.g. staff / cashier) does not get them.
+var WD_FULL_ACCESS_ROLES = ['admin', 'manager'];
+window.wdFullAccess = function () {
+    var r = (typeof currentUserRole !== 'undefined' && currentUserRole) ? String(currentUserRole).toLowerCase().trim() : '';
+    return WD_FULL_ACCESS_ROLES.indexOf(r) !== -1;
+};
+
 (function () {
     function esc(s) {
         return String(s == null ? '' : s)
@@ -68,6 +76,7 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
 
     // ---------- screen ----------
     window.wdmShowMaterialsDashboard = function () {
+        if (!window.wdFullAccess()) return;
         var ws = document.getElementById('workspace-content');
         if (!ws) return;
         addStyles();
@@ -504,7 +513,7 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
 
     // Catch the "Add New Product" button in materials stores (runs before the button's own handler)
     document.addEventListener('click', function (ev) {
-        if (!isMat()) return;
+        if (!isMat() || !window.wdFullAccess()) return;
         var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
         if (!b || b.closest('#wdd-add-modal') || b.closest('#wdp-quick-modal')) return;
         if (!/add\s+(new\s+)?(product|item|material)/i.test(b.textContent || '')) return;
@@ -547,7 +556,7 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
         try {
             var side = document.querySelector('#dashboard-main-wrapper .sidebar');
             if (!side) return;
-            var admin = (typeof currentUserRole !== 'undefined') && currentUserRole === 'Admin' && sid() && sid() !== 'SUPER_ADMIN';
+            var admin = window.wdFullAccess() && sid() && sid() !== 'SUPER_ADMIN';
             if (!isMat() || !admin) {
                 ['wdd-sb-stock', 'wdd-sb-common'].forEach(function (i) { var e = $(i); if (e) e.remove(); });
                 return;
@@ -563,6 +572,61 @@ console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
     window.addEventListener('load', function () {
         setTimeout(attach, 1300);
         var obs = new MutationObserver(function () { attach(); });
+        if (document.body) obs.observe(document.body, { childList: true, subtree: true });
+    });
+})();
+
+// ==================== MANAGER LIMITS (materials stores) ====================
+// A Manager in a building-materials store can NOT add a branch and can NOT delete inventory items.
+// Only the owner (Admin) can. The buttons are hidden, and a click on them is also blocked as a backup.
+// This only affects the Manager role (see wdIsManager) in materials stores.
+(function () {
+    function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
+    function isManager() {
+        var r = (typeof currentUserRole !== 'undefined' && currentUserRole) ? String(currentUserRole).toLowerCase().trim() : '';
+        return r === 'manager';
+    }
+    window.wdIsManager = isManager;
+    function limited() { return isManager() && isMat(); }
+
+    function info(b) {
+        return ((b.textContent || '') + ' ' + (b.getAttribute('onclick') || '') + ' ' + (b.getAttribute('title') || '') + ' ' + (b.getAttribute('aria-label') || '')).toLowerCase();
+    }
+    function kind(b) {
+        if (!b || b.closest('#wcq-modal, #wcr-modal, #wdd-add-modal, #wdp-quick-modal')) return null;
+        var t = info(b);
+        // add / create a branch
+        if (/(add|new|create)[^a-z]{0,6}(a\s+|another\s+)?(new\s+)?branch|branch[^a-z]{0,6}(add|new|create)|addbranch|createbranch|newbranch|savebranch/.test(t)) return 'branch';
+        // delete an inventory item (only inside the inventory screen)
+        if (b.closest('#inventory-view') && (/delete|remove|🗑|trash/.test(t) || (b.textContent || '').trim().toLowerCase() === 'del')) return 'delete';
+        return null;
+    }
+
+    function sweep() {
+        if (!limited()) return;
+        document.querySelectorAll('button, .menu-btn').forEach(function (b) {
+            if (kind(b)) b.style.setProperty('display', 'none', 'important');
+        });
+    }
+
+    // backup: block the click even if a button was missed by the hiding
+    document.addEventListener('click', function (ev) {
+        if (!limited()) return;
+        var b = ev.target && ev.target.closest ? ev.target.closest('button, .menu-btn') : null;
+        var k = kind(b);
+        if (!k) return;
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        alert(k === 'branch' ? 'Only the owner can add a branch.' : 'Only the owner can delete inventory items.');
+    }, true);
+
+    window.addEventListener('load', function () {
+        setTimeout(sweep, 1200);
+        var busy = false;
+        var obs = new MutationObserver(function () {
+            if (busy) return; busy = true;
+            setTimeout(function () { busy = false; try { sweep(); } catch (e) {} }, 150);
+        });
         if (document.body) obs.observe(document.body, { childList: true, subtree: true });
     });
 })();
