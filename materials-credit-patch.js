@@ -23,6 +23,7 @@ console.log("Wise Decision materials-credit-patch.js — v1 loaded");
     function dayKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
     function $(id) { return document.getElementById(id); }
     function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
+    function full() { return (typeof window.wdFullAccess === 'function') ? window.wdFullAccess() : (typeof currentUserRole !== 'undefined' && currentUserRole === 'Admin'); }
     function sid() { return (typeof currentStoreId !== 'undefined') ? currentStoreId : null; }
     function ref(path) { return firebase.database().ref('stores/' + sid() + '/matCredit' + (path ? '/' + path : '')); }
     function who() { return (typeof currentStaffName !== 'undefined' && currentStaffName) || 'Admin'; }
@@ -99,6 +100,7 @@ console.log("Wise Decision materials-credit-patch.js — v1 loaded");
 
     // ---------- the Credit Book page ----------
     window.wcrShowCreditBook = async function () {
+        if (!full()) return;
         var ws = $('workspace-content');
         if (!ws) return;
         addStyles();
@@ -329,7 +331,7 @@ console.log("Wise Decision materials-credit-patch.js — v1 loaded");
     }
 
     function injectDashCard() {
-        if (!isMat() || !sid()) return;
+        if (!isMat() || !sid() || !full()) return;
         var grid = document.querySelector('.wdd-actions');
         if (!grid || $('wcr-dash-card')) return;
         var card = document.createElement('div');
@@ -347,7 +349,7 @@ console.log("Wise Decision materials-credit-patch.js — v1 loaded");
         var side = document.querySelector('#dashboard-main-wrapper .sidebar');
         if (!side) return;
         var existing = $('wcr-sidebar-btn');
-        var admin = (typeof currentUserRole !== 'undefined') && currentUserRole === 'Admin' && sid() && sid() !== 'SUPER_ADMIN';
+        var admin = full() && sid() && sid() !== 'SUPER_ADMIN';
         if (!isMat() || !admin) { if (existing) existing.remove(); return; }
         if (existing) return;
         var anchor = $('wdm-sidebar-wastage-btn') || $('wdm-sidebar-newsale-btn') || $('wdm-sidebar-materials-btn');
