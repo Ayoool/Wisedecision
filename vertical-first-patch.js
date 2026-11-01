@@ -1,7 +1,11 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.15) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.18) ====================
 // Load LAST — after every other vertical patch.
 //
-// v3.15: Building-materials stores now also keep the Manage Stock, Common Materials, Credit Book, Quotations, Suppliers, Customers,
+// v3.18: In building-materials stores, staff (anyone who is not Admin/Manager) see ONLY the sales
+//        button (POS Sales / New Sale) and Logout. The allowed roles come from WD_FULL_ACCESS_ROLES
+//        in materials-dashboard-patch.js.
+//
+// v3.17: Building-materials stores now also keep the Manage Stock, Common Materials, Credit Book, Quotations, Reorder List, Suppliers, Customers,
 //        Expenses and Accountant buttons in the sidebar (see the 'keep' lists below).
 //
 // v3: Phone vendor stores now see ONLY their own phone dashboard.
@@ -14,7 +18,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.15 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.18 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -55,10 +59,10 @@ var WDV_MAP = {
     // Inventory stays hidden on purpose: "Manage Stock" on the Materials Dashboard replaces it.
     // To bring back more sidebar buttons, add their text to keep.
     'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'staff', 'branches', 'stock transfers', 'reports',
+                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'reorder', 'staff', 'branches', 'stock transfers', 'reports',
                              'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false },
     'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'staff', 'branches', 'stock transfers', 'reports',
+                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'reorder', 'staff', 'branches', 'stock transfers', 'reports',
                              'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false }
 };
 
@@ -138,7 +142,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.15] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.18] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -185,7 +189,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.15] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.18] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
@@ -322,12 +326,69 @@ function wdvApplyPendingType() {
     }).catch(function (e) { console.warn('[vertical-first] could not save business type:', e && e.message ? e.message : e); });
 }
 
+
+// ---------------------------------------------------------------------
+// Staff lock for building-materials stores: staff can make sales and log out, nothing else.
+// "Staff" = any signed-in role that is not Admin/Manager (see WD_FULL_ACCESS_ROLES in
+// materials-dashboard-patch.js). If no sales button can be found, nothing is hidden.
+// ---------------------------------------------------------------------
+var WDV_STAFF_KEEP = ['pos sales', 'new sale', 'point of sale', 'logout', 'log out', 'sign out'];
+var WDV_STAFF_SALES = ['pos sales', 'new sale', 'point of sale'];
+var wdvStaffRedirected = null;
+
+function wdvEnsureStaffStyle() {
+    if (document.getElementById('wdv-staff-style')) return;
+    var st = document.createElement('style');
+    st.id = 'wdv-staff-style';
+    st.textContent =
+        'body.wdv-staff-only #dashboard-main-wrapper .sidebar button:not(.wdv-keep-staff),' +
+        'body.wdv-staff-only #dashboard-main-wrapper .sidebar .menu-btn:not(.wdv-keep-staff){display:none !important;}';
+    document.head.appendChild(st);
+}
+
+function wdvStaffLock() {
+    var role = (typeof currentUserRole !== 'undefined' && currentUserRole) ? String(currentUserRole) : '';
+    var sid = (typeof currentStoreId !== 'undefined') ? currentStoreId : null;
+    var full = (typeof window.wdFullAccess === 'function') ? window.wdFullAccess() : (role.toLowerCase() === 'admin');
+    var isStaff = !!role && !!sid && sid !== 'SUPER_ADMIN' && wdvIsMaterialsTypeNow() && !full;
+    var sidebar = wdvSidebar();
+
+    if (!isStaff || !sidebar) {
+        if (document.body && document.body.classList.contains('wdv-staff-only') && !isStaff) {
+            document.body.classList.remove('wdv-staff-only');
+            sidebar && sidebar.querySelectorAll('.wdv-keep-staff').forEach(function (b) { b.classList.remove('wdv-keep-staff'); });
+        }
+        return;
+    }
+
+    var salesBtn = null, any = false;
+    sidebar.querySelectorAll('button, .menu-btn').forEach(function (x) {
+        var t = (x.textContent || '').trim().toLowerCase();
+        var keep = WDV_STAFF_KEEP.some(function (k) { return t.indexOf(k) !== -1; });
+        if (keep) { x.classList.add('wdv-keep-staff'); any = true; } else { x.classList.remove('wdv-keep-staff'); }
+        if (!salesBtn && WDV_STAFF_SALES.some(function (k) { return t.indexOf(k) !== -1; })) salesBtn = x;
+    });
+    // never lock the sidebar if the sales button was not found
+    if (!salesBtn) { document.body.classList.remove('wdv-staff-only'); return; }
+    wdvEnsureStaffStyle();
+    document.body.classList.add('wdv-staff-only');
+
+    // land staff on the sales screen instead of the generic overview (once per store)
+    var ws = document.getElementById('workspace-content');
+    var h2 = ws ? ws.querySelector('h2') : null;
+    if (h2 && (h2.textContent || '').indexOf('Store Overview') !== -1 && wdvStaffRedirected !== sid) {
+        wdvStaffRedirected = sid;
+        try { salesBtn.click(); } catch (e) {}
+    }
+}
+
 function wdvTick() {
     try {
         wdvInstallShim();
         wdvApplyPendingType();
         wdvWatchType();
         wdvRearrangeSidebar();
+        wdvStaffLock();
         if (wdvResolved && wdvResolved.exclusive) { wdvEnsureStyle(); wdvHideSettingCards(); }
         wdvRedirectIfNeeded();
     } catch (e) { console.warn('[vertical-first]', e); }
