@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v145'; // Bumped to add phone-dashboard-patch.js
+const CACHE = 'wd-shell-v146'; // Bumped to add electronics-patch.js
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -31,7 +31,7 @@ const PRECACHE = [
     './materials-patch.js',
     './materials-polish-patch.js',
     './phone-extras-patch.js',
-    './phone-dashboard-patch.js', // <-- Added: phone vendor dashboard redesign
+    './phone-dashboard-patch.js',
     './fashion-patch.js',
     './fashion-layaway-patch.js',
     './fashion-reserve-patch.js',
@@ -55,6 +55,7 @@ const PRECACHE = [
     './materials-credit-patch.js',
     './materials-quote-patch.js',
     './materials-reorder-patch.js',
+    './electronics-patch.js', 
     'https://js.paystack.co/v2/inline.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
     'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
