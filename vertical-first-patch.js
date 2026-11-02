@@ -1,5 +1,8 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.18) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.19) ====================
 // Load LAST — after every other vertical patch.
+//
+// v3.19: Phone vendor stores also keep the new phone tool buttons (Phone Reports, Who Owes Me, Warranty Check,
+//        Phone Repairs, Phone Sales History, Adjust Phone Stock) added by phone-dashboard-patch.js.
 //
 // v3.18: In building-materials stores, staff (anyone who is not Admin/Manager) see ONLY the sales
 //        button (POS Sales / New Sale) and Logout. The allowed roles come from WD_FULL_ACCESS_ROLES
@@ -18,7 +21,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.18 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.19 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -47,9 +50,9 @@ window.addEventListener('load', wdvInstallShim);
 var WDV_MAP = {
     'fashion':      { btn: ['wdf-sidebar-btn'],  label: '👗 Fashion Sales', exclusive: false },
     'boutique':     { btn: ['wdf-sidebar-btn'],  label: '👗 Fashion Sales', exclusive: false },
-    'phone_vendor': { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches'] },
-    'phone':        { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches'] },
-    'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches'] },
+    'phone_vendor': { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock'] },
+    'phone':        { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock'] },
+    'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock'] },
     'water':        { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     'drinks':       { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     // Building materials (materials-patch.js adds these 3 sidebar buttons for the Admin):
@@ -142,7 +145,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.18] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.19] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -189,7 +192,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.18] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.19] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
