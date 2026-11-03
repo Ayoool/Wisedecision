@@ -958,8 +958,7 @@ console.log("Wise Decision electronics-patch.js — v1 loaded");
         if (d.style.display !== disp) d.style.display = disp;
     }
     function attachSidebar() {
-        var side = document.querySelector('#dashboard-main-wrapper .sidebar);
-        side = document.querySelector('#dashboard-main-wrapper .sidebar');
+        var side = document.querySelector('#dashboard-main-wrapper .sidebar');
         var on = !!(side && isElec() && sid() && sid() !== 'SUPER_ADMIN');
         if (document.body && document.body.classList.contains('wde-elec') !== on) document.body.classList.toggle('wde-elec', on);
         var main = $('wde-sidebar-main-btn');
