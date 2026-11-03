@@ -8,6 +8,8 @@
 //
 // Sidebar switches automatically based on stores/{storeId}/storeType.
 // Super Admin can override from the store row.
+//
+// Store types list now includes 📺 Electronics / Appliances (its dashboard comes from electronics-patch.js).
 
 console.log("Wise Decision phone-vendor-patch.js — v1 loaded");
 
@@ -30,6 +32,7 @@ var WDV_STORE_TYPES = [
     { id: 'restaurant', label: '🍽️ Restaurant / Food',         dashboard: 'general' },
     { id: 'fashion',    label: '👕 Fashion / Boutique',        dashboard: 'general' },
     { id: 'hardware',   label: '🏗️ Hardware / Building',       dashboard: 'general' },
+    { id: 'electronics', label: '📺 Electronics / Appliances', dashboard: 'general' },
     { id: 'stationery', label: '📚 Stationery / Bookshop',     dashboard: 'general' },
     { id: 'water',      label: '💧 Water / Drinks Distributor',dashboard: 'general' },
     { id: 'cosmetics',  label: '🎨 Cosmetics Shop',            dashboard: 'general' },
@@ -746,7 +749,7 @@ function wdvWatchStoreType() {
 // (This is a safety net so you can flip a store if they chose wrong)
 // =====================================================================
 window.wdvSuperAdminToggleType = async function (storeId) {
-    var current = prompt('Store type for "' + storeId + '"?\n\nOptions:\n  general\n  phone_vendor\n  pharmacy\n  restaurant\n  fashion\n  hardware\n  stationery\n  water\n  cosmetics', 'general');
+    var current = prompt('Store type for "' + storeId + '"?\n\nOptions:\n  general\n  phone_vendor\n  pharmacy\n  restaurant\n  fashion\n  hardware\n  electronics\n  stationery\n  water\n  cosmetics', 'general');
     if (!current) return;
     var val = current.trim().toLowerCase();
     try {
