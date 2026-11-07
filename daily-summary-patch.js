@@ -1,7 +1,7 @@
 // ==================== WISE DECISION DAILY SUMMARY PATCH (v1) ====================
 // Load AFTER the store-type patches (phone / materials / electronics) and before vertical-first-patch.js (v3.21+).
 //
-// A "📲 Daily Summary" button for the Admin (owner) on every store type. One tap builds today's (or yesterday's)
+// A "📲 Daily Summary" button for the Admin and the Manager on every store type (the Manager does not see the profit line). One tap builds today's (or yesterday's)
 // summary and opens WhatsApp with the message ready to send:
 //
 //     📊 Daily Summary — Medstar Pharmacy
@@ -39,7 +39,11 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
     function nice(key) { var p = key.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
     function sid() { return (typeof currentStoreId !== 'undefined') ? currentStoreId : null; }
     function role() { return (typeof currentUserRole !== 'undefined' && currentUserRole) ? String(currentUserRole).toLowerCase().trim() : ''; }
-    function isOwner() { return role() === 'admin' && !!sid() && sid() !== 'SUPER_ADMIN'; }
+    // Admin and Manager can use the Daily Summary. Only the Admin sees the PROFIT line, because it comes from cost prices
+    // (managers do not see cost prices anywhere else). Change this to true to let managers see profit too.
+    var WDSUM_MANAGER_SEES_PROFIT = false;
+    function isOwner() { return (role() === 'admin' || role() === 'manager') && !!sid() && sid() !== 'SUPER_ADMIN'; }
+    function showProfit() { return role() === 'admin' || WDSUM_MANAGER_SEES_PROFIT; }
     function read(path) { return firebase.database().ref(path).once('value').then(function (s) { return s.val(); }); }
     function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } return null; }
     function waNum(p) {
@@ -178,7 +182,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
                 line += '\n' + (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct) + '% vs the day before';
             }
             L.push(line);
-            if (o.profit !== null) L.push('💵 Profit (est.): *' + money(o.profit) + '*');
+            if (o.profit !== null && showProfit()) L.push('💵 Profit (est.): *' + money(o.profit) + '*');
             if (o.top.length) {
                 L.push('');
                 L.push('🏆 *Top sellers*');
@@ -301,7 +305,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
     }
 
     // =====================================================================
-    // SIDEBAR BUTTON (owner & manager only), just above Logout
+    // SIDEBAR BUTTON (owner only), just above Logout
     // =====================================================================
     function addCss() {
         if ($('wdsum-css')) return;
