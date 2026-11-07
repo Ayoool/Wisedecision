@@ -2,7 +2,8 @@
 // Gives the grey sidebar buttons a colour, on every store type:
 //   * Customer Orders  -> rose
 //   * Subscription     -> lime green
-// Style only. It does not add, remove or move any button.
+// Also moves Business Settings so it sits right after Daily Summary and just before Logout (owner view only).
+// It never adds or removes a button.
 // Load anywhere after payments-patch.js (which creates the Subscription button).
 // To colour another grey button later, add one line to WDC_RULES and one CSS rule below.
 
@@ -41,7 +42,20 @@ console.log("Wise Decision sidebar-colors-patch.js — v1 loaded");
         });
     }
 
-    function tick() { try { tag(); } catch (e) { console.warn('[sidebar-colors]', e); } }
+    // Business Settings goes right after Daily Summary (which sits just above Logout)
+    function reorder() {
+        var side = document.querySelector('#dashboard-main-wrapper .sidebar');
+        var sum = document.getElementById('wdsum-btn');
+        if (!side || !sum || !sum.parentNode) return;
+        var settings = null;
+        side.querySelectorAll('button').forEach(function (b) {
+            if (!settings && b !== sum && /business settings/i.test((b.textContent || '').trim())) settings = b;
+        });
+        if (!settings || settings.parentNode !== sum.parentNode) return;
+        if (sum.nextElementSibling !== settings) sum.parentNode.insertBefore(settings, sum.nextSibling);
+    }
+
+    function tick() { try { tag(); reorder(); } catch (e) { console.warn('[sidebar-colors]', e); } }
     window.addEventListener('load', function () { setTimeout(tick, 800); });
     var busy = false;
     var obs = new MutationObserver(function () {
