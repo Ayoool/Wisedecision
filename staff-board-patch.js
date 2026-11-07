@@ -13,7 +13,7 @@
 console.log("Wise Decision staff-board-patch.js — v1 loaded");
 
 (function () {
-    var state = { range: 'today', from: '', to: '', branch: 'all', by: 'receiver', txs: [], rows: [] };
+    var state = { range: 'today', from: '', to: '', branch: 'all', by: 'both', txs: [], rows: [] };
 
     function money(n) { return '₦' + (Math.round((Number(n) || 0) * 100) / 100).toLocaleString(); }
 
@@ -124,7 +124,80 @@ console.log("Wise Decision staff-board-patch.js — v1 loaded");
         };
     }
 
+    // Side-by-side view: each sale counts as "sold" for the person who made the order
+    // and as "received" for the person who took the payment (they can be the same person).
+    function addRole(r, t, role) {
+        var e = r._ids[t._key];
+        if (!e) { e = r._ids[t._key] = { tx: t, role: role }; r.list.push(e); }
+        else if (e.role !== role) e.role = 'Sold & received';
+    }
+
+    function aggregateBoth() {
+        var map = {};
+        var totals = { cash: 0, transfer: 0, sales: 0, refunds: 0 };
+        function row(k) {
+            return map[k] || (map[k] = { name: k, sold: 0, soldCount: 0, cash: 0, transfer: 0, credit: 0, refunds: 0, list: [], _ids: {} });
+        }
+        state.txs.forEach(function (t) {
+            var br = t.branchId || 'main';
+            if (state.branch !== 'all' && br !== state.branch) return;
+            var p = split(t);
+            var seller = t.staff || t.soldBy || 'Unknown';
+            var receiver = t.receivedBy || seller;
+            var refunded = Number(t.refundedAmount) || 0;
+
+            var s = row(seller);
+            s.soldCount++;
+            s.sold += p.total;
+            s.refunds += refunded;
+            addRole(s, t, 'Sold');
+
+            var r = row(receiver);
+            r.cash += p.cash;
+            r.transfer += p.transfer;
+            r.credit += p.credit;
+            addRole(r, t, 'Received');
+
+            totals.cash += p.cash;
+            totals.transfer += p.transfer;
+            totals.sales++;
+            totals.refunds += refunded;
+        });
+        var rows = Object.keys(map).map(function (k) { return map[k]; });
+        rows.sort(function (a, b) { return ((b.cash + b.transfer) - (a.cash + a.transfer)) || (b.sold - a.sold); });
+        return { rows: rows, totals: totals };
+    }
+
+    function bothTable(rows) {
+        var h = '<div style="overflow-x:auto; background:#fff; border:1px solid #eef2f7; border-radius:10px; box-shadow:0 6px 18px rgba(15,23,42,0.06);">' +
+            '<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">' +
+            '<thead><tr style="background:#f8fafc; border-bottom:1px solid #e2e8f0; color:#64748b;">' +
+            '<th style="padding:10px;">#</th><th style="padding:10px;">Staff</th>' +
+            '<th style="padding:10px;">Sold</th><th style="padding:10px;">Cash received</th>' +
+            '<th style="padding:10px;">Transfer received</th><th style="padding:10px;">Total received</th>' +
+            '<th style="padding:10px;">Refunds</th></tr></thead><tbody>';
+        if (rows.length === 0) {
+            h += '<tr><td colspan="7" style="text-align:center; color:#64748b; padding:25px;">No sales found for this period.</td></tr>';
+        } else {
+            rows.forEach(function (r, i) {
+                h += '<tr style="border-bottom:1px solid #f1f5f9; cursor:pointer;" onclick="wdsbDetail(' + i + ')">' +
+                    '<td style="padding:10px; color:#94a3b8;">' + (i + 1) + '</td>' +
+                    '<td style="padding:10px;"><strong>' + esc(r.name) + '</strong> <span style="color:#0284c7; font-size:11px;">view ›</span></td>' +
+                    '<td style="padding:10px; font-weight:bold;">' + (r.soldCount ? money(r.sold) + '<br><small style="color:#64748b; font-weight:normal;">' + r.soldCount + ' sale' + (r.soldCount === 1 ? '' : 's') + '</small>' : '—') + '</td>' +
+                    '<td style="padding:10px; color:#166534; font-weight:bold;">' + money(r.cash) + '</td>' +
+                    '<td style="padding:10px; color:#1d4ed8; font-weight:bold;">' + money(r.transfer) + '</td>' +
+                    '<td style="padding:10px; font-weight:800;">' + money(r.cash + r.transfer) + '</td>' +
+                    '<td style="padding:10px; color:' + (r.refunds > 0 ? '#991b1b' : '#94a3b8') + ';">' + (r.refunds > 0 ? money(r.refunds) : '—') + '</td>' +
+                    '</tr>';
+            });
+        }
+        h += '</tbody></table></div>' +
+            '<p style="font-size:11px; color:#64748b; margin-top:10px;">Sold = value of the orders they made (credit included). Cash and transfer received = what they actually took at the till. Tap a name to see their sales.</p>';
+        return h;
+    }
+
     function aggregate() {
+        if (state.by === 'both') return aggregateBoth();
         var map = {};
         var totals = { cash: 0, transfer: 0, sales: 0, refunds: 0 };
         state.txs.forEach(function (t) {
@@ -164,6 +237,12 @@ console.log("Wise Decision staff-board-patch.js — v1 loaded");
             card('Total Received', money(t.cash + t.transfer), '#faf5ff', '#e9d5ff', '#6b21a8', '#581c87') +
             card('Sales Count', String(t.sales), '#f8fafc', '#e2e8f0', '#475569', '#0f172a') +
             '</div>';
+
+        if (state.by === 'both') {
+            h += bothTable(agg.rows);
+            host.innerHTML = h;
+            return;
+        }
 
         h += '<div style="overflow-x:auto; background:#fff; border:1px solid #eef2f7; border-radius:10px; box-shadow:0 6px 18px rgba(15,23,42,0.06);">' +
             '<table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">' +
@@ -272,6 +351,7 @@ console.log("Wise Decision staff-board-patch.js — v1 loaded");
                     '<select onchange="wdsbSetBranch(this.value)"' + (isAdmin ? '' : ' disabled') + ' style="padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;">' + branchOpts + '</select>' +
                     '<label style="font-size:12px; font-weight:bold; color:#334155;">Group by:</label>' +
                     '<select onchange="wdsbSetBy(this.value)" style="padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:13px;">' +
+                        '<option value="both"' + (state.by === 'both' ? ' selected' : '') + '>Sold &amp; Received (side by side)</option>' +
                         '<option value="receiver"' + (state.by === 'receiver' ? ' selected' : '') + '>Received by (took the payment)</option>' +
                         '<option value="seller"' + (state.by === 'seller' ? ' selected' : '') + '>Sold by (made the order)</option>' +
                     '</select>' +
@@ -302,14 +382,17 @@ console.log("Wise Decision staff-board-patch.js — v1 loaded");
             document.body.appendChild(m);
         }
 
-        var list = r.list.slice().sort(function (a, b) { return new Date(b.date || 0) - new Date(a.date || 0); });
-        var rowsHtml = list.map(function (t) {
+        var items = r.list.map(function (x) { return x && x.tx ? x : { tx: x, role: '' }; });
+        items.sort(function (a, b) { return new Date(b.tx.date || 0) - new Date(a.tx.date || 0); });
+        var rowsHtml = items.map(function (it) {
+            var t = it.tx;
             var p = split(t);
+            var roleTag = it.role ? '<br><small style="color:#0284c7; font-weight:bold;">' + it.role + '</small>' : '';
             var when = t.date ? new Date(t.date).toLocaleString() : 'N/A';
             var cust = t.customerName && t.customerName !== 'Walk-In Customer' ? '<br><small style="color:#64748b;">👤 ' + esc(t.customerName) + '</small>' : '';
             var refund = Number(t.refundedAmount) > 0 ? '<br><small style="color:#991b1b;">Refunded ' + money(t.refundedAmount) + '</small>' : '';
             return '<tr style="border-bottom:1px solid #f1f5f9;">' +
-                '<td style="padding:8px;"><strong>' + esc(t.txId || t._key) + '</strong>' + cust + '<br><small style="color:#64748b;">' + esc(when) + '</small></td>' +
+                '<td style="padding:8px;"><strong>' + esc(t.txId || t._key) + '</strong>' + cust + '<br><small style="color:#64748b;">' + esc(when) + '</small>' + roleTag + '</td>' +
                 '<td style="padding:8px; color:#166534;">' + money(p.cash) + '</td>' +
                 '<td style="padding:8px; color:#1d4ed8;">' + money(p.transfer) + '</td>' +
                 '<td style="padding:8px;">' + (p.credit > 0 ? money(p.credit) : '—') + '</td>' +
