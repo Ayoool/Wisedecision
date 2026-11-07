@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v154'; // Bumped to add trial-lock-patch.js
+const CACHE = 'wd-shell-v155'; // Bumped to add trial-lock-patch.js
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -59,6 +59,7 @@ const PRECACHE = [
     './trial-lock-patch.js',
     './daily-summary-patch.js',
     './sidebar-colors-patch.js',
+    './settings-save-patch.js',
     './staff-board-patch.js',
     'https://js.paystack.co/v2/inline.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
