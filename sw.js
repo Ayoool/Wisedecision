@@ -59,6 +59,7 @@ const PRECACHE = [
     './trial-lock-patch.js',
     './daily-summary-patch.js',
     './sidebar-colors-patch.js',
+    './staff-board-patch.js',
     'https://js.paystack.co/v2/inline.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
     'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
