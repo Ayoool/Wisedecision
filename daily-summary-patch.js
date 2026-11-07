@@ -1,28 +1,32 @@
-// ==================== WISE DECISION DAILY SUMMARY PATCH (v1) ====================
+// ==================== WISE DECISION DAILY SUMMARY PATCH (v2) ====================
 // Load AFTER the store-type patches (phone / materials / electronics) and before vertical-first-patch.js (v3.21+).
 //
-// A "📲 Daily Summary" button for the Admin (owner) on every store type. One tap builds today's (or yesterday's)
-// summary and opens WhatsApp with the message ready to send:
+// v2 FIXES
+//   * Sales were missing / undercounted: the summary read the "last 500 sales by receipt ID", which skips newer
+//     sales when older receipts have higher IDs. It now reads exactly the days it needs, by sale date
+//     (the same way the Staff Board does), so Today and Yesterday match your Dashboard and Reports.
+//   * Profit was wrong (could be negative): the cost price is per PACK, but it was multiplied by pieces sold.
+//     It is now divided by pieces per pack (same as your Reports profit), and only items with a cost price count.
+//   * "Send on WhatsApp" only used the first number. Each number you type now gets its own green send button.
+//   * Low stock no longer prints a huge count by itself: it shows how many are finished, plus the items that
+//     SOLD that day and are now low (the ones you actually need to restock).
+//   * A Refunds line is shown when something was refunded that day.
 //
-//     📊 Daily Summary — Medstar Pharmacy
-//     Friday, 6 November 2026
-//     💰 Sales: ₦184,500 (9 sales)   ▲ 12% vs yesterday
-//     💵 Profit (est.): ₦41,200
-//     🏆 Top sellers: ...
-//     💳 Owed to you: ...   ⚠️ Low stock: ...
+// A "📲 Daily Summary" button for the Admin (owner) on every store type. One tap builds today's (or yesterday's)
+// summary and opens WhatsApp with the message ready to send.
 //
 // What it reads (read-only, nothing is changed):
-//   * general / pharmacy / fashion / other stores and Building Materials: stores/<id>/transactions (last 500), inventory
+//   * general / pharmacy / fashion / other stores and Building Materials: stores/<id>/transactions (by date), inventory
 //     (+ the Credit Book for materials stores)
 //   * Phone vendors: phoneSales/<id>, phoneInventory/<id>
 //   * Electronics: stores/<id>/elecSales, elecStock
-// The WhatsApp number is remembered on this phone (it starts as the store's phone number).
+// The WhatsApp numbers are remembered on this phone (they start as the store's phone number).
 // An optional evening reminder card ("Today's summary is ready") appears after the hour you choose (default 8 pm).
 //
 // NOTE: WhatsApp cannot be sent automatically without a paid WhatsApp API, so the owner taps Send. This is by design.
 // Profit is an estimate from cost prices; it shows only when cost prices are available.
 
-console.log("Wise Decision daily-summary-patch.js — v1 loaded");
+console.log("Wise Decision daily-summary-patch.js — v2 loaded");
 
 (function () {
     // The phone sidebar hides every button not on this list (phone-extras-patch.js)
@@ -43,7 +47,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
     function read(path) { return firebase.database().ref(path).once('value').then(function (s) { return s.val(); }); }
     function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } return null; }
     function waNum(p) {
-        var d = String(p || '').split(/[,;/|]/)[0].replace(/\D/g, '');
+        var d = String(p || '').split(/[,;/|\s]/)[0].replace(/\D/g, '');
         if (!d) return '';
         if (d.indexOf('234') === 0) return d;
         if (d.charAt(0) === '0') return '234' + d.slice(1);
@@ -58,7 +62,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
         var type = '', name = s;
         try { type = String((await read('stores/' + s + '/storeType')) || '').toLowerCase(); } catch (e) { }
         try { name = (await read('stores/' + s + '/businessName')) || s; } catch (e) { }
-        var out = { name: name, day: day, type: type, count: 0, total: 0, profit: null, prevTotal: 0, top: [], owed: null, low: null, stockNote: '' };
+        var out = { name: name, day: day, type: type, count: 0, total: 0, profit: null, prevTotal: 0, top: [], owed: null, low: null, zero: null, lowSold: [], refunds: 0, stockNote: '' };
         var topMap = {};
         var addTop = function (n, v) { n = n || 'Item'; topMap[n] = (topMap[n] || 0) + num(v); };
 
@@ -104,49 +108,85 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
 
         } else {
             // general stores and building materials: stores/<id>/transactions
-            var snap = await firebase.database().ref('stores/' + s + '/transactions').limitToLast(500).once('value');
-            var costMap = {}, haveCost = false, inventory = {};
+            // v2: read only the two days we need, by sale date (yesterday-of-the-day .. end of the day)
+            var dp = day.split('-').map(Number);
+            var rangeStart = new Date(dp[0], dp[1] - 1, dp[2] - 1);
+            var rangeEnd = new Date(new Date(dp[0], dp[1] - 1, dp[2] + 1).getTime() - 1);
+            var txRef = firebase.database().ref('stores/' + s + '/transactions');
+            var snap;
+            try {
+                snap = await txRef.orderByChild('date').startAt(rangeStart.toISOString()).endAt(rangeEnd.toISOString()).once('value');
+            } catch (e) {
+                snap = await txRef.limitToLast(500).once('value');   // fallback, same as v1
+            }
+
+            // cost per PIECE (cost price is stored per pack), same maths as the Reports profit
+            var costById = {}, costMap = {}, inventory = {}, soldList = {};
             try {
                 inventory = (await read('stores/' + s + '/inventory')) || {};
                 Object.keys(inventory).forEach(function (b) {
                     Object.keys(inventory[b] || {}).forEach(function (id) {
                         var p = inventory[b][id]; if (!p) return;
                         var nm = String(p.name || p.productName || '').toLowerCase().trim();
-                        if (nm && num(p.costPrice) > 0) costMap[nm] = num(p.costPrice);
+                        var perPiece = num(p.costPrice) / (num(p.unitsPerPack) || 1);
+                        if (perPiece > 0) {
+                            costById[b + '_' + id] = perPiece;
+                            if (nm) costMap[nm] = perPiece;
+                        }
                     });
                 });
             } catch (e) { }
-            var profG = 0;
+
+            var profG = 0, haveCost = false;
             snap.forEach(function (c) {
                 var tx = c.val(); if (!tx || !tx.date || tx.refunded) return;
                 var d = localDay(tx.date), t = num(tx.totalAmount);
                 if (d === yday) out.prevTotal += t;
                 if (d !== day) return;
+                var br = tx.branchId || 'main';
                 out.count++; out.total += t;
-                var cost = 0;
+                out.refunds += num(tx.refundedAmount);
                 (tx.items || []).forEach(function (it) {
                     if (!it || it.id === '__delivery__') return;
                     addTop(it.name, it.total);
-                    var ic = num(it.costPrice) || costMap[String(it.name || '').toLowerCase().trim()] || 0;
-                    if (ic > 0) haveCost = true;
-                    cost += ic * num(it.piecesNeeded !== undefined ? it.piecesNeeded : it.qty);
+                    if (it.id) soldList[br + '\u0001' + it.id] = { b: br, id: it.id };
+                    var ic = num(it.costPrice) || costById[br + '_' + it.id] || costMap[String(it.name || '').toLowerCase().trim()] || 0;
+                    if (ic > 0) {
+                        haveCost = true;
+                        profG += num(it.total) - ic * num(it.piecesNeeded !== undefined ? it.piecesNeeded : it.qty);
+                    }
                 });
-                profG += t - cost;
             });
             if (haveCost) out.profit = profG;
-            // low stock
+
+            // low stock: how many are low, how many are finished, and which items that SOLD today are now low
             try {
-                var low2 = 0;
+                var low2 = 0, zero2 = 0;
                 Object.keys(inventory).forEach(function (b) {
                     Object.keys(inventory[b] || {}).forEach(function (id) {
                         var p = inventory[b][id]; if (!p) return;
                         var stock = num(p.stock !== undefined ? p.stock : p.stockQty);
                         var thr = p.lowStockThreshold != null ? num(p.lowStockThreshold) : 5;
                         if (stock <= thr && stock >= 0) low2++;
+                        if (stock <= 0) zero2++;
                     });
                 });
-                out.low = low2;
+                out.low = low2; out.zero = zero2;
+
+                var ls2 = [];
+                Object.keys(soldList).forEach(function (k) {
+                    var ref = soldList[k], p = (inventory[ref.b] || {})[ref.id]; if (!p) return;
+                    var stock = num(p.stock !== undefined ? p.stock : p.stockQty);
+                    var thr = p.lowStockThreshold != null ? num(p.lowStockThreshold) : 5;
+                    if (stock <= thr) {
+                        var label = (typeof formatStockLabel === 'function') ? formatStockLabel(p) : String(stock);
+                        ls2.push({ name: p.name || p.productName || 'Item', stock: stock, label: label });
+                    }
+                });
+                ls2.sort(function (a, b) { return a.stock - b.stock; });
+                out.lowSold = ls2.slice(0, 5);
             } catch (e) { }
+
             // Building Materials: the Credit Book
             if (type.indexOf('hardware') === 0 || type.indexOf('materials') === 0) {
                 try {
@@ -179,6 +219,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
             }
             L.push(line);
             if (o.profit !== null) L.push('💵 Profit (est.): *' + money(o.profit) + '*');
+            if (o.refunds > 0) L.push('↩️ Refunds: ' + money(o.refunds));
             if (o.top.length) {
                 L.push('');
                 L.push('🏆 *Top sellers*');
@@ -187,7 +228,15 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
         }
         var extra = [];
         if (o.owed) extra.push('💳 Owed to you: *' + money(o.owed.amount) + '*' + (o.owed.n ? ' (' + o.owed.n + ' customer' + (o.owed.n === 1 ? '' : 's') + ')' : ''));
-        if (o.low !== null && o.low > 0) extra.push('⚠️ Low stock: ' + o.low + ' item' + (o.low === 1 ? '' : 's'));
+        if (o.low !== null && o.low > 0) {
+            var lowLine = '⚠️ Low stock: ' + o.low + ' item' + (o.low === 1 ? '' : 's');
+            if (o.zero) lowLine += ' (' + o.zero + ' finished)';
+            extra.push(lowLine);
+        }
+        if (o.lowSold && o.lowSold.length) {
+            extra.push('🔔 *Restock soon* (sold this day, now low):');
+            o.lowSold.forEach(function (x) { extra.push('• ' + x.name + ' — ' + x.label + ' left'); });
+        }
         if (o.stockNote) extra.push('📦 ' + o.stockNote);
         if (extra.length) { L.push(''); extra.forEach(function (x) { L.push(x); }); }
         L.push('');
@@ -211,6 +260,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
     window.wdsumClose = function () { var m = $('wdsum-modal'); if (m) m.remove(); };
 
     var INP = 'width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;box-sizing:border-box;background:#fff;';
+    var SENDBTN = 'width:100%;margin-top:8px;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:800;color:#fff;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);cursor:pointer;';
 
     window.wdsumOpen = async function (which) {
         if (!isOwner()) return;
@@ -227,14 +277,29 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
                 '<button id="wdsum-t-today" onclick="wdsumSwitch(\'today\')" style="flex:1;padding:10px;border-radius:10px;font-weight:800;font-size:13px;cursor:pointer;">Today</button>' +
                 '<button id="wdsum-t-yday" onclick="wdsumSwitch(\'yesterday\')" style="flex:1;padding:10px;border-radius:10px;font-weight:800;font-size:13px;cursor:pointer;">Yesterday</button></div>' +
             '<pre id="wdsum-text" style="white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid #e8eef5;border-radius:14px;padding:12px;font-family:inherit;font-size:13px;line-height:1.5;min-height:120px;">Building your summary…</pre>' +
-            '<label style="display:block;font-size:11px;font-weight:800;color:#334155;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.4px;">Send to this WhatsApp number</label>' +
-            '<input id="wdsum-num" type="tel" inputmode="tel" value="' + esc(saved) + '" placeholder="0801… (leave empty to choose a contact)" style="' + INP + '">' +
-            '<button id="wdsum-send" onclick="wdsumSend()" style="width:100%;margin-top:12px;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:800;color:#fff;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);cursor:pointer;">💬 Send on WhatsApp</button>' +
+            '<label style="display:block;font-size:11px;font-weight:800;color:#334155;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.4px;">WhatsApp numbers (separate with commas)</label>' +
+            '<input id="wdsum-num" type="tel" inputmode="tel" value="' + esc(saved) + '" oninput="wdsumRenderSend()" placeholder="0801… (leave empty to choose a contact)" style="' + INP + '">' +
+            '<div id="wdsum-send-list"></div>' +
             '<button onclick="wdsumCopy()" style="width:100%;margin-top:8px;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font-size:14px;font-weight:700;background:#fff;cursor:pointer;">📋 Copy text</button>' +
             '<label style="display:block;font-size:11px;font-weight:800;color:#334155;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.4px;">Remind me each evening at</label>' +
             '<select id="wdsum-hour" onchange="wdsumHour(this.value)" style="' + INP + '">' + hours.map(function (h) { return '<option value="' + h[0] + '"' + (h[0] === hour ? ' selected' : '') + '>' + h[1] + '</option>'; }).join('') + '</select>'
         );
+        wdsumRenderSend();
         wdsumSwitch(cur.which);
+    };
+
+    // One green button per phone number
+    window.wdsumRenderSend = function () {
+        var box = $('wdsum-send-list'); if (!box) return;
+        var raw = ($('wdsum-num') || {}).value || '';
+        var parts = raw.split(/[,;/|\s]+/).map(function (p) { return p.replace(/[^\d+]/g, ''); }).filter(function (p) { return p.replace(/\D/g, '').length >= 7; });
+        if (!parts.length) {
+            box.innerHTML = '<button style="' + SENDBTN + 'margin-top:12px;" onclick="wdsumSend(\'\')">💬 Send on WhatsApp</button>';
+            return;
+        }
+        box.innerHTML = parts.map(function (p, i) {
+            return '<button style="' + SENDBTN + (i === 0 ? 'margin-top:12px;' : '') + '" onclick="wdsumSend(\'' + p + '\')">💬 Send to ' + p + '</button>';
+        }).join('');
     };
 
     window.wdsumSwitch = async function (which) {
@@ -256,13 +321,13 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
 
     window.wdsumHour = function (v) { ls('wdsum_hour_' + sid(), v); };
 
-    window.wdsumSend = function () {
+    window.wdsumSend = function (number) {
         if (!cur.text || /^Could not build|^Building/.test(cur.text)) { alert('The summary is not ready yet.'); return; }
         var raw = ($('wdsum-num') || {}).value || '';
         ls('wdsum_num_' + sid(), raw.trim());
         ls('wdsum_sent_' + sid(), dayKey(new Date()));
         removeToast();
-        window.open('https://wa.me/' + waNum(raw) + '?text=' + encodeURIComponent(cur.text), '_blank');
+        window.open('https://wa.me/' + waNum(number) + '?text=' + encodeURIComponent(cur.text), '_blank');
     };
     window.wdsumCopy = function () {
         if (!cur.text) return;
