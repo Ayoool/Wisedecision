@@ -202,7 +202,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
     // =====================================================================
     // THE SCREEN
     // =====================================================================
-    var cur = { which: 'today', text: '' };
+    var cur = { which: 'today', text: '', obj: null };
 
     function openModal(inner) {
         var m = $('wdsum-modal'); if (m) m.remove();
@@ -234,6 +234,7 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
             '<label style="display:block;font-size:11px;font-weight:800;color:#334155;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.4px;">Send to this WhatsApp number</label>' +
             '<input id="wdsum-num" type="tel" inputmode="tel" value="' + esc(saved) + '" placeholder="0801… (leave empty to choose a contact)" style="' + INP + '">' +
             '<button id="wdsum-send" onclick="wdsumSend()" style="width:100%;margin-top:12px;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:800;color:#fff;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);cursor:pointer;">💬 Send on WhatsApp</button>' +
+            '<button onclick="wdsumPrint()" style="width:100%;margin-top:8px;padding:13px;border:1px solid #bfdbfe;border-radius:12px;font-size:14px;font-weight:800;background:#eff6ff;color:#1d4ed8;cursor:pointer;">🖨 Print (thermal printer)</button>' +
             '<button onclick="wdsumCopy()" style="width:100%;margin-top:8px;padding:12px;border:1px solid #cbd5e1;border-radius:12px;font-size:14px;font-weight:700;background:#fff;cursor:pointer;">📋 Copy text</button>' +
             '<label style="display:block;font-size:11px;font-weight:800;color:#334155;margin:14px 0 5px;text-transform:uppercase;letter-spacing:.4px;">Remind me each evening at</label>' +
             '<select id="wdsum-hour" onchange="wdsumHour(this.value)" style="' + INP + '">' + hours.map(function (h) { return '<option value="' + h[0] + '"' + (h[0] === hour ? ' selected' : '') + '>' + h[1] + '</option>'; }).join('') + '</select>'
@@ -247,10 +248,12 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
         var on = 'border:none;background:#0284c7;color:#fff;', off = 'border:1px solid #cbd5e1;background:#fff;color:#334155;';
         if (a) a.style.cssText += ';' + (which === 'today' ? on : off);
         if (b) b.style.cssText += ';' + (which === 'yesterday' ? on : off);
+        cur.obj = null;
         var pre = $('wdsum-text'); if (pre) pre.textContent = 'Building your summary…';
         var day = dayKey(new Date()); if (which === 'yesterday') day = prevDay(day);
         try {
             var o = await gather(day);
+            cur.obj = o;
             cur.text = buildText(o);
         } catch (e) {
             cur.text = 'Could not build the summary: ' + (e.message || e);
@@ -272,6 +275,58 @@ console.log("Wise Decision daily-summary-patch.js — v1 loaded");
         if (!cur.text) return;
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cur.text).then(function () { alert('Copied.'); }, function () { prompt('Copy this:', cur.text); });
         else prompt('Copy this:', cur.text);
+    };
+
+    // =====================================================================
+    // PRINT (thermal receipt printer, 58/80 mm)
+    // Plain text only (no emoji: thermal printers cannot draw them). Uses the app's own thermal print path
+    // (triggerThermalPrint) when it exists, otherwise opens a small print page sized for an 80 mm roll.
+    // =====================================================================
+    function printHtml(o) {
+        var dash = '<div style="border-top:1px dashed #000;margin:6px 0;"></div>';
+        var row = function (l, r) { return '<div style="display:flex;justify-content:space-between;gap:8px;"><span>' + esc(l) + '</span><span style="font-weight:bold;text-align:right;">' + esc(r) + '</span></div>'; };
+        var h = '<div style="font-family:monospace;font-size:12px;line-height:1.45;color:#000;width:100%;">' +
+            '<div style="text-align:center;font-weight:bold;font-size:14px;">' + esc(String(o.name).toUpperCase()) + '</div>' +
+            '<div style="text-align:center;font-weight:bold;">DAILY SUMMARY</div>' +
+            '<div style="text-align:center;font-size:11px;">' + esc(nice(o.day)) + '</div>' + dash;
+        if (o.count === 0) {
+            h += '<div style="text-align:center;">No sales recorded.</div>';
+        } else {
+            h += row('Sales', money(o.total)) + row('No. of sales', String(o.count));
+            if (o.prevTotal > 0) {
+                var pct = Math.round(((o.total - o.prevTotal) / o.prevTotal) * 100);
+                h += row('vs day before', (pct >= 0 ? '+' : '-') + Math.abs(pct) + '%');
+            }
+            if (o.profit !== null && showProfit()) h += row('Profit (est.)', money(o.profit));
+            if (o.top.length) {
+                h += dash + '<div style="font-weight:bold;">TOP SELLERS</div>';
+                o.top.forEach(function (t, i) { h += row((i + 1) + '. ' + t.name, money(t.v)); });
+            }
+        }
+        var extra = '';
+        if (o.owed) extra += row('Owed to you', money(o.owed.amount)) + (o.owed.n ? '<div style="font-size:11px;text-align:right;">' + o.owed.n + ' customer' + (o.owed.n === 1 ? '' : 's') + '</div>' : '');
+        if (o.low !== null && o.low > 0) extra += row('Low stock', o.low + ' item' + (o.low === 1 ? '' : 's'));
+        if (o.stockNote) extra += '<div>' + esc(o.stockNote) + '</div>';
+        if (extra) h += dash + extra;
+        var by = (typeof currentStaffName !== 'undefined' && currentStaffName) ? currentStaffName : '';
+        h += dash + '<div style="font-size:10px;text-align:center;">Printed ' + esc(new Date().toLocaleString()) + (by ? '<br>By ' + esc(by) : '') + '</div></div>';
+        return h;
+    }
+
+    window.wdsumPrint = function () {
+        if (!cur.obj) { alert('The summary is not ready yet.'); return; }
+        var html = printHtml(cur.obj);
+        if (typeof triggerThermalPrint === 'function') {
+            try { triggerThermalPrint(html); return; } catch (e) { console.warn('[daily-summary] app print failed, using own page', e); }
+        }
+        var w = window.open('', '_blank');
+        if (!w) { alert('Your browser blocked the print window. Allow pop-ups for this site and try again.'); return; }
+        w.document.open();
+        w.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Daily Summary</title>' +
+            '<style>@page{size:80mm auto;margin:0}html,body{margin:0;padding:0;background:#fff}body{width:76mm;padding:2mm;box-sizing:border-box}' +
+            '@media screen{body{margin:10px auto;border:1px solid #ddd}}</style></head><body>' + html + '</body></html>');
+        w.document.close();
+        setTimeout(function () { try { w.focus(); w.print(); } catch (e) { } }, 400);
     };
 
     // =====================================================================
