@@ -1,5 +1,7 @@
-// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.21) ====================
+// ==================== WISE DECISION VERTICAL-FIRST PATCH (v3.22) ====================
 // Load LAST — after every other vertical patch.
+//
+// v3.22: Business Settings now stays in the sidebar for materials, hardware, electronics and phone stores.
 //
 // v3.21: The 📲 Daily Summary button (daily-summary-patch.js) stays visible in materials, electronics and phone stores.
 //
@@ -25,7 +27,7 @@
 // v2: Redirects away from the generic "Store Overview" / "Point of Sale" screens
 //     by clicking the vertical's sidebar button.
 
-console.log("Wise Decision vertical-first-patch.js v3.21 loaded");
+console.log("Wise Decision vertical-first-patch.js v3.22 loaded");
 
 // ---------------------------------------------------------------------
 // Compatibility shim: materials-patch.js and materials-polish-patch.js only treat a store as a
@@ -54,9 +56,9 @@ window.addEventListener('load', wdvInstallShim);
 var WDV_MAP = {
     'fashion':      { btn: ['wdf-sidebar-btn'],  label: '👗 Fashion Sales', exclusive: false },
     'boutique':     { btn: ['wdf-sidebar-btn'],  label: '👗 Fashion Sales', exclusive: false },
-    'phone_vendor': { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'daily summary'] },
-    'phone':        { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'daily summary'] },
-    'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'daily summary'] },
+    'phone_vendor': { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'daily summary', 'business settings'] },
+    'phone':        { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'daily summary', 'business settings'] },
+    'phone shop':   { btn: ['wdph-sidebar-btn', 'wdv-sidebar-phone-btn'], label: '📱 Phone Sales', exclusive: true, keep: ['staff', 'branches', 'phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'daily summary', 'business settings'] },
     'water':        { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     'drinks':       { btn: ['wdw-sidebar-btn'],  label: '💧 Water Sales', exclusive: false },
     // Building materials (materials-patch.js adds these 3 sidebar buttons for the Admin):
@@ -69,13 +71,13 @@ var WDV_MAP = {
     //   📺 Electronics Dashboard (main), 🛒 New Sale, 📦 Electronics Stock, 💵 Who Owes Me,
     //   🛡 Warranty Check, 📈 Electronics Reports.
     'electronics':  { btn: ['wde-sidebar-main-btn'], label: '📺 Electronics', exclusive: true,
-                      keep: ['new sale', 'electronics stock', 'who owes me', 'warranty check', 'electronics reports', 'daily summary', 'staff', 'branches'],
+                      keep: ['new sale', 'electronics stock', 'who owes me', 'warranty check', 'electronics reports', 'daily summary', 'business settings', 'staff', 'branches'],
                       redirectOn: ['Store Overview'], restyle: false },
     'materials':    { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'reorder', 'daily summary', 'staff', 'branches', 'stock transfers', 'reports',
+                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'reorder', 'daily summary', 'business settings', 'staff', 'branches', 'stock transfers', 'reports',
                              'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false },
     'hardware':     { btn: ['wdm-sidebar-materials-btn'], label: '🏗️ Materials', exclusive: true,
-                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'reorder', 'daily summary', 'staff', 'branches', 'stock transfers', 'reports',
+                      keep: ['new sale', 'damaged', 'wastage', 'manage stock', 'common materials', 'credit', 'quotation', 'reorder', 'daily summary', 'business settings', 'staff', 'branches', 'stock transfers', 'reports',
                              'suppliers', 'customers', 'expenses', 'accountant'], redirectOn: ['Store Overview'], restyle: false }
 };
 
@@ -155,7 +157,7 @@ function wdvWatchType() {
             wdvRestoreSidebar();
             wdvResolved = v;
             wdvMissingSince = 0; wdvMissingLogged = false;
-            if (v) console.log('[vertical-first v3.21] store type = ' + type + ' → ' + v.label);
+            if (v) console.log('[vertical-first v3.22] store type = ' + type + ' → ' + v.label);
         }
         wdvTick();
     }, function () {});
@@ -202,7 +204,7 @@ function wdvRearrangeSidebar() {
             wdvMissingLogged = true;
             var ids = [];
             sidebar.querySelectorAll('button').forEach(function (b) { ids.push((b.id || '(no id)') + ': ' + (b.textContent || '').trim().slice(0, 18)); });
-            console.warn('[vertical-first v3.21] button not found: ' + wdvResolved.btn.join(' / ') +
+            console.warn('[vertical-first v3.22] button not found: ' + wdvResolved.btn.join(' / ') +
                 ' | role=' + (typeof currentUserRole !== 'undefined' ? currentUserRole : '?') +
                 ' | wdmStoreType=' + (typeof wdmStoreType !== 'undefined' ? wdmStoreType : 'n/a') +
                 ' | materialsCheck=' + (typeof wdmIsMaterialsStore === 'function' ? wdmIsMaterialsStore() : 'n/a') +
