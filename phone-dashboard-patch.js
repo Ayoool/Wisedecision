@@ -35,7 +35,7 @@ console.log("Wise Decision phone-dashboard-patch.js — v1 loaded");
     // The phone sidebar hides every button whose text is not in this list (phone-extras-patch.js).
     // The labels used below are unique on purpose, so the normal grocery buttons stay hidden.
     if (typeof WDX_PHONE_KEEP !== 'undefined' && Array.isArray(WDX_PHONE_KEEP)) {
-        ['phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock'].forEach(function (k) {
+        ['phone reports', 'who owes me', 'warranty check', 'phone repairs', 'phone sales history', 'adjust phone stock', 'business settings'].forEach(function (k) {
             if (WDX_PHONE_KEEP.indexOf(k) === -1) WDX_PHONE_KEEP.push(k);
         });
     }
