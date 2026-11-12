@@ -1,8 +1,8 @@
-// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v2 - NAVY & ORANGE) ====================
+// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v3 - BUTTON BACKGROUNDS) ====================
 // Load AFTER materials-patch.js and materials-polish-patch.js.
 // Replaces the look and layout of the Materials Dashboard. Same data, cleaner screen.
 
-console.log("Wise Decision materials-dashboard-patch.js — v2 (Navy & Orange) loaded");
+console.log("Wise Decision materials-dashboard-patch.js — v3 (Sidebar Backgrounds) loaded");
 
 // Who gets the full back-office tools (dashboard, stock, credit book, quotations, reorder list)?
 // Role names are matched ignoring upper/lower case. Anyone else (e.g. staff / cashier) does not get them.
@@ -266,8 +266,8 @@ window.wdFullAccess = function () {
     }
 })();
 
-// ==================== MATERIALS SIDEBAR RESTYLE (part of v2) ====================
-// Updated to match Dark Navy background with White text and solid Orange active state.
+// ==================== MATERIALS SIDEBAR RESTYLE (v3 - BUTTON BACKGROUNDS) ====================
+// Gives the sidebar buttons a card-like background so they stand out against the dark navy.
 (function () {
     function addSidebarStyles() {
         if (document.getElementById('wdd-sidebar-styles')) return;
@@ -276,24 +276,19 @@ window.wdFullAccess = function () {
         var S = 'body.wdd-mat #dashboard-main-wrapper .sidebar ';
         
         st.textContent =
-        // Base button (Transparent text, White)
-        S + '.menu-btn{background:transparent !important;color:#cbd5e1 !important;border:none !important;border-radius:10px !important;padding:12px 14px !important;margin:0 0 4px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:none !important;transition:all .2s;}' +
-        S + '.menu-btn:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;}' +
+        // Base button (Slightly lighter navy background, subtle border, white text)
+        S + '.menu-btn{background:#152a4e !important;color:#cbd5e1 !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 6px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:0 2px 4px rgba(0,0,0,.1) !important;transition:all .2s;}' +
+        
+        // Hover state (Lighter navy)
+        S + '.menu-btn:hover{background:#1e3a8a !important;color:#fff !important;border-color:rgba(255,255,255,.15) !important;transform:translateY(-1px);}' +
         
         // Active Dashboard Button (Orange)
-        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#fff !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
+        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#fff !important;border-color:#ea580c !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
         S + '#wdm-sidebar-materials-btn:hover{background:#c2410c !important;}' +
         
-        // New Sale Button (Orange tinted text)
-        S + '#wdm-sidebar-newsale-btn{color:#fff !important;font-weight:800 !important;}' +
-        
-        // Remove the rainbow colors, make everything unified white/navy
-        S + '.menu-btn[data-wdd]{background:transparent !important;color:#cbd5e1 !important;border:none !important;}' +
-        S + '.menu-btn[data-wdd]:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;}' +
-        
-        // Logout Button
-        S + '.btn-logout{color:#94a3b8 !important;background:transparent !important;border:none !important;font-weight:600 !important;}' +
-        S + '.btn-logout:hover{color:#f87171 !important;background:rgba(255,255,255,.05) !important;}' +
+        // Logout Button (Keep it subtle but with background)
+        S + '.btn-logout{background:#1e293b !important;color:#94a3b8 !important;border:1px solid rgba(255,255,255,.05) !important;border-radius:10px !important;font-weight:600 !important;}' +
+        S + '.btn-logout:hover{color:#f87171 !important;background:#334155 !important;border-color:#475569 !important;}' +
         
         // Phones: swipeable row
         '@media (max-width:767px){' +
@@ -333,7 +328,7 @@ window.wdFullAccess = function () {
     });
 })();
 
-// ==================== MATERIALS "ADD MATERIAL" FORM (part of v2) ====================
+// ==================== MATERIALS "ADD MATERIAL" FORM (part of v3) ====================
 // Updated to use Navy text and Orange save buttons.
 (function () {
     var STOCK_IN = 'bulk';
@@ -539,9 +534,9 @@ window.wdFullAccess = function () {
         var st = document.createElement('style');
         st.id = 'wdd-extra-side-css';
         st.textContent =
-            // Transparent styled buttons blending into the dark navy sidebar
-            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:transparent !important;color:#cbd5e1 !important;border:none !important;}' +
-            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:rgba(255,255,255,.08) !important;color:#fff !important;}';
+            // Match the new background style for the extra buttons
+            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:#152a4e !important;color:#cbd5e1 !important;border:1px solid rgba(255,255,255,.08) !important;}' +
+            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:#1e3a8a !important;color:#fff !important;border-color:rgba(255,255,255,.15) !important;}';
         document.head.appendChild(st);
     }
 
