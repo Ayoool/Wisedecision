@@ -1,7 +1,7 @@
-// ==================== WISE DECISION MATERIALS: NAVY & ORANGE PRO THEME (v5) ====================
-// Matches the high-end POS interface with Dark Navy, Bright Orange, and Clean White.
+// ==================== WISE DECISION MATERIALS: NAVY & ORANGE PRO THEME (v6) ====================
+// Matches the high-end POS interface with White Sidebar, Navy Buttons, and Clean White background.
 
-console.log("Wise Decision materials-simple-theme-patch.js — v5 (Navy & Orange) loaded");
+console.log("Wise Decision materials-simple-theme-patch.js — v6 (White Sidebar, Navy Buttons) loaded");
 
 (function () {
     'use strict';
@@ -24,8 +24,8 @@ console.log("Wise Decision materials-simple-theme-patch.js — v5 (Navy & Orange
     // =====================================================================
     // STYLES
     // =====================================================================
-    var NAVY = '#0b1b3a';     // Dark Navy (Text & Primary Buttons)
-    var ORANGE = '#ea580c';   // Bright Orange (Active Tab & Pay Buttons)
+    var NAVY = '#0b1b3a';     // Dark Navy
+    var ORANGE = '#ea580c';   // Bright Orange
     var BG = '#f0f4f8';       // Very light blue-grey background
     var WHITE = '#ffffff';
 
@@ -89,23 +89,33 @@ console.log("Wise Decision materials-simple-theme-patch.js — v5 (Navy & Orange
         var st = document.createElement('style');
         st.id = 'wds-css';
         st.textContent =
-        // ---------- Sidebar: DARK NAVY ----------
-        W + ' .sidebar{background:' + NAVY + ' !important;border-right:none !important;border-bottom-color:rgba(255,255,255,.1) !important;box-shadow:4px 0 15px rgba(0,0,0,.1) !important;}' +
-        W + ' .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2) !important;}' +
-        W + ' .sidebar #dashboard-store-title{color:' + WHITE + ' !important;font-weight:900 !important;letter-spacing:.5px;}' +
-        W + ' .sidebar #user-role-label{color:#94a3b8 !important;font-weight:600 !important;}' +
-        W + ' .sidebar #branch-badge-container span,' + W + ' .sidebar #branch-badge-container select,' + W + ' .sidebar #branch-badge-container label{background:rgba(255,255,255,.1) !important;color:' + WHITE + ' !important;border:1px solid rgba(255,255,255,.2) !important;border-radius:8px !important;font-weight:700 !important;}' +
         
-        // Sidebar Menu Items
-        W + ' .sidebar .menu-btn{background:transparent !important;color:#cbd5e1 !important;border:none !important;border-radius:10px !important;font-weight:700 !important;margin-bottom:4px;box-shadow:none !important;filter:none !important;transform:none !important;transition:all .2s;}' +
-        W + ' .sidebar .menu-btn:hover{background:rgba(255,255,255,.08) !important;color:' + WHITE + ' !important;transform:none !important;}' +
+        // ---------- SIDEBAR: WHITE BACKGROUND, NAVY BUTTONS ----------
+        W + ' .sidebar{background:#ffffff !important; border-right:1px solid #e2e8f0 !important; box-shadow:none !important;}' +
+        W + ' .sidebar::-webkit-scrollbar-thumb{background:#cbd5e1 !important;}' +
         
-        // Sidebar Active State (ORANGE)
-        W + ' .sidebar .menu-btn.wds-on{background:' + ORANGE + ' !important;color:' + WHITE + ' !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
-        W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:8px;filter:grayscale(1) brightness(2.6);}' +
-        W + ' .sidebar .menu-btn.wds-on .wds-ic{filter:none;}' +
+        // Dark text for store name and user role
+        W + ' .sidebar #dashboard-store-title{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:.5px;}' +
+        W + ' .sidebar #user-role-label{color:#475569 !important;font-weight:700 !important;}' +
+        W + ' .sidebar #branch-badge-container span,' + W + ' .sidebar #branch-badge-container select,' + W + ' .sidebar #branch-badge-container label{background:#f1f5f9 !important;color:' + NAVY + ' !important;border:1px solid #cbd5e1 !important;border-radius:8px !important;font-weight:700 !important;}' +
         
-        // ---------- DASHBOARD ----------
+        // Sidebar Menu Items (Uniform Navy Blue)
+        W + ' .sidebar .menu-btn, ' + W + ' .sidebar .menu-btn.wds-on{background:' + NAVY + ' !important;color:' + WHITE + ' !important;border:1px solid ' + NAVY + ' !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:800 !important;text-align:left !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;transition:background .2s;transform:none !important;}' +
+        
+        // Hover state
+        W + ' .sidebar .menu-btn:hover, ' + W + ' .sidebar .menu-btn.wds-on:hover{background:#1e3a8a !important;color:' + WHITE + ' !important;border-color:#1e3a8a !important;transform:none !important;}' +
+        
+        // Force active dashboard button to stay Navy (No Orange)
+        W + ' .sidebar #wdm-sidebar-materials-btn, ' + W + ' .sidebar #wdm-sidebar-newsale-btn{background:' + NAVY + ' !important;color:' + WHITE + ' !important;border-color:' + NAVY + ' !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
+        
+        // White icons for navy buttons
+        W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:8px;filter:brightness(0) invert(1) !important;}' +
+        
+        // Logout button (White bg, red text)
+        W + ' .sidebar .btn-logout{background:#ffffff !important;color:#b91c1c !important;border:1px solid #fecaca !important;box-shadow:none !important;}' +
+        W + ' .sidebar .btn-logout:hover{background:#fef2f2 !important;border-color:#fca5a5 !important;}' +
+        
+        // ---------- DASHBOARD CONTENT ----------
         '.wds{max-width:1100px;margin:0 auto;color:' + NAVY + ';font-family:inherit;}' +
         '.wds *{box-sizing:border-box;}' +
         '.wds-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px;}' +
