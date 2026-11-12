@@ -1,15 +1,8 @@
-// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v1) ====================
+// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v2 - NAVY & ORANGE) ====================
 // Load AFTER materials-patch.js and materials-polish-patch.js.
-// Replaces the look and layout of the Materials Dashboard. Same data, cleaner screen:
-//   * one big "Today" card (sales, profit, number of sales)
-//   * one big green "Start New Sale" button
-//   * Month / Capital tiles
-//   * quick-action buttons in a tidy 2-column grid
-//   * 7-day sales bars
-//   * Low stock, Recent sales, Top sellers as clean lists
-// Nothing else in the app is touched.
+// Replaces the look and layout of the Materials Dashboard. Same data, cleaner screen.
 
-console.log("Wise Decision materials-dashboard-patch.js — v1 loaded");
+console.log("Wise Decision materials-dashboard-patch.js — v2 (Navy & Orange) loaded");
 
 // Who gets the full back-office tools (dashboard, stock, credit book, quotations, reorder list)?
 // Role names are matched ignoring upper/lower case. Anyone else (e.g. staff / cashier) does not get them.
@@ -36,41 +29,58 @@ window.wdFullAccess = function () {
         var st = document.createElement('style');
         st.id = 'wdd-styles';
         st.textContent =
-        '.wdd{max-width:720px;margin:0 auto;color:#0f172a;}' +
+        '.wdd{max-width:720px;margin:0 auto;color:#0b1b3a;font-family:inherit;}' +
         '.wdd *{box-sizing:border-box;}' +
         '.wdd-head{margin:0 0 14px 0;}' +
-        '.wdd-hi{font-size:20px;font-weight:800;}' +
-        '.wdd-date{font-size:12px;color:#64748b;margin-top:2px;}' +
-        '.wdd-hero{background:linear-gradient(135deg,#f97316 0%,#c2410c 100%);color:#fff;border-radius:18px;padding:18px;margin-bottom:12px;box-shadow:0 10px 24px rgba(234,88,12,.28);}' +
-        '.wdd-hero-label{font-size:12px;opacity:.85;text-transform:uppercase;letter-spacing:.6px;font-weight:700;}' +
-        '.wdd-hero-amt{font-size:32px;font-weight:800;margin:4px 0 14px 0;line-height:1.1;}' +
-        '.wdd-hero-row{display:flex;gap:10px;}' +
-        '.wdd-hero-row>div{flex:1;background:rgba(255,255,255,.14);border-radius:12px;padding:10px 12px;}' +
-        '.wdd-hero-row b{display:block;font-size:16px;}' +
-        '.wdd-hero-row span{font-size:11px;opacity:.85;}' +
-        '.wdd-cta{width:100%;border:none;border-radius:14px;padding:16px;font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);box-shadow:0 8px 18px rgba(22,163,74,.3);cursor:pointer;margin-bottom:12px;}' +
-        '.wdd-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}' +
-        '.wdd-tile{background:#fff;border:1px solid #e8eef5;border-radius:14px;padding:12px 14px;}' +
-        '.wdd-tile small{display:block;font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.4px;}' +
-        '.wdd-tile b{display:block;font-size:17px;margin-top:4px;}' +
-        '.wdd-tile em{font-style:normal;font-size:10px;color:#94a3b8;}' +
-        '.wdd-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}' +
-        '.wdd-act{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #e8eef5;border-radius:12px;padding:12px;font-size:13px;font-weight:700;color:#334155;cursor:pointer;text-align:left;}' +
-        '.wdd-act span{font-size:18px;}' +
-        '.wdd-card{background:#fff;border:1px solid #e8eef5;border-radius:16px;padding:14px;margin-bottom:12px;}' +
-        '.wdd-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}' +
-        '.wdd-card-h h3{margin:0;font-size:14px;}' +
-        '.wdd-badge{font-size:11px;font-weight:800;padding:3px 9px;border-radius:99px;background:#fee2e2;color:#b91c1c;}' +
+        '.wdd-hi{font-size:22px;font-weight:900;letter-spacing:-.3px;}' +
+        '.wdd-date{font-size:13px;color:#64748b;margin-top:2px;font-weight:600;}' +
+        
+        // Hero Banner (Navy with Orange Accent)
+        '.wdd-hero{background:#0b1b3a;color:#fff;border-radius:20px;padding:24px;margin-bottom:16px;box-shadow:0 10px 24px rgba(11,27,58,.28);position:relative;overflow:hidden;}' +
+        '.wdd-hero::after{content:"";position:absolute;right:-10%;top:-50%;width:200px;height:200px;background:rgba(234,88,12,.15);border-radius:50%;filter:blur(30px);}' +
+        '.wdd-hero-label{font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:800;}' +
+        '.wdd-hero-amt{font-size:42px;font-weight:900;margin:8px 0 20px 0;line-height:1.1;letter-spacing:-1px;}' +
+        '.wdd-hero-row{display:flex;gap:12px;position:relative;z-index:2;}' +
+        '.wdd-hero-row>div{flex:1;background:rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;border:1px solid rgba(255,255,255,.1);}' +
+        '.wdd-hero-row b{display:block;font-size:18px;font-weight:900;}' +
+        '.wdd-hero-row span{font-size:11px;color:#cbd5e1;font-weight:600;}' +
+        
+        // Primary Action Button (Orange)
+        '.wdd-cta{width:100%;border:none;border-radius:14px;padding:18px;font-size:16px;font-weight:900;color:#fff;background:#ea580c;box-shadow:0 8px 18px rgba(234,88,12,.3);cursor:pointer;margin-bottom:16px;transition:background .2s;}' +
+        '.wdd-cta:hover{background:#c2410c;}' +
+        
+        // Tiles
+        '.wdd-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}' +
+        '.wdd-tile{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 2px 4px rgba(0,0,0,.02);}' +
+        '.wdd-tile small{display:block;font-size:12px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.5px;}' +
+        '.wdd-tile b{display:block;font-size:22px;margin-top:6px;font-weight:900;letter-spacing:-.5px;}' +
+        '.wdd-tile em{font-style:normal;font-size:11px;color:#94a3b8;font-weight:600;}' +
+        
+        // Quick Actions
+        '.wdd-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}' +
+        '.wdd-act{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;font-size:14px;font-weight:800;color:#0b1b3a;cursor:pointer;text-align:left;transition:all .2s;box-shadow:0 2px 4px rgba(0,0,0,.02);}' +
+        '.wdd-act:hover{border-color:#ea580c;box-shadow:0 4px 12px rgba(234,88,12,.1);transform:translateY(-1px);}' +
+        '.wdd-act span{font-size:20px;}' +
+        
+        // Cards
+        '.wdd-card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:20px;margin-bottom:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.03);}' +
+        '.wdd-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}' +
+        '.wdd-card-h h3{margin:0;font-size:16px;font-weight:900;}' +
+        '.wdd-badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:99px;background:#fee2e2;color:#b91c1c;}' +
         '.wdd-badge.ok{background:#dcfce7;color:#166534;}' +
-        '.wdd-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;}' +
+        
+        // Rows
+        '.wdd-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600;}' +
         '.wdd-row:last-child{border-bottom:none;}' +
-        '.wdd-sub{display:block;font-size:11px;color:#64748b;margin-top:2px;}' +
-        '.wdd-empty{font-size:13px;color:#94a3b8;padding:6px 0;}' +
-        '.wdd-bars{display:flex;align-items:flex-end;gap:8px;height:96px;}' +
+        '.wdd-sub{display:block;font-size:12px;color:#64748b;margin-top:2px;font-weight:500;}' +
+        '.wdd-empty{font-size:14px;color:#94a3b8;padding:10px 0;font-weight:600;text-align:center;}' +
+        
+        // Bar Chart (Orange bars)
+        '.wdd-bars{display:flex;align-items:flex-end;gap:8px;height:100px;padding-top:10px;}' +
         '.wdd-bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}' +
-        '.wdd-bar i{display:block;width:100%;background:#fed7aa;border-radius:6px 6px 0 0;min-height:3px;}' +
-        '.wdd-bar.today i{background:#ea580c;}' +
-        '.wdd-bar small{font-size:10px;color:#64748b;margin-top:4px;}';
+        '.wdd-bar i{display:block;width:100%;background:#e2e8f0;border-radius:6px 6px 0 0;min-height:4px;}' +
+        '.wdd-bar.today i{background:#ea580c;box-shadow:0 0 10px rgba(234,88,12,.4);}' +
+        '.wdd-bar small{font-size:11px;color:#64748b;margin-top:6px;font-weight:800;}';
         document.head.appendChild(st);
     }
 
@@ -248,7 +258,7 @@ window.wdFullAccess = function () {
             setHtml('wdd-top', top.length === 0
                 ? '<div class="wdd-empty">No sales this week yet.</div>'
                 : top.map(function (t, i) {
-                    return '<div class="wdd-row"><span>' + (i + 1) + '. ' + esc(t.name) + '</span><strong style="color:#166534;">' + money(t.rev) + ' <span style="color:#64748b;font-weight:normal;font-size:11px;">×' + t.qty + '</span></strong></div>';
+                    return '<div class="wdd-row"><span>' + (i + 1) + '. ' + esc(t.name) + '</span><strong style="color:#ea580c;">' + money(t.rev) + ' <span style="color:#64748b;font-weight:normal;font-size:11px;">×' + t.qty + '</span></strong></div>';
                 }).join(''));
         } catch (e) {
             console.warn('[materials-dashboard-patch] load error:', e);
@@ -256,34 +266,36 @@ window.wdFullAccess = function () {
     }
 })();
 
-// ==================== MATERIALS SIDEBAR RESTYLE (part of v1) ====================
-// Style only. It does not add, remove or reorder any buttons (vertical-first-patch.js and
-// materials-patch.js still control that). Applies only while a materials store is open.
+// ==================== MATERIALS SIDEBAR RESTYLE (part of v2) ====================
+// Updated to match Dark Navy background with White text and solid Orange active state.
 (function () {
     function addSidebarStyles() {
         if (document.getElementById('wdd-sidebar-styles')) return;
         var st = document.createElement('style');
         st.id = 'wdd-sidebar-styles';
         var S = 'body.wdd-mat #dashboard-main-wrapper .sidebar ';
+        
         st.textContent =
-        S + '.menu-btn{background:#fff !important;color:#334155 !important;border:1px solid #e8eef5 !important;border-left:4px solid transparent !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:600 !important;text-align:left !important;box-shadow:none !important;transition:background .15s,border-color .15s;}' +
-        S + '.menu-btn:hover{background:#fff7ed !important;border-left-color:#ea580c !important;}' +
-        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#fff !important;border-color:#ea580c !important;font-weight:700 !important;}' +
-        S + '#wdm-sidebar-materials-btn:hover{background:#9a3412 !important;border-left-color:#9a3412 !important;}' +
-        S + '#wdm-sidebar-newsale-btn{background:#f0fdf4 !important;color:#15803d !important;border-color:#bbf7d0 !important;border-left-color:#22c55e !important;font-weight:700 !important;}' +
-        S + '#wdm-sidebar-wastage-btn{border-left-color:#ef4444 !important;}' +
-        S + '.menu-btn[data-wdd="reports"]{background:#eff6ff !important;color:#1d4ed8 !important;border-color:#bfdbfe !important;border-left-color:#3b82f6 !important;}' +
-        S + '.menu-btn[data-wdd="staff"]{background:#ecfeff !important;color:#0e7490 !important;border-color:#a5f3fc !important;border-left-color:#06b6d4 !important;}' +
-        S + '.menu-btn[data-wdd="transfer"]{background:#f0fdfa !important;color:#0f766e !important;border-color:#99f6e4 !important;border-left-color:#14b8a6 !important;}' +
-        S + '.menu-btn[data-wdd="branch"]{background:#fefce8 !important;color:#a16207 !important;border-color:#fef08a !important;border-left-color:#eab308 !important;}' +
-        S + '.menu-btn[data-wdd="supplier"]{background:#f0f9ff !important;color:#0369a1 !important;border-color:#bae6fd !important;border-left-color:#0ea5e9 !important;}' +
-        S + '.menu-btn[data-wdd="customer"]{background:#fff1f2 !important;color:#be123c !important;border-color:#fecdd3 !important;border-left-color:#f43f5e !important;}' +
-        S + '.menu-btn[data-wdd="expense"]{background:#f7fee7 !important;color:#4d7c0f !important;border-color:#d9f99d !important;border-left-color:#84cc16 !important;}' +
-        S + '.menu-btn[data-wdd="accountant"]{background:#f1f5f9 !important;color:#334155 !important;border-color:#cbd5e1 !important;border-left-color:#64748b !important;}' +
-        S + '.menu-btn[data-wdd]:hover{filter:brightness(.95);}' +
-        S + '.btn-logout{color:#b91c1c !important;border-color:#fecaca !important;background:#fff !important;}' +
-        S + '.btn-logout:hover{background:#fef2f2 !important;border-left-color:#ef4444 !important;}' +
-        // Phones: one swipeable row of buttons so the dashboard shows straight away
+        // Base button (Transparent text, White)
+        S + '.menu-btn{background:transparent !important;color:#cbd5e1 !important;border:none !important;border-radius:10px !important;padding:12px 14px !important;margin:0 0 4px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:none !important;transition:all .2s;}' +
+        S + '.menu-btn:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;}' +
+        
+        // Active Dashboard Button (Orange)
+        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#fff !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
+        S + '#wdm-sidebar-materials-btn:hover{background:#c2410c !important;}' +
+        
+        // New Sale Button (Orange tinted text)
+        S + '#wdm-sidebar-newsale-btn{color:#fff !important;font-weight:800 !important;}' +
+        
+        // Remove the rainbow colors, make everything unified white/navy
+        S + '.menu-btn[data-wdd]{background:transparent !important;color:#cbd5e1 !important;border:none !important;}' +
+        S + '.menu-btn[data-wdd]:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;}' +
+        
+        // Logout Button
+        S + '.btn-logout{color:#94a3b8 !important;background:transparent !important;border:none !important;font-weight:600 !important;}' +
+        S + '.btn-logout:hover{color:#f87171 !important;background:rgba(255,255,255,.05) !important;}' +
+        
+        // Phones: swipeable row
         '@media (max-width:767px){' +
             'body.wdd-mat #dashboard-main-wrapper .sidebar{flex-direction:row !important;flex-wrap:nowrap !important;align-items:center !important;gap:8px !important;overflow-x:auto !important;overflow-y:hidden !important;padding:10px 12px !important;border-right:none !important;border-bottom:1px solid #e2e8f0 !important;box-shadow:none !important;position:sticky;top:0;z-index:20;-webkit-overflow-scrolling:touch;}' +
             'body.wdd-mat #dashboard-main-wrapper .sidebar > *{flex-shrink:0 !important;}' +
@@ -321,16 +333,10 @@ window.wdFullAccess = function () {
     });
 })();
 
-// ==================== MATERIALS "ADD MATERIAL" FORM (part of v1) ====================
-// In a materials store, tapping "Add New Product" opens this form instead of the general one.
-// Built for building materials: category list, "sold by" unit, bundle/bag size, cost + retail +
-// wholesale price, opening stock, low-stock alert. No expiry date. Saves the same record shape
-// as Common Materials, so the rest of the app reads it as normal.
+// ==================== MATERIALS "ADD MATERIAL" FORM (part of v2) ====================
+// Updated to use Navy text and Orange save buttons.
 (function () {
-    // Opening stock is saved in BULK units (bundle/bag/carton), the way the dashboard shows stock.
-    // If your inventory counts stock in single pieces instead, change this to 'base'.
     var STOCK_IN = 'bulk';
-
     var CATS = ['Roofing', 'Nails & Screws', 'Boards', 'Doors', 'Cement & Blocks', 'Wire & Rods', 'Plumbing', 'Tiles & Ceramics', 'Wardrobe', 'Paint', 'Electrical', 'Tools', 'Other'];
     var BASE = ['sheet', 'piece', 'kg', 'bag', 'roll', 'length', 'box', 'tin', 'drum', 'pack', 'metre'];
     var BULK = ['bundle', 'bag', 'carton', 'pallet', 'roll', 'tonne', 'pack', 'tin'];
@@ -345,23 +351,23 @@ window.wdFullAccess = function () {
     function opts(list, sel) {
         return list.map(function (x) { return '<option' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('');
     }
-    var INP = 'width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;box-sizing:border-box;background:#fff;';
-    var LBL = 'display:block;font-size:11px;font-weight:800;color:#334155;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.4px;';
+    var INP = 'width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;box-sizing:border-box;background:#fff;font-weight:600;color:#0b1b3a;';
+    var LBL = 'display:block;font-size:11px;font-weight:800;color:#475569;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.5px;';
 
     window.wdmOpenAddMaterial = function () {
         var m = $('wdd-add-modal'); if (m) m.remove();
         m = document.createElement('div');
         m.id = 'wdd-add-modal';
-        m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:1800;display:flex;justify-content:center;align-items:flex-end;padding:0;';
+        m.style.cssText = 'position:fixed;inset:0;background:rgba(11,27,58,.7);z-index:1800;display:flex;justify-content:center;align-items:flex-end;padding:0;';
         m.innerHTML =
-        '<div style="background:#f8fafc;color:#0f172a;width:100%;max-width:520px;max-height:94vh;overflow-y:auto;border-radius:20px 20px 0 0;padding:18px 16px 20px;box-sizing:border-box;">' +
+        '<div style="background:#f8fafc;color:#0b1b3a;width:100%;max-width:520px;max-height:94vh;overflow-y:auto;border-radius:24px 24px 0 0;padding:20px 18px 24px;box-sizing:border-box;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-            '<h3 style="margin:0;font-size:18px;">🏗️ Add Material</h3>' +
-            '<button onclick="document.getElementById(\'wdd-add-modal\').remove()" style="border:none;background:#e2e8f0;border-radius:99px;width:34px;height:34px;font-size:16px;cursor:pointer;">✕</button>' +
+            '<h3 style="margin:0;font-size:20px;font-weight:900;">🏗️ Add Material</h3>' +
+            '<button onclick="document.getElementById(\'wdd-add-modal\').remove()" style="border:none;background:#e2e8f0;border-radius:99px;width:34px;height:34px;font-size:16px;cursor:pointer;color:#0b1b3a;font-weight:bold;">✕</button>' +
           '</div>' +
-          '<div style="font-size:12px;color:#64748b;">Start typing a name — common materials fill the units for you.</div>' +
+          '<div style="font-size:13px;color:#64748b;font-weight:500;">Start typing a name — common materials fill the units for you.</div>' +
 
-          '<div style="background:#fff;border:1px solid #e8eef5;border-radius:14px;padding:4px 14px 14px;margin-top:10px;">' +
+          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
             '<label style="' + LBL + '">Material name</label>' +
             '<input id="wdd-a-name" list="wdd-a-names" placeholder="e.g. Roofing Sheet 4m" style="' + INP + '" oninput="wdmAddMatFill()">' +
             '<datalist id="wdd-a-names">' + ((typeof WDP_COMMON_MATERIALS !== 'undefined' ? WDP_COMMON_MATERIALS : []).map(function (x) { return '<option value="' + esc(x.name) + '">'; }).join('')) + '</datalist>' +
@@ -369,11 +375,11 @@ window.wdFullAccess = function () {
             '<select id="wdd-a-cat" style="' + INP + '">' + opts(CATS) + '</select>' +
           '</div>' +
 
-          '<div style="background:#fff;border:1px solid #e8eef5;border-radius:14px;padding:4px 14px 14px;margin-top:10px;">' +
+          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
             '<label style="' + LBL + '">Sold by (single unit)</label>' +
             '<input id="wdd-a-base" list="wdd-a-bases" placeholder="sheet, kg, piece…" style="' + INP + '" oninput="wdmAddMatLabels()">' +
             '<datalist id="wdd-a-bases">' + BASE.map(function (x) { return '<option value="' + x + '">'; }).join('') + '</datalist>' +
-            '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;font-weight:600;">' +
+            '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;font-weight:700;">' +
               '<input type="checkbox" id="wdd-a-single" onchange="wdmAddMatSingle()" style="width:18px;height:18px;margin:0;"> Sold only as single items (no bundle / bag)</label>' +
             '<div id="wdd-a-bulkwrap">' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
@@ -384,7 +390,7 @@ window.wdFullAccess = function () {
             '</div>' +
           '</div>' +
 
-          '<div style="background:#fff;border:1px solid #e8eef5;border-radius:14px;padding:4px 14px 14px;margin-top:10px;">' +
+          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
             '<label style="' + LBL + '">Cost price <span class="wdd-l-bulk">(per bundle)</span></label>' +
             '<input id="wdd-a-cost" type="number" min="0" inputmode="decimal" placeholder="₦" style="' + INP + '">' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
@@ -395,24 +401,23 @@ window.wdFullAccess = function () {
               '<div><label style="' + LBL + '">Retail <span class="wdd-l-base">(per sheet)</span></label><input id="wdd-a-pretail" type="number" min="0" inputmode="decimal" placeholder="auto" style="' + INP + '"></div>' +
               '<div><label style="' + LBL + '">Wholesale <span class="wdd-l-base">(per sheet)</span></label><input id="wdd-a-pwhole" type="number" min="0" inputmode="decimal" placeholder="auto" style="' + INP + '"></div>' +
             '</div>' +
-            '<div style="font-size:11px;color:#94a3b8;margin-top:6px;">Leave the single-unit prices blank to work them out from the bundle price.</div>' +
+            '<div style="font-size:11px;color:#94a3b8;margin-top:6px;font-weight:600;">Leave the single-unit prices blank to work them out from the bundle price.</div>' +
           '</div>' +
 
-          '<div style="background:#fff;border:1px solid #e8eef5;border-radius:14px;padding:4px 14px 14px;margin-top:10px;">' +
+          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
               '<div><label style="' + LBL + '">Opening stock <span class="wdd-l-bulk">(bundles)</span></label><input id="wdd-a-stock" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" style="' + INP + '"></div>' +
               '<div><label style="' + LBL + '">Alert when below</label><input id="wdd-a-low" type="number" min="0" inputmode="numeric" placeholder="5" style="' + INP + '"></div>' +
             '</div>' +
           '</div>' +
 
-          '<div id="wdd-a-err" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;font-size:13px;margin-top:12px;"></div>' +
-          '<button onclick="wdmSaveAddMaterial()" style="width:100%;margin-top:14px;padding:15px;border:none;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);cursor:pointer;">Save Material</button>' +
+          '<div id="wdd-a-err" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;font-size:13px;margin-top:12px;font-weight:600;"></div>' +
+          '<button onclick="wdmSaveAddMaterial()" style="width:100%;margin-top:16px;padding:16px;border:none;border-radius:14px;font-size:16px;font-weight:900;color:#fff;background:#ea580c;box-shadow:0 8px 18px rgba(234,88,12,.3);cursor:pointer;">Save Material</button>' +
         '</div>';
         document.body.appendChild(m);
         wdmAddMatLabels();
     };
 
-    // fill units when the typed name matches a common material
     window.wdmAddMatFill = function () {
         var list = (typeof WDP_COMMON_MATERIALS !== 'undefined') ? WDP_COMMON_MATERIALS : [];
         var v = ($('wdd-a-name').value || '').toLowerCase().trim();
@@ -429,7 +434,6 @@ window.wdFullAccess = function () {
         }
     };
 
-    // keep the little labels in sync with the unit names typed
     window.wdmAddMatLabels = function () {
         var base = ($('wdd-a-base').value || '').trim() || 'unit';
         var single = $('wdd-a-single') && $('wdd-a-single').checked;
@@ -511,7 +515,6 @@ window.wdFullAccess = function () {
         }
     };
 
-    // Catch the "Add New Product" button in materials stores (runs before the button's own handler)
     document.addEventListener('click', function (ev) {
         if (!isMat() || !window.wdFullAccess()) return;
         var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
@@ -525,8 +528,6 @@ window.wdFullAccess = function () {
 })();
 
 // ==================== EXTRA SIDEBAR BUTTONS: Manage Stock + Common Materials ====================
-// Puts the two dashboard quick buttons into the sidebar too, right under New Sale.
-// (Credit Book and Quotations add their own sidebar buttons from their own patch files.)
 (function () {
     function $(id) { return document.getElementById(id); }
     function sid() { return (typeof currentStoreId !== 'undefined') ? currentStoreId : null; }
@@ -538,9 +539,9 @@ window.wdFullAccess = function () {
         var st = document.createElement('style');
         st.id = 'wdd-extra-side-css';
         st.textContent =
-            S + '#wdd-sb-stock{background:#fff7ed !important;color:#c2410c !important;border-color:#fed7aa !important;border-left-color:#f97316 !important;}' +
-            S + '#wdd-sb-common{background:#ecfeff !important;color:#0e7490 !important;border-color:#a5f3fc !important;border-left-color:#06b6d4 !important;}' +
-            S + '#wdm-sidebar-wastage-btn{background:#fef2f2 !important;color:#b91c1c !important;border-color:#fecaca !important;border-left-color:#ef4444 !important;}';
+            // Transparent styled buttons blending into the dark navy sidebar
+            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:transparent !important;color:#cbd5e1 !important;border:none !important;}' +
+            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:rgba(255,255,255,.08) !important;color:#fff !important;}';
         document.head.appendChild(st);
     }
 
@@ -577,9 +578,6 @@ window.wdFullAccess = function () {
 })();
 
 // ==================== MANAGER LIMITS (materials stores) ====================
-// A Manager in a building-materials store can NOT add a branch and can NOT delete inventory items.
-// Only the owner (Admin) can. The buttons are hidden, and a click on them is also blocked as a backup.
-// This only affects the Manager role (see wdIsManager) in materials stores.
 (function () {
     function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
     function isManager() {
@@ -595,9 +593,7 @@ window.wdFullAccess = function () {
     function kind(b) {
         if (!b || b.closest('#wcq-modal, #wcr-modal, #wdd-add-modal, #wdp-quick-modal')) return null;
         var t = info(b);
-        // add / create a branch
         if (/(add|new|create)[^a-z]{0,6}(a\s+|another\s+)?(new\s+)?branch|branch[^a-z]{0,6}(add|new|create)|addbranch|createbranch|newbranch|savebranch/.test(t)) return 'branch';
-        // delete an inventory item (only inside the inventory screen)
         if (b.closest('#inventory-view') && (/delete|remove|🗑|trash/.test(t) || (b.textContent || '').trim().toLowerCase() === 'del')) return 'delete';
         return null;
     }
@@ -609,7 +605,6 @@ window.wdFullAccess = function () {
         });
     }
 
-    // backup: block the click even if a button was missed by the hiding
     document.addEventListener('click', function (ev) {
         if (!limited()) return;
         var b = ev.target && ev.target.closest ? ev.target.closest('button, .menu-btn') : null;
