@@ -1,20 +1,8 @@
-// ==================== WISE DECISION MATERIALS: SIMPLE PROFESSIONAL THEME (v1) ====================
+// ==================== WISE DECISION MATERIALS: SIMPLE PROFESSIONAL THEME (v2) ====================
 // Load LAST (after materials-dashboard-patch.js, sidebar-colors-patch.js, daily-summary-patch.js and the other patches).
-//
-// Building Materials / Hardware stores only. It restyles the WHOLE app for these stores in navy, blue and white:
-//   0. EVERY SCREEN (POS, Inventory, Reports, Customers, Suppliers, Expenses, Staff, pop-ups): plain light background,
-//      white cards, navy headings, one blue for all main buttons, clean table headers, blue input focus.
-//      Old teal / green / purple / orange tints are replaced.
-//   1. ONE-COLOUR SIDEBAR: deep navy, white text, the open page in solid blue. Every button looks the same.
-//   2. A SIMPLE DASHBOARD in three colours (navy, blue, white):
-//        - big bold "Today's sales" card with a 7-day bar strip
-//        - three bold figures: This month, Owed to you, Low stock
-//        - Recent sales list (tap a sale to open its receipt)
-//        - a Refresh button (also refreshes by itself every minute)
-//      The coloured cards that other patches used to add to the dashboard no longer appear (their sidebar buttons stay).
-// Nothing is changed in the database. Other store types are not affected.
+// Updated to match the clean, professional Indigo/Purple UI with bold typography.
 
-console.log("Wise Decision materials-simple-theme-patch.js — v1 loaded");
+console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
 
 (function () {
     'use strict';
@@ -37,10 +25,12 @@ console.log("Wise Decision materials-simple-theme-patch.js — v1 loaded");
     // =====================================================================
     // STYLES
     // =====================================================================
-    var NAVY = '#0b1b3a', BLUE = '#2563eb';
+    var NAVY = '#0f172a'; // Dark Slate for text
+    var BLUE = '#4f46e5'; // Indigo (Matching the image)
+    var PURPLE = '#7c3aed'; // Violet gradient end
+    var BG = '#f8fafc'; // Light background
 
 
-    // Whole-app look for materials stores (every screen and pop-up)
     function globalCss() {
         var P = 'body.wdd-mat ', WS = P + '#workspace-content', MD = P + '[id$="-modal"]';
         var both = function (rule) { return WS + ' ' + rule + ',' + MD + ' ' + rule; };
@@ -50,100 +40,118 @@ console.log("Wise Decision materials-simple-theme-patch.js — v1 loaded");
         var TXT = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([readonly]),select,textarea';
         var fld = TXT.split(',').map(function (t) { return both(t); }).join(',');
         var fldF = TXT.split(',').map(function (t) { return both(t.replace(/^select$|^textarea$/, function (m) { return m; }) + ':focus'); }).join(',');
+        
         return '' +
-        // colours used by older rules (anything using var(--accent) turns blue)
         P + '{--accent:' + BLUE + ';--primary:' + BLUE + ';--brand:' + BLUE + ';}' +
-        // page
-        P + '.main-content-area,' + P + '.dashboard-layout{background:#f1f5f9 !important;}' +
-        WS + ' h2{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:-.3px;}' +
-        WS + ' h3{color:' + NAVY + ' !important;}' +
-        // tinted / gradient cards become clean white cards with navy text
-        WS + ' [style*="linear-gradient"]{background:#fff !important;border:1px solid #dbe3ee !important;box-shadow:0 1px 2px rgba(11,27,58,.05) !important;}' +
+        // Page background
+        P + '.main-content-area,' + P + '.dashboard-layout{background:' + BG + ' !important;}' +
+        
+        // BOLD TYPOGRAPHY
+        WS + ' h2, ' + WS + ' h3{color:' + NAVY + ' !important;font-weight:800 !important;letter-spacing:-.5px;}' +
+        WS + ' td, ' + WS + ' p {font-weight:500; color:#334155;}' +
+        
+        // Tinted / gradient cards become clean white cards
+        WS + ' [style*="linear-gradient"]{background:#fff !important;border:1px solid #e2e8f0 !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.05) !important; border-radius:16px !important;}' +
         WS + ' [style*="linear-gradient"] *{color:' + NAVY + ' !important;}' +
-        // tables
-        WS + ' table th{background:#f1f5f9 !important;color:#334155 !important;font-size:11px !important;text-transform:uppercase;letter-spacing:.6px;font-weight:800 !important;border-bottom:2px solid #dbe3ee !important;}' +
-        WS + ' table td{border-bottom:1px solid #eef2f7 !important;}' +
+        
+        // Tables
+        WS + ' table th{background:#f8fafc !important;color:#475569 !important;font-size:12px !important;text-transform:uppercase;letter-spacing:.5px;font-weight:800 !important;border-bottom:2px solid #e2e8f0 !important;padding:12px;}' +
+        WS + ' table td{border-bottom:1px solid #f1f5f9 !important;font-weight:600 !important; padding:12px;}' +
         WS + ' table tbody tr:hover td{background:#f8fafc !important;}' +
-        // buttons: one blue for every main button, neutral for cancel / close / delete
-        blueSel + '{background:' + BLUE + ' !important;border:1px solid ' + BLUE + ' !important;color:#fff !important;box-shadow:none !important;filter:none !important;}' +
-        blueHov + '{background:#1d4ed8 !important;}' +
-        both('.menu-btn.btn-logout') + '{background:#fff !important;border:1px solid #cbd5e1 !important;color:#334155 !important;box-shadow:none !important;}' +
+        
+        // Buttons (Pill shaped, matching the image)
+        blueSel + '{background:' + BLUE + ' !important;border:1px solid ' + BLUE + ' !important;color:#fff !important;box-shadow:none !important;filter:none !important;border-radius:8px !important;font-weight:700 !important;}' +
+        blueHov + '{background:#4338ca !important;}' +
+        both('.menu-btn.btn-logout') + '{background:#fff !important;border:1px solid #cbd5e1 !important;color:#334155 !important;box-shadow:none !important;border-radius:8px !important;font-weight:700 !important;}' +
         both('.menu-btn.btn-logout:hover') + '{background:#f1f5f9 !important;}' +
-        // buttons that used purple or sky blue when selected (POS: Pack / Piece, Retail / Wholesale)
+        
+        // POS toggles
         WS + ' [style*="background: rgb(124, 58, 237)"],' + WS + ' [style*="background:#7c3aed"],' + WS + ' [style*="background: #7c3aed"],' +
         WS + ' [style*="background: rgb(2, 132, 199)"],' + WS + ' [style*="background:#0284c7"],' + WS + ' [style*="background: #0284c7"]{background:' + BLUE + ' !important;color:#fff !important;}' +
-        // inputs
-        fld + '{border:1px solid #cbd5e1 !important;border-radius:10px !important;background:#fff !important;color:' + NAVY + ' !important;}' +
-        fldF + '{border-color:' + BLUE + ' !important;box-shadow:0 0 0 3px rgba(37,99,235,.15) !important;outline:none !important;}' +
-        // pop-ups
-        MD + ' > div{border:none !important;border-radius:18px !important;box-shadow:0 24px 60px rgba(11,27,58,.35) !important;}' +
-        // blue accents that were teal / green
+        
+        // Inputs
+        fld + '{border:1px solid #cbd5e1 !important;border-radius:8px !important;background:#fff !important;color:' + NAVY + ' !important;font-weight:600 !important;}' +
+        fldF + '{border-color:' + BLUE + ' !important;box-shadow:0 0 0 3px rgba(79,70,229,.15) !important;outline:none !important;}' +
+        
+        // Pop-ups
+        MD + ' > div{border:none !important;border-radius:20px !important;box-shadow:0 20px 40px rgba(15,23,42,.2) !important;}' +
         WS + ' span[style*="var(--accent)"]{color:' + BLUE + ' !important;}';
     }
 
     function addCss() {
         if ($('wds-css')) return;
-        var W = 'body.wdd-mat #dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper';   // beats the older per-button colours
+        var W = 'body.wdd-mat #dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper'; 
         var st = document.createElement('style');
         st.id = 'wds-css';
         st.textContent =
-        // ---------- sidebar: one colour ----------
-        W + ' .sidebar{background:' + NAVY + ' !important;border-right:none !important;border-bottom-color:rgba(255,255,255,.12) !important;box-shadow:none !important;}' +
-        W + ' .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25) !important;}' +
-        W + ' .sidebar #dashboard-store-title{color:#fff !important;font-weight:800 !important;letter-spacing:.2px;}' +
-        W + ' .sidebar #user-role-label{color:#94a3b8 !important;}' +
-        W + ' .sidebar #branch-badge-container span,' + W + ' .sidebar #branch-badge-container select,' + W + ' .sidebar #branch-badge-container label{background:rgba(255,255,255,.1) !important;color:#e2e8f0 !important;border:none !important;}' +
-        W + ' .sidebar .menu-btn{background:transparent !important;color:#cbd5e1 !important;border:none !important;border-left:3px solid transparent !important;border-radius:10px !important;font-weight:600 !important;box-shadow:none !important;filter:none !important;transform:none !important;transition:background .15s,color .15s;}' +
-        W + ' .sidebar .menu-btn:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;transform:none !important;filter:none !important;}' +
-        W + ' .sidebar .menu-btn.wds-on{background:' + BLUE + ' !important;color:#fff !important;border-left-color:#bfdbfe !important;}' +
-        W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:2px;filter:grayscale(1) brightness(2.6);}' +
-        W + ' .sidebar .wdp-dot,' + W + ' .sidebar .wde-dot{background:' + BLUE + ' !important;color:#fff !important;}' +
-        // ---------- dashboard ----------
-        '.wds{max-width:980px;margin:0 auto;color:' + NAVY + ';font-family:inherit;}' +
+        // ---------- Sidebar: WHITE & CLEAN (Matching Top Nav in image) ----------
+        W + ' .sidebar{background:#ffffff !important;border-right:1px solid #e2e8f0 !important;border-bottom-color:transparent !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.02) !important;}' +
+        W + ' .sidebar::-webkit-scrollbar-thumb{background:#cbd5e1 !important;}' +
+        W + ' .sidebar #dashboard-store-title{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:-.3px;}' +
+        W + ' .sidebar #user-role-label{color:#64748b !important;font-weight:600 !important;}' +
+        W + ' .sidebar #branch-badge-container span,' + W + ' .sidebar #branch-badge-container select,' + W + ' .sidebar #branch-badge-container label{background:#f1f5f9 !important;color:#334155 !important;border:1px solid #e2e8f0 !important;border-radius:8px !important;font-weight:700 !important;}' +
+        
+        // Sidebar Buttons (Menu items)
+        W + ' .sidebar .menu-btn{background:transparent !important;color:#475569 !important;border:none !important;border-radius:10px !important;font-weight:700 !important;margin-bottom:2px;box-shadow:none !important;filter:none !important;transform:none !important;transition:all .2s;}' +
+        W + ' .sidebar .menu-btn:hover{background:#f8fafc !important;color:' + NAVY + ' !important;transform:none !important;}' +
+        W + ' .sidebar .menu-btn.wds-on{background:#eef2ff !important;color:' + BLUE + ' !important;}' +
+        W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:4px;filter:grayscale(1) opacity(0.7);}' +
+        W + ' .sidebar .menu-btn.wds-on .wds-ic{filter:none;}' +
+        
+        // ---------- DASHBOARD ----------
+        '.wds{max-width:1000px;margin:0 auto;color:' + NAVY + ';font-family:inherit;}' +
         '.wds *{box-sizing:border-box;}' +
-        '.wds-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}' +
-        '.wds-title{font-size:24px;font-weight:900;letter-spacing:-.3px;}' +
-        '.wds-date{font-size:12px;color:#64748b;margin-top:2px;}' +
-        '.wds-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}' +
-        '.wds-upd{font-size:11px;color:#64748b;}' +
-        '.wds-btn{border:1px solid #cbd5e1;background:#fff;color:' + NAVY + ';border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}' +
-        '.wds-btn:hover{background:#f1f5f9;}' +
+        '.wds-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;}' +
+        '.wds-title{font-size:26px;font-weight:900;letter-spacing:-.5px;}' +
+        '.wds-date{font-size:13px;color:#64748b;font-weight:600;margin-top:2px;}' +
+        '.wds-btns{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}' +
+        '.wds-upd{font-size:12px;color:#64748b;font-weight:600;}' +
+        
+        // Buttons
+        '.wds-btn{border:1px solid #cbd5e1;background:#fff;color:' + NAVY + ';border-radius:10px;padding:10px 16px;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;}' +
+        '.wds-btn:hover{background:#f8fafc;}' +
         '.wds-btn.pri{background:' + BLUE + ';border-color:' + BLUE + ';color:#fff;}' +
-        '.wds-btn.pri:hover{background:#1d4ed8;}' +
+        '.wds-btn.pri:hover{background:#4338ca;box-shadow:0 4px 12px rgba(79,70,229,.3);}' +
+        
+        // Hero Banner (Matches Estimated Net Worth)
         '.wds-spin{display:inline-block;}' +
         '.wds-busy .wds-spin{animation:wds-rot .8s linear infinite;}' +
         '@keyframes wds-rot{to{transform:rotate(360deg);}}' +
-        '.wds-hero{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:flex-end;background:linear-gradient(135deg,' + NAVY + ' 0%,#1e40af 100%);color:#fff;border-radius:20px;padding:24px;box-shadow:0 14px 34px rgba(11,27,58,.28);margin-bottom:14px;}' +
-        '.wds-hl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#bfdbfe;}' +
-        '.wds-ha{font-size:46px;font-weight:900;line-height:1.05;margin:6px 0 8px;letter-spacing:-1px;}' +
-        '.wds-hs{font-size:13px;color:#dbeafe;font-weight:600;}' +
-        '.wds-bars{display:flex;align-items:flex-end;gap:7px;height:78px;min-width:200px;flex:0 1 280px;}' +
+        '.wds-hero{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center;background:linear-gradient(135deg,' + BLUE + ' 0%,' + PURPLE + ' 100%);color:#fff;border-radius:20px;padding:30px 36px;box-shadow:0 10px 25px -5px rgba(79,70,229,.4);margin-bottom:16px;}' +
+        '.wds-hl{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.8);}' +
+        '.wds-ha{font-size:48px;font-weight:900;line-height:1.1;margin:6px 0 8px;letter-spacing:-1.5px;}' +
+        '.wds-hs{font-size:14px;color:rgba(255,255,255,0.9);font-weight:600;}' +
+        '.wds-bars{display:flex;align-items:flex-end;gap:8px;height:80px;min-width:200px;flex:0 1 280px;}' +
         '.wds-bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}' +
-        '.wds-bar i{display:block;width:100%;border-radius:6px 6px 0 0;background:rgba(255,255,255,.28);min-height:4px;}' +
+        '.wds-bar i{display:block;width:100%;border-radius:6px 6px 0 0;background:rgba(255,255,255,.2);min-height:4px;}' +
         '.wds-bar.t i{background:#fff;}' +
-        '.wds-bar small{font-size:10px;color:#bfdbfe;margin-top:5px;font-weight:600;}' +
-        '.wds-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px;}' +
-        '.wds-tile{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px 18px;cursor:pointer;transition:box-shadow .15s,border-color .15s;}' +
-        '.wds-tile:hover{border-color:#93c5fd;box-shadow:0 8px 20px rgba(37,99,235,.10);}' +
-        '.wds-tl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:#64748b;}' +
-        '.wds-tv{font-size:28px;font-weight:900;margin-top:6px;color:' + NAVY + ';letter-spacing:-.5px;}' +
-        '.wds-ts{font-size:11px;color:#64748b;margin-top:3px;}' +
-        '.wds-card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:6px 18px 10px;}' +
-        '.wds-ch{display:flex;justify-content:space-between;align-items:center;padding:14px 0 8px;}' +
-        '.wds-ch h3{margin:0;font-size:15px;font-weight:800;}' +
-        '.wds-link{background:none;border:none;color:' + BLUE + ';font-weight:700;font-size:13px;cursor:pointer;padding:0;}' +
-        '.wds-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #eef2f7;cursor:pointer;}' +
+        '.wds-bar small{font-size:11px;color:rgba(255,255,255,0.8);margin-top:6px;font-weight:700;}' +
+        
+        // Stat Tiles (Matches the 4 white cards in image)
+        '.wds-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;}' +
+        '.wds-tile{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;cursor:pointer;transition:all .2s;box-shadow:0 2px 4px rgba(15,23,42,.02);}' +
+        '.wds-tile:hover{border-color:#a5b4fc;box-shadow:0 10px 20px -5px rgba(79,70,229,.1);transform:translateY(-2px);}' +
+        '.wds-tl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748b;}' +
+        '.wds-tv{font-size:32px;font-weight:900;margin-top:8px;color:' + NAVY + ';letter-spacing:-.5px;}' +
+        '.wds-ts{font-size:12px;color:#64748b;margin-top:4px;font-weight:600;}' +
+        
+        // Recent Sales Card
+        '.wds-card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:8px 24px 16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.02);}' +
+        '.wds-ch{display:flex;justify-content:space-between;align-items:center;padding:16px 0 12px;}' +
+        '.wds-ch h3{margin:0;font-size:18px;font-weight:900;color:' + NAVY + ';}' +
+        '.wds-link{background:none;border:none;color:' + BLUE + ';font-weight:800;font-size:13px;cursor:pointer;padding:0;}' +
+        '.wds-row{display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid #f1f5f9;cursor:pointer;}' +
         '.wds-row:hover .wds-rt{color:' + BLUE + ';}' +
-        '.wds-ic2{width:38px;height:38px;border-radius:12px;background:#eff6ff;color:' + BLUE + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;flex-shrink:0;}' +
+        '.wds-ic2{width:44px;height:44px;border-radius:12px;background:#eef2ff;color:' + BLUE + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;flex-shrink:0;}' +
         '.wds-rm{flex:1;min-width:0;}' +
-        '.wds-rt{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
-        '.wds-rs{font-size:12px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+        '.wds-rt{font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + NAVY + ';transition:color 0.2s;}' +
+        '.wds-rs{font-size:13px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;}' +
         '.wds-ra{text-align:right;flex-shrink:0;}' +
-        '.wds-rv{font-weight:900;font-size:16px;color:' + NAVY + ';}' +
-        '.wds-pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:#dbeafe;color:#1d4ed8;margin-top:3px;}' +
-        '.wds-pill.off{background:#e2e8f0;color:#334155;}' +
-        '.wds-empty{text-align:center;color:#94a3b8;padding:26px 8px;font-size:13px;border-top:1px solid #eef2f7;}' +
-        '@media (max-width:600px){.wds-ha{font-size:38px;}.wds-bars{flex:1 1 100%;}.wds-hero{padding:20px;}}' + globalCss();
+        '.wds-rv{font-weight:900;font-size:18px;color:' + NAVY + ';}' +
+        '.wds-pill{display:inline-block;font-size:11px;font-weight:800;padding:4px 10px;border-radius:99px;background:#dcfce7;color:#166534;margin-top:4px;}' +
+        '.wds-pill.off{background:#fee2e2;color:#991b1b;}' +
+        '.wds-empty{text-align:center;color:#94a3b8;padding:32px 8px;font-size:14px;font-weight:600;border-top:1px solid #f1f5f9;}' +
+        '@media (max-width:600px){.wds-ha{font-size:40px;}.wds-bars{flex:1 1 100%;}.wds-hero{padding:24px;}}' + globalCss();
         document.head.appendChild(st);
     }
 
@@ -190,17 +198,23 @@ console.log("Wise Decision materials-simple-theme-patch.js — v1 loaded");
         var now = new Date();
         ws.innerHTML =
         '<div class="wds" id="wds">' +
-            '<div class="wds-top"><div><div class="wds-title">Dashboard</div><div class="wds-date">' + esc(now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</div></div>' +
+            '<div class="wds-top"><div><div class="wds-title">Inventory Overview</div><div class="wds-date">' + esc(now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })) + '</div></div>' +
             '<div class="wds-btns"><span class="wds-upd" id="wds-upd"></span>' +
                 '<button class="wds-btn" id="wds-refresh" onclick="wdsRefresh()"><span class="wds-spin">↻</span> Refresh</button>' +
                 '<button class="wds-btn pri" onclick="switchView(\'pos-view\')">+ New Sale</button></div></div>' +
+            
+            // HERO BANNER (Matches the big purple box)
             '<div class="wds-hero"><div><div class="wds-hl">Total sales today</div><div class="wds-ha" id="wds-today">₦0</div><div class="wds-hs" id="wds-today-sub">Loading…</div></div>' +
                 '<div class="wds-bars" id="wds-bars"></div></div>' +
+            
+            // WHITE STAT CARDS
             '<div class="wds-tiles">' +
                 '<div class="wds-tile" onclick="switchView(\'reports-view\')"><div class="wds-tl">This month</div><div class="wds-tv" id="wds-month">₦0</div><div class="wds-ts">Sales so far this month</div></div>' +
                 '<div class="wds-tile" onclick="wdsOpenOwed()"><div class="wds-tl">Owed to you</div><div class="wds-tv" id="wds-owed">₦0</div><div class="wds-ts" id="wds-owed-s">Credit book</div></div>' +
                 '<div class="wds-tile" onclick="wdsOpenLow()"><div class="wds-tl">Low stock</div><div class="wds-tv" id="wds-low">0</div><div class="wds-ts">Items to reorder</div></div>' +
             '</div>' +
+            
+            // RECENT SALES LIST
             '<div class="wds-card"><div class="wds-ch"><h3>Recent sales</h3><button class="wds-link" onclick="switchView(\'reports-view\')">View all ›</button></div><div id="wds-recent"><div class="wds-empty">Loading…</div></div></div>' +
         '</div>';
         setActive($('wdm-sidebar-materials-btn'));
