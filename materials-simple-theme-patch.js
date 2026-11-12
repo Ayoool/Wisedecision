@@ -1,6 +1,7 @@
-// ==================== WISE DECISION MATERIALS: SIMPLE PROFESSIONAL THEME (v4 - EMERALD) ====================
+// ==================== WISE DECISION MATERIALS: NAVY & ORANGE PRO THEME (v5) ====================
+// Matches the high-end POS interface with Dark Navy, Bright Orange, and Clean White.
 
-console.log("Wise Decision materials-simple-theme-patch.js — v4 (Emerald) loaded");
+console.log("Wise Decision materials-simple-theme-patch.js — v5 (Navy & Orange) loaded");
 
 (function () {
     'use strict';
@@ -23,10 +24,10 @@ console.log("Wise Decision materials-simple-theme-patch.js — v4 (Emerald) load
     // =====================================================================
     // STYLES
     // =====================================================================
-    var NAVY = '#0f172a'; // Dark Slate for text
-    var BLUE = '#059669'; // Emerald Green (Primary)
-    var PURPLE = '#0f766e'; // Deep Teal (Gradient end)
-    var BG = '#f8fafc'; // Light background
+    var NAVY = '#0b1b3a';     // Dark Navy (Text & Primary Buttons)
+    var ORANGE = '#ea580c';   // Bright Orange (Active Tab & Pay Buttons)
+    var BG = '#f0f4f8';       // Very light blue-grey background
+    var WHITE = '#ffffff';
 
     function globalCss() {
         var P = 'body.wdd-mat ', WS = P + '#workspace-content', MD = P + '[id$="-modal"]';
@@ -36,49 +37,50 @@ console.log("Wise Decision materials-simple-theme-patch.js — v4 (Emerald) load
         var blueHov = BTN.map(function (c) { return both('.menu-btn.' + c + ':hover'); }).join(',');
         var TXT = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([readonly]),select,textarea';
         var fld = TXT.split(',').map(function (t) { return both(t); }).join(',');
-        var fldF = TXT.split(',').map(function (t) { return both(t.replace(/^select$|^textarea$/, function (m) { return m; }) + ':focus'); }).join(',');
+        var fldF = TXT.split(',').map(function (t) { return both(t + ':focus'); }).join(',');
         
         return '' +
-        P + '{--accent:' + BLUE + ';--primary:' + BLUE + ';--brand:' + BLUE + ';}' +
+        P + '{--accent:' + NAVY + ';--primary:' + NAVY + ';--brand:' + NAVY + ';}' +
         
         // Page background
         P + '.main-content-area,' + P + '.dashboard-layout{background:' + BG + ' !important;}' +
         
         // BOLD TYPOGRAPHY
-        WS + ' h2, ' + WS + ' h3{color:' + NAVY + ' !important;font-weight:800 !important;letter-spacing:-.5px;}' +
-        WS + ' td, ' + WS + ' p {font-weight:500; color:#334155;}' +
+        WS + ' h2, ' + WS + ' h3{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:-.5px;}' +
+        WS + ' td, ' + WS + ' p, ' + WS + ' label {font-weight:600; color:#334155;}' +
         
         // Tinted / gradient cards become clean white cards
-        WS + ' [style*="linear-gradient"]{background:#fff !important;border:1px solid #e2e8f0 !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.05) !important; border-radius:16px !important;}' +
+        WS + ' [style*="linear-gradient"]{background:' + WHITE + ' !important;border:1px solid #e2e8f0 !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.05) !important; border-radius:20px !important;}' +
         WS + ' [style*="linear-gradient"] *{color:' + NAVY + ' !important;}' +
         
         // Tables
-        WS + ' table th{background:#f8fafc !important;color:#475569 !important;font-size:12px !important;text-transform:uppercase;letter-spacing:.5px;font-weight:800 !important;border-bottom:2px solid #e2e8f0 !important;padding:12px;}' +
+        WS + ' table th{background:' + BG + ' !important;color:' + NAVY + ' !important;font-size:12px !important;text-transform:uppercase;letter-spacing:.5px;font-weight:900 !important;border-bottom:2px solid #e2e8f0 !important;padding:12px;}' +
         WS + ' table td{border-bottom:1px solid #f1f5f9 !important;font-weight:600 !important; padding:12px;}' +
         WS + ' table tbody tr:hover td{background:#f8fafc !important;}' +
         
-        // Buttons (Pill shaped)
-        blueSel + '{background:' + BLUE + ' !important;border:1px solid ' + BLUE + ' !important;color:#fff !important;box-shadow:none !important;filter:none !important;border-radius:8px !important;font-weight:700 !important;}' +
-        blueHov + '{background:#047857 !important;}' +
-        both('.menu-btn.btn-logout') + '{background:#fff !important;border:1px solid #cbd5e1 !important;color:#334155 !important;box-shadow:none !important;border-radius:8px !important;font-weight:700 !important;}' +
-        both('.menu-btn.btn-logout:hover') + '{background:#f1f5f9 !important;}' +
+        // Primary Buttons (Navy)
+        blueSel + '{background:' + NAVY + ' !important;border:1px solid ' + NAVY + ' !important;color:' + WHITE + ' !important;box-shadow:none !important;filter:none !important;border-radius:10px !important;font-weight:800 !important;}' +
+        blueHov + '{background:#1e3a8a !important;}' +
+        both('.menu-btn.btn-logout') + '{background:' + WHITE + ' !important;border:1px solid #cbd5e1 !important;color:' + NAVY + ' !important;box-shadow:none !important;border-radius:10px !important;font-weight:800 !important;}' +
         
-        // =====================================================================
-        // AGGRESSIVE ORANGE KILLER (Fixes Credit Book & POS tabs)
-        // =====================================================================
-        WS + ' [style*="background: rgb(234, 88, 12)"],' + WS + ' [style*="background:#ea580c"],' + WS + ' [style*="background: #ea580c"],' +
-        WS + ' [style*="background: rgb(249, 115, 22)"],' + WS + ' [style*="background:#f97316"],' + WS + ' [style*="background: #f97316"],' +
-        WS + ' .btn-credit, ' + WS + ' .btn-orange, ' + WS + ' .credit-btn, ' + WS + ' .tab-active,' +
-        WS + ' [style*="background: rgb(79, 70, 229)"],' + WS + ' [style*="background:#4f46e5"] { ' +
-        'background: ' + BLUE + ' !important; border-color: ' + BLUE + ' !important; color: #fff !important; box-shadow: 0 4px 6px -1px rgba(5,150,105,.2) !important; }' +
+        // Orange Action Buttons (e.g., Pay, Print, Highlighted Tabs)
+        WS + ' .btn-pay, ' + WS + ' .btn-orange, ' + WS + ' .btn-credit, ' +
+        WS + ' [style*="background: rgb(249, 115, 22)"],' + WS + ' [style*="background:#f97316"],' +
+        WS + ' [style*="background: rgb(234, 88, 12)"],' + WS + ' [style*="background:#ea580c"] { ' +
+        'background: ' + ORANGE + ' !important; border-color: ' + ORANGE + ' !important; color: ' + WHITE + ' !important; font-weight: 800 !important; box-shadow: 0 4px 12px rgba(234,88,12,.3) !important; border-radius: 10px !important; }' +
+
+        // POS Toggles (Retail/Piece etc) - Active state should be Navy
+        WS + ' [style*="background: rgb(124, 58, 237)"],' + WS + ' [style*="background:#7c3aed"],' +
+        WS + ' [style*="background: rgb(2, 132, 199)"],' + WS + ' [style*="background:#0284c7"] { ' +
+        'background: ' + NAVY + ' !important; color: ' + WHITE + ' !important; border-radius: 10px !important; font-weight: 800 !important; }' +
 
         // Inputs
-        fld + '{border:1px solid #cbd5e1 !important;border-radius:8px !important;background:#fff !important;color:' + NAVY + ' !important;font-weight:600 !important;}' +
-        fldF + '{border-color:' + BLUE + ' !important;box-shadow:0 0 0 3px rgba(5,150,105,.15) !important;outline:none !important;}' +
+        fld + '{border:1px solid #cbd5e1 !important;border-radius:10px !important;background:' + WHITE + ' !important;color:' + NAVY + ' !important;font-weight:600 !important;padding:10px 14px !important;}' +
+        fldF + '{border-color:' + ORANGE + ' !important;box-shadow:0 0 0 3px rgba(234,88,12,.15) !important;outline:none !important;}' +
         
         // Pop-ups
-        MD + ' > div{border:none !important;border-radius:20px !important;box-shadow:0 20px 40px rgba(15,23,42,.2) !important;}' +
-        WS + ' span[style*="var(--accent)"]{color:' + BLUE + ' !important;}';
+        MD + ' > div{border:none !important;border-radius:24px !important;box-shadow:0 24px 60px rgba(11,27,58,.3) !important;}' +
+        WS + ' span[style*="var(--accent)"]{color:' + NAVY + ' !important;}';
     }
 
     function addCss() {
@@ -87,74 +89,77 @@ console.log("Wise Decision materials-simple-theme-patch.js — v4 (Emerald) load
         var st = document.createElement('style');
         st.id = 'wds-css';
         st.textContent =
-        // ---------- Sidebar: WHITE & CLEAN ----------
-        W + ' .sidebar{background:#ffffff !important;border-right:1px solid #e2e8f0 !important;border-bottom-color:transparent !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.02) !important;}' +
-        W + ' .sidebar::-webkit-scrollbar-thumb{background:#cbd5e1 !important;}' +
-        W + ' .sidebar #dashboard-store-title{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:-.3px;}' +
-        W + ' .sidebar #user-role-label{color:#64748b !important;font-weight:600 !important;}' +
-        W + ' .sidebar #branch-badge-container span,' + W + ' .sidebar #branch-badge-container select,' + W + ' .sidebar #branch-badge-container label{background:#f1f5f9 !important;color:#334155 !important;border:1px solid #e2e8f0 !important;border-radius:8px !important;font-weight:700 !important;}' +
+        // ---------- Sidebar: DARK NAVY ----------
+        W + ' .sidebar{background:' + NAVY + ' !important;border-right:none !important;border-bottom-color:rgba(255,255,255,.1) !important;box-shadow:4px 0 15px rgba(0,0,0,.1) !important;}' +
+        W + ' .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2) !important;}' +
+        W + ' .sidebar #dashboard-store-title{color:' + WHITE + ' !important;font-weight:900 !important;letter-spacing:.5px;}' +
+        W + ' .sidebar #user-role-label{color:#94a3b8 !important;font-weight:600 !important;}' +
+        W + ' .sidebar #branch-badge-container span,' + W + ' .sidebar #branch-badge-container select,' + W + ' .sidebar #branch-badge-container label{background:rgba(255,255,255,.1) !important;color:' + WHITE + ' !important;border:1px solid rgba(255,255,255,.2) !important;border-radius:8px !important;font-weight:700 !important;}' +
         
-        // Sidebar Buttons (Menu items)
-        W + ' .sidebar .menu-btn{background:transparent !important;color:#475569 !important;border:none !important;border-radius:10px !important;font-weight:700 !important;margin-bottom:2px;box-shadow:none !important;filter:none !important;transform:none !important;transition:all .2s;}' +
-        W + ' .sidebar .menu-btn:hover{background:#f8fafc !important;color:' + NAVY + ' !important;transform:none !important;}' +
-        W + ' .sidebar .menu-btn.wds-on{background:#ecfdf5 !important;color:' + BLUE + ' !important;}' +
-        W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:4px;filter:grayscale(1) opacity(0.7);}' +
+        // Sidebar Menu Items
+        W + ' .sidebar .menu-btn{background:transparent !important;color:#cbd5e1 !important;border:none !important;border-radius:10px !important;font-weight:700 !important;margin-bottom:4px;box-shadow:none !important;filter:none !important;transform:none !important;transition:all .2s;}' +
+        W + ' .sidebar .menu-btn:hover{background:rgba(255,255,255,.08) !important;color:' + WHITE + ' !important;transform:none !important;}' +
+        
+        // Sidebar Active State (ORANGE)
+        W + ' .sidebar .menu-btn.wds-on{background:' + ORANGE + ' !important;color:' + WHITE + ' !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
+        W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:8px;filter:grayscale(1) brightness(2.6);}' +
         W + ' .sidebar .menu-btn.wds-on .wds-ic{filter:none;}' +
         
         // ---------- DASHBOARD ----------
-        '.wds{max-width:1000px;margin:0 auto;color:' + NAVY + ';font-family:inherit;}' +
+        '.wds{max-width:1100px;margin:0 auto;color:' + NAVY + ';font-family:inherit;}' +
         '.wds *{box-sizing:border-box;}' +
-        '.wds-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;}' +
-        '.wds-title{font-size:26px;font-weight:900;letter-spacing:-.5px;}' +
-        '.wds-date{font-size:13px;color:#64748b;font-weight:600;margin-top:2px;}' +
-        '.wds-btns{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}' +
-        '.wds-upd{font-size:12px;color:#64748b;font-weight:600;}' +
+        '.wds-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px;}' +
+        '.wds-title{font-size:28px;font-weight:900;letter-spacing:-.5px;}' +
+        '.wds-date{font-size:14px;color:#64748b;font-weight:600;margin-top:4px;}' +
+        '.wds-btns{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}' +
+        '.wds-upd{font-size:12px;color:#64748b;font-weight:700;}' +
         
-        // Buttons
-        '.wds-btn{border:1px solid #cbd5e1;background:#fff;color:' + NAVY + ';border-radius:10px;padding:10px 16px;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;}' +
-        '.wds-btn:hover{background:#f8fafc;}' +
-        '.wds-btn.pri{background:' + BLUE + ';border-color:' + BLUE + ';color:#fff;}' +
-        '.wds-btn.pri:hover{background:#047857;box-shadow:0 4px 12px rgba(5,150,105,.3);}' +
+        // Dashboard Buttons
+        '.wds-btn{border:1px solid #cbd5e1;background:' + WHITE + ';color:' + NAVY + ';border-radius:10px;padding:10px 18px;font-weight:800;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all 0.2s;}' +
+        '.wds-btn:hover{background:' + BG + ';}' +
+        '.wds-btn.pri{background:' + NAVY + ';border-color:' + NAVY + ';color:' + WHITE + ';}' +
+        '.wds-btn.pri:hover{background:#1e3a8a;box-shadow:0 4px 12px rgba(11,27,58,.3);}' +
         
-        // Hero Banner
+        // Hero Banner (Navy with Orange Bars)
         '.wds-spin{display:inline-block;}' +
         '.wds-busy .wds-spin{animation:wds-rot .8s linear infinite;}' +
         '@keyframes wds-rot{to{transform:rotate(360deg);}}' +
-        '.wds-hero{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center;background:linear-gradient(135deg,' + PURPLE + ' 0%,' + BLUE + ' 100%);color:#fff;border-radius:20px;padding:30px 36px;box-shadow:0 10px 25px -5px rgba(5,150,105,.4);margin-bottom:16px;}' +
-        '.wds-hl{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.8);}' +
-        '.wds-ha{font-size:48px;font-weight:900;line-height:1.1;margin:6px 0 8px;letter-spacing:-1.5px;}' +
-        '.wds-hs{font-size:14px;color:rgba(255,255,255,0.9);font-weight:600;}' +
-        '.wds-bars{display:flex;align-items:flex-end;gap:8px;height:80px;min-width:200px;flex:0 1 280px;}' +
+        '.wds-hero{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center;background:' + NAVY + ';color:' + WHITE + ';border-radius:24px;padding:36px;box-shadow:0 12px 30px -5px rgba(11,27,58,.3);margin-bottom:20px;position:relative;overflow:hidden;}' +
+        '.wds-hero::after{content:"";position:absolute;right:-5%;top:-50%;width:300px;height:300px;background:rgba(234,88,12,.15);border-radius:50%;filter:blur(40px);}' +
+        '.wds-hl{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;}' +
+        '.wds-ha{font-size:52px;font-weight:900;line-height:1.1;margin:8px 0 10px;letter-spacing:-1.5px;}' +
+        '.wds-hs{font-size:15px;color:#cbd5e1;font-weight:600;}' +
+        '.wds-bars{display:flex;align-items:flex-end;gap:8px;height:90px;min-width:220px;flex:0 1 300px;position:relative;z-index:2;}' +
         '.wds-bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}' +
-        '.wds-bar i{display:block;width:100%;border-radius:6px 6px 0 0;background:rgba(255,255,255,.2);min-height:4px;}' +
-        '.wds-bar.t i{background:#fff;}' +
-        '.wds-bar small{font-size:11px;color:rgba(255,255,255,0.8);margin-top:6px;font-weight:700;}' +
+        '.wds-bar i{display:block;width:100%;border-radius:6px 6px 0 0;background:rgba(255,255,255,.15);min-height:4px;}' +
+        '.wds-bar.t i{background:' + ORANGE + ';box-shadow:0 0 15px rgba(234,88,12,.5);}' +
+        '.wds-bar small{font-size:11px;color:#94a3b8;margin-top:8px;font-weight:800;}' +
         
         // Stat Tiles
-        '.wds-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;}' +
-        '.wds-tile{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;cursor:pointer;transition:all .2s;box-shadow:0 2px 4px rgba(15,23,42,.02);}' +
-        '.wds-tile:hover{border-color:#6ee7b7;box-shadow:0 10px 20px -5px rgba(5,150,105,.1);transform:translateY(-2px);}' +
-        '.wds-tl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748b;}' +
-        '.wds-tv{font-size:32px;font-weight:900;margin-top:8px;color:' + NAVY + ';letter-spacing:-.5px;}' +
-        '.wds-ts{font-size:12px;color:#64748b;margin-top:4px;font-weight:600;}' +
+        '.wds-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:24px;}' +
+        '.wds-tile{background:' + WHITE + ';border:1px solid #e2e8f0;border-radius:20px;padding:24px;cursor:pointer;transition:all .2s;box-shadow:0 4px 6px -1px rgba(0,0,0,.03);}' +
+        '.wds-tile:hover{border-color:' + NAVY + ';box-shadow:0 12px 25px -5px rgba(11,27,58,.1);transform:translateY(-3px);}' +
+        '.wds-tl{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748b;}' +
+        '.wds-tv{font-size:36px;font-weight:900;margin-top:10px;color:' + NAVY + ';letter-spacing:-1px;}' +
+        '.wds-ts{font-size:13px;color:#64748b;margin-top:6px;font-weight:600;}' +
         
         // Recent Sales Card
-        '.wds-card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:8px 24px 16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.02);}' +
-        '.wds-ch{display:flex;justify-content:space-between;align-items:center;padding:16px 0 12px;}' +
-        '.wds-ch h3{margin:0;font-size:18px;font-weight:900;color:' + NAVY + ';}' +
-        '.wds-link{background:none;border:none;color:' + BLUE + ';font-weight:800;font-size:13px;cursor:pointer;padding:0;}' +
-        '.wds-row{display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid #f1f5f9;cursor:pointer;}' +
-        '.wds-row:hover .wds-rt{color:' + BLUE + ';}' +
-        '.wds-ic2{width:44px;height:44px;border-radius:12px;background:#ecfdf5;color:' + BLUE + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;flex-shrink:0;}' +
+        '.wds-card{background:' + WHITE + ';border:1px solid #e2e8f0;border-radius:24px;padding:10px 28px 20px;box-shadow:0 4px 6px -1px rgba(0,0,0,.03);}' +
+        '.wds-ch{display:flex;justify-content:space-between;align-items:center;padding:20px 0 16px;}' +
+        '.wds-ch h3{margin:0;font-size:20px;font-weight:900;color:' + NAVY + ';}' +
+        '.wds-link{background:none;border:none;color:' + ORANGE + ';font-weight:800;font-size:14px;cursor:pointer;padding:0;}' +
+        '.wds-row{display:flex;align-items:center;gap:16px;padding:16px 0;border-top:1px solid #f1f5f9;cursor:pointer;}' +
+        '.wds-row:hover .wds-rt{color:' + ORANGE + ';}' +
+        '.wds-ic2{width:48px;height:48px;border-radius:14px;background:#fff7ed;color:' + ORANGE + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;flex-shrink:0;}' +
         '.wds-rm{flex:1;min-width:0;}' +
-        '.wds-rt{font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + NAVY + ';transition:color 0.2s;}' +
+        '.wds-rt{font-weight:800;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + NAVY + ';transition:color 0.2s;}' +
         '.wds-rs{font-size:13px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;}' +
         '.wds-ra{text-align:right;flex-shrink:0;}' +
-        '.wds-rv{font-weight:900;font-size:18px;color:' + NAVY + ';}' +
-        '.wds-pill{display:inline-block;font-size:11px;font-weight:800;padding:4px 10px;border-radius:99px;background:#dcfce7;color:#166534;margin-top:4px;}' +
+        '.wds-rv{font-weight:900;font-size:20px;color:' + NAVY + ';}' +
+        '.wds-pill{display:inline-block;font-size:11px;font-weight:800;padding:4px 12px;border-radius:99px;background:#dcfce7;color:#166534;margin-top:6px;}' +
         '.wds-pill.off{background:#fee2e2;color:#991b1b;}' +
-        '.wds-empty{text-align:center;color:#94a3b8;padding:32px 8px;font-size:14px;font-weight:600;border-top:1px solid #f1f5f9;}' +
-        '@media (max-width:600px){.wds-ha{font-size:40px;}.wds-bars{flex:1 1 100%;}.wds-hero{padding:24px;}}' + globalCss();
+        '.wds-empty{text-align:center;color:#94a3b8;padding:40px 8px;font-size:15px;font-weight:600;border-top:1px solid #f1f5f9;}' +
+        '@media (max-width:600px){.wds-ha{font-size:44px;}.wds-bars{flex:1 1 100%;}.wds-hero{padding:24px;}}' + globalCss();
         document.head.appendChild(st);
     }
 
