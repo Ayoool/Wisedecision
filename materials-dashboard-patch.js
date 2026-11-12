@@ -1,8 +1,8 @@
-// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v3 - BUTTON BACKGROUNDS) ====================
+// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v5 - STAFF RESTRICTIONS) ====================
 // Load AFTER materials-patch.js and materials-polish-patch.js.
-// Replaces the look and layout of the Materials Dashboard. Same data, cleaner screen.
+// Replaces the look and layout of the Materials Dashboard. Restricts standard workers to POS only.
 
-console.log("Wise Decision materials-dashboard-patch.js — v3 (Sidebar Backgrounds) loaded");
+console.log("Wise Decision materials-dashboard-patch.js — v5 (Staff Restrictions) loaded");
 
 // Who gets the full back-office tools (dashboard, stock, credit book, quotations, reorder list)?
 // Role names are matched ignoring upper/lower case. Anyone else (e.g. staff / cashier) does not get them.
@@ -86,7 +86,11 @@ window.wdFullAccess = function () {
 
     // ---------- screen ----------
     window.wdmShowMaterialsDashboard = function () {
-        if (!window.wdFullAccess()) return;
+        if (!window.wdFullAccess()) {
+            // If standard worker somehow tries to open dashboard, send them to POS
+            if (typeof switchView === 'function') switchView('pos-view');
+            return;
+        }
         var ws = document.getElementById('workspace-content');
         if (!ws) return;
         addStyles();
@@ -266,8 +270,7 @@ window.wdFullAccess = function () {
     }
 })();
 
-// ==================== MATERIALS SIDEBAR RESTYLE (v3 - BUTTON BACKGROUNDS) ====================
-// Gives the sidebar buttons a card-like background so they stand out against the dark navy.
+// ==================== MATERIALS SIDEBAR RESTYLE (v5) ====================
 (function () {
     function addSidebarStyles() {
         if (document.getElementById('wdd-sidebar-styles')) return;
@@ -276,19 +279,23 @@ window.wdFullAccess = function () {
         var S = 'body.wdd-mat #dashboard-main-wrapper .sidebar ';
         
         st.textContent =
-        // Base button (Slightly lighter navy background, subtle border, white text)
-        S + '.menu-btn{background:#152a4e !important;color:#cbd5e1 !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 6px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:0 2px 4px rgba(0,0,0,.1) !important;transition:all .2s;}' +
+        // Base button (White background, Navy text)
+        S + '.menu-btn{background:#ffffff !important;color:#0b1b3a !important;border:1px solid #ffffff !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:800 !important;text-align:left !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;transition:all .2s;}' +
         
-        // Hover state (Lighter navy)
-        S + '.menu-btn:hover{background:#1e3a8a !important;color:#fff !important;border-color:rgba(255,255,255,.15) !important;transform:translateY(-1px);}' +
+        // Hover state
+        S + '.menu-btn:hover{background:#f8fafc !important;color:#ea580c !important;border-color:#f8fafc !important;transform:translateY(-1px);}' +
         
         // Active Dashboard Button (Orange)
-        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#fff !important;border-color:#ea580c !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
-        S + '#wdm-sidebar-materials-btn:hover{background:#c2410c !important;}' +
+        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#ffffff !important;border-color:#ea580c !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
+        S + '#wdm-sidebar-materials-btn:hover{background:#c2410c !important;color:#ffffff !important;}' +
         
-        // Logout Button (Keep it subtle but with background)
-        S + '.btn-logout{background:#1e293b !important;color:#94a3b8 !important;border:1px solid rgba(255,255,255,.05) !important;border-radius:10px !important;font-weight:600 !important;}' +
-        S + '.btn-logout:hover{color:#f87171 !important;background:#334155 !important;border-color:#475569 !important;}' +
+        // Fix icon colors
+        S + '.menu-btn .wds-ic {filter: grayscale(1) brightness(0.2);}' +
+        S + '#wdm-sidebar-materials-btn .wds-ic {filter: none !important;}' +
+        
+        // Logout Button
+        S + '.btn-logout{background:#ffffff !important;color:#b91c1c !important;border:1px solid #ffffff !important;border-radius:10px !important;font-weight:700 !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
+        S + '.btn-logout:hover{background:#fef2f2 !important;border-color:#fef2f2 !important;}' +
         
         // Phones: swipeable row
         '@media (max-width:767px){' +
@@ -328,8 +335,7 @@ window.wdFullAccess = function () {
     });
 })();
 
-// ==================== MATERIALS "ADD MATERIAL" FORM (part of v3) ====================
-// Updated to use Navy text and Orange save buttons.
+// ==================== MATERIALS "ADD MATERIAL" FORM (part of v5) ====================
 (function () {
     var STOCK_IN = 'bulk';
     var CATS = ['Roofing', 'Nails & Screws', 'Boards', 'Doors', 'Cement & Blocks', 'Wire & Rods', 'Plumbing', 'Tiles & Ceramics', 'Wardrobe', 'Paint', 'Electrical', 'Tools', 'Other'];
@@ -534,9 +540,8 @@ window.wdFullAccess = function () {
         var st = document.createElement('style');
         st.id = 'wdd-extra-side-css';
         st.textContent =
-            // Match the new background style for the extra buttons
-            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:#152a4e !important;color:#cbd5e1 !important;border:1px solid rgba(255,255,255,.08) !important;}' +
-            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:#1e3a8a !important;color:#fff !important;border-color:rgba(255,255,255,.15) !important;}';
+            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:#ffffff !important;color:#0b1b3a !important;border:1px solid #ffffff !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
+            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:#f8fafc !important;color:#ea580c !important;border-color:#f8fafc !important;}';
         document.head.appendChild(st);
     }
 
@@ -619,4 +624,97 @@ window.wdFullAccess = function () {
         });
         if (document.body) obs.observe(document.body, { childList: true, subtree: true });
     });
+})();
+
+// ==================== STANDARD WORKER RESTRICTIONS ====================
+// Hides the dashboard, redirects to POS, hides all sidebar buttons except POS and Logout,
+// and filters transaction tables so workers only see their own sales.
+(function () {
+    function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
+    function isStaff() { return isMat() && !window.wdFullAccess(); }
+
+    // 1. Hide Sidebar Buttons (Keep POS and Logout only)
+    function restrictSidebar() {
+        if (!isStaff()) return;
+        var side = document.querySelector('#dashboard-main-wrapper .sidebar');
+        if (!side) return;
+
+        side.querySelectorAll('.menu-btn').forEach(function (b) {
+            var t = (b.textContent || '').toLowerCase();
+            // Allow New Sale (POS) and Logout
+            if (t.includes('new sale') || t.includes('pos') || b.classList.contains('btn-logout') || t.includes('logout')) {
+                b.style.setProperty('display', '', 'important'); // Show
+            } else {
+                b.style.setProperty('display', 'none', 'important'); // Hide
+            }
+        });
+    }
+
+    // 2. Redirect to POS if they somehow land on Dashboard
+    var originalShowDash = window.wdmShowMaterialsDashboard;
+    window.wdmShowMaterialsDashboard = function () {
+        if (isStaff()) {
+            if (typeof switchView === 'function') switchView('pos-view');
+            return;
+        }
+        if (originalShowDash) originalShowDash.apply(this, arguments);
+    };
+
+    // 3. Filter POS Sales History / Receipts so staff only see their own
+    function filterSalesRows() {
+        if (!isStaff()) return;
+        var staffName = (typeof currentStaffName !== 'undefined' && currentStaffName) ? String(currentStaffName).toLowerCase().trim() : '';
+        if (!staffName) return;
+
+        // Look for tables or lists in the POS view
+        var posView = document.getElementById('pos-view');
+        if (!posView) return;
+
+        // Find rows in tables or list items that look like transactions
+        posView.querySelectorAll('table tr, .history-item, .receipt-row').forEach(function (row) {
+            // Skip headers
+            if (row.querySelector('th')) return;
+
+            var txt = (row.textContent || '').toLowerCase();
+            // If the row has a staff name or a transaction ID, and it DOESN'T match the logged-in staff,
+            // we hide it. (If we can't find a name, we leave it visible to be safe, but usually it shows).
+            if (txt.includes('staff:') || txt.includes('sold by:')) {
+                if (!txt.includes(staffName)) {
+                    row.style.setProperty('display', 'none', 'important');
+                } else {
+                    row.style.setProperty('display', '', 'important');
+                }
+            }
+        });
+    }
+
+    // Run on load and when views change
+    window.addEventListener('load', function () {
+        // Initial redirect
+        if (isStaff()) {
+            setTimeout(function () {
+                if (typeof switchView === 'function') switchView('pos-view');
+            }, 800);
+        }
+
+        // Observe for changes to keep enforcing the rules
+        var busy = false;
+        var obs = new MutationObserver(function () {
+            if (busy) return;
+            busy = true;
+            setTimeout(function () {
+                busy = false;
+                try {
+                    restrictSidebar();
+                    filterSalesRows();
+                } catch (e) {}
+            }, 200);
+        });
+        if (document.body) obs.observe(document.body, { childList: true, subtree: true });
+        
+        // Run once immediately
+        restrictSidebar();
+        filterSalesRows();
+    });
+
 })();
