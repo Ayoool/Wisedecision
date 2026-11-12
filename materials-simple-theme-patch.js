@@ -1,7 +1,10 @@
 // ==================== WISE DECISION MATERIALS: SIMPLE PROFESSIONAL THEME (v1) ====================
 // Load LAST (after materials-dashboard-patch.js, sidebar-colors-patch.js, daily-summary-patch.js and the other patches).
 //
-// Building Materials / Hardware stores only:
+// Building Materials / Hardware stores only. It restyles the WHOLE app for these stores in navy, blue and white:
+//   0. EVERY SCREEN (POS, Inventory, Reports, Customers, Suppliers, Expenses, Staff, pop-ups): plain light background,
+//      white cards, navy headings, one blue for all main buttons, clean table headers, blue input focus.
+//      Old teal / green / purple / orange tints are replaced.
 //   1. ONE-COLOUR SIDEBAR: deep navy, white text, the open page in solid blue. Every button looks the same.
 //   2. A SIMPLE DASHBOARD in three colours (navy, blue, white):
 //        - big bold "Today's sales" card with a 7-day bar strip
@@ -35,6 +38,48 @@ console.log("Wise Decision materials-simple-theme-patch.js — v1 loaded");
     // STYLES
     // =====================================================================
     var NAVY = '#0b1b3a', BLUE = '#2563eb';
+
+
+    // Whole-app look for materials stores (every screen and pop-up)
+    function globalCss() {
+        var P = 'body.wdd-mat ', WS = P + '#workspace-content', MD = P + '[id$="-modal"]';
+        var both = function (rule) { return WS + ' ' + rule + ',' + MD + ' ' + rule; };
+        var BTN = ['btn-action-primary', 'btn-dash', 'btn-pos', 'btn-inv', 'btn-acc', 'btn-rep', 'btn-exp', 'btn-staff', 'btn-cust', 'btn-supplier', 'btn-transfer', 'btn-branch', 'btn-sec', 'btn-subscription'];
+        var blueSel = BTN.map(function (c) { return both('.menu-btn.' + c); }).join(',');
+        var blueHov = BTN.map(function (c) { return both('.menu-btn.' + c + ':hover'); }).join(',');
+        var TXT = 'input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([readonly]),select,textarea';
+        var fld = TXT.split(',').map(function (t) { return both(t); }).join(',');
+        var fldF = TXT.split(',').map(function (t) { return both(t.replace(/^select$|^textarea$/, function (m) { return m; }) + ':focus'); }).join(',');
+        return '' +
+        // colours used by older rules (anything using var(--accent) turns blue)
+        P + '{--accent:' + BLUE + ';--primary:' + BLUE + ';--brand:' + BLUE + ';}' +
+        // page
+        P + '.main-content-area,' + P + '.dashboard-layout{background:#f1f5f9 !important;}' +
+        WS + ' h2{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:-.3px;}' +
+        WS + ' h3{color:' + NAVY + ' !important;}' +
+        // tinted / gradient cards become clean white cards with navy text
+        WS + ' [style*="linear-gradient"]{background:#fff !important;border:1px solid #dbe3ee !important;box-shadow:0 1px 2px rgba(11,27,58,.05) !important;}' +
+        WS + ' [style*="linear-gradient"] *{color:' + NAVY + ' !important;}' +
+        // tables
+        WS + ' table th{background:#f1f5f9 !important;color:#334155 !important;font-size:11px !important;text-transform:uppercase;letter-spacing:.6px;font-weight:800 !important;border-bottom:2px solid #dbe3ee !important;}' +
+        WS + ' table td{border-bottom:1px solid #eef2f7 !important;}' +
+        WS + ' table tbody tr:hover td{background:#f8fafc !important;}' +
+        // buttons: one blue for every main button, neutral for cancel / close / delete
+        blueSel + '{background:' + BLUE + ' !important;border:1px solid ' + BLUE + ' !important;color:#fff !important;box-shadow:none !important;filter:none !important;}' +
+        blueHov + '{background:#1d4ed8 !important;}' +
+        both('.menu-btn.btn-logout') + '{background:#fff !important;border:1px solid #cbd5e1 !important;color:#334155 !important;box-shadow:none !important;}' +
+        both('.menu-btn.btn-logout:hover') + '{background:#f1f5f9 !important;}' +
+        // buttons that used purple or sky blue when selected (POS: Pack / Piece, Retail / Wholesale)
+        WS + ' [style*="background: rgb(124, 58, 237)"],' + WS + ' [style*="background:#7c3aed"],' + WS + ' [style*="background: #7c3aed"],' +
+        WS + ' [style*="background: rgb(2, 132, 199)"],' + WS + ' [style*="background:#0284c7"],' + WS + ' [style*="background: #0284c7"]{background:' + BLUE + ' !important;color:#fff !important;}' +
+        // inputs
+        fld + '{border:1px solid #cbd5e1 !important;border-radius:10px !important;background:#fff !important;color:' + NAVY + ' !important;}' +
+        fldF + '{border-color:' + BLUE + ' !important;box-shadow:0 0 0 3px rgba(37,99,235,.15) !important;outline:none !important;}' +
+        // pop-ups
+        MD + ' > div{border:none !important;border-radius:18px !important;box-shadow:0 24px 60px rgba(11,27,58,.35) !important;}' +
+        // blue accents that were teal / green
+        WS + ' span[style*="var(--accent)"]{color:' + BLUE + ' !important;}';
+    }
 
     function addCss() {
         if ($('wds-css')) return;
@@ -98,7 +143,7 @@ console.log("Wise Decision materials-simple-theme-patch.js — v1 loaded");
         '.wds-pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 9px;border-radius:99px;background:#dbeafe;color:#1d4ed8;margin-top:3px;}' +
         '.wds-pill.off{background:#e2e8f0;color:#334155;}' +
         '.wds-empty{text-align:center;color:#94a3b8;padding:26px 8px;font-size:13px;border-top:1px solid #eef2f7;}' +
-        '@media (max-width:600px){.wds-ha{font-size:38px;}.wds-bars{flex:1 1 100%;}.wds-hero{padding:20px;}}';
+        '@media (max-width:600px){.wds-ha{font-size:38px;}.wds-bars{flex:1 1 100%;}.wds-hero{padding:20px;}}' + globalCss();
         document.head.appendChild(st);
     }
 
