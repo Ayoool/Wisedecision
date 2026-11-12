@@ -1,11 +1,9 @@
-// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v5 - STAFF RESTRICTIONS) ====================
+// ==================== WISE DECISION MATERIALS DASHBOARD REDESIGN (v7 - UNIFORM NAVY BUTTONS) ====================
 // Load AFTER materials-patch.js and materials-polish-patch.js.
-// Replaces the look and layout of the Materials Dashboard. Restricts standard workers to POS only.
 
-console.log("Wise Decision materials-dashboard-patch.js — v5 (Staff Restrictions) loaded");
+console.log("Wise Decision materials-dashboard-patch.js — v7 (Uniform Navy Buttons) loaded");
 
-// Who gets the full back-office tools (dashboard, stock, credit book, quotations, reorder list)?
-// Role names are matched ignoring upper/lower case. Anyone else (e.g. staff / cashier) does not get them.
+// Who gets the full back-office tools?
 var WD_FULL_ACCESS_ROLES = ['admin', 'manager'];
 window.wdFullAccess = function () {
     var r = (typeof currentUserRole !== 'undefined' && currentUserRole) ? String(currentUserRole).toLowerCase().trim() : '';
@@ -23,7 +21,7 @@ window.wdFullAccess = function () {
     function pad(n) { return String(n).padStart(2, '0'); }
     function dayKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
 
-    // ---------- styles (added once) ----------
+    // ---------- styles ----------
     function addStyles() {
         if (document.getElementById('wdd-styles')) return;
         var st = document.createElement('style');
@@ -35,7 +33,7 @@ window.wdFullAccess = function () {
         '.wdd-hi{font-size:22px;font-weight:900;letter-spacing:-.3px;}' +
         '.wdd-date{font-size:13px;color:#64748b;margin-top:2px;font-weight:600;}' +
         
-        // Hero Banner (Navy with Orange Accent)
+        // Hero Banner
         '.wdd-hero{background:#0b1b3a;color:#fff;border-radius:20px;padding:24px;margin-bottom:16px;box-shadow:0 10px 24px rgba(11,27,58,.28);position:relative;overflow:hidden;}' +
         '.wdd-hero::after{content:"";position:absolute;right:-10%;top:-50%;width:200px;height:200px;background:rgba(234,88,12,.15);border-radius:50%;filter:blur(30px);}' +
         '.wdd-hero-label{font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:800;}' +
@@ -45,37 +43,33 @@ window.wdFullAccess = function () {
         '.wdd-hero-row b{display:block;font-size:18px;font-weight:900;}' +
         '.wdd-hero-row span{font-size:11px;color:#cbd5e1;font-weight:600;}' +
         
-        // Primary Action Button (Orange)
+        // Primary Action Button
         '.wdd-cta{width:100%;border:none;border-radius:14px;padding:18px;font-size:16px;font-weight:900;color:#fff;background:#ea580c;box-shadow:0 8px 18px rgba(234,88,12,.3);cursor:pointer;margin-bottom:16px;transition:background .2s;}' +
         '.wdd-cta:hover{background:#c2410c;}' +
         
-        // Tiles
+        // Tiles & Cards
         '.wdd-tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}' +
         '.wdd-tile{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 2px 4px rgba(0,0,0,.02);}' +
         '.wdd-tile small{display:block;font-size:12px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.5px;}' +
         '.wdd-tile b{display:block;font-size:22px;margin-top:6px;font-weight:900;letter-spacing:-.5px;}' +
         '.wdd-tile em{font-style:normal;font-size:11px;color:#94a3b8;font-weight:600;}' +
         
-        // Quick Actions
         '.wdd-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}' +
         '.wdd-act{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;font-size:14px;font-weight:800;color:#0b1b3a;cursor:pointer;text-align:left;transition:all .2s;box-shadow:0 2px 4px rgba(0,0,0,.02);}' +
         '.wdd-act:hover{border-color:#ea580c;box-shadow:0 4px 12px rgba(234,88,12,.1);transform:translateY(-1px);}' +
         '.wdd-act span{font-size:20px;}' +
         
-        // Cards
         '.wdd-card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:20px;margin-bottom:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.03);}' +
         '.wdd-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}' +
         '.wdd-card-h h3{margin:0;font-size:16px;font-weight:900;}' +
         '.wdd-badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:99px;background:#fee2e2;color:#b91c1c;}' +
         '.wdd-badge.ok{background:#dcfce7;color:#166534;}' +
         
-        // Rows
         '.wdd-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #f1f5f9;font-size:14px;font-weight:600;}' +
         '.wdd-row:last-child{border-bottom:none;}' +
         '.wdd-sub{display:block;font-size:12px;color:#64748b;margin-top:2px;font-weight:500;}' +
         '.wdd-empty{font-size:14px;color:#94a3b8;padding:10px 0;font-weight:600;text-align:center;}' +
         
-        // Bar Chart (Orange bars)
         '.wdd-bars{display:flex;align-items:flex-end;gap:8px;height:100px;padding-top:10px;}' +
         '.wdd-bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}' +
         '.wdd-bar i{display:block;width:100%;background:#e2e8f0;border-radius:6px 6px 0 0;min-height:4px;}' +
@@ -87,7 +81,6 @@ window.wdFullAccess = function () {
     // ---------- screen ----------
     window.wdmShowMaterialsDashboard = function () {
         if (!window.wdFullAccess()) {
-            // If standard worker somehow tries to open dashboard, send them to POS
             if (typeof switchView === 'function') switchView('pos-view');
             return;
         }
@@ -104,7 +97,6 @@ window.wdFullAccess = function () {
         ws.innerHTML =
         '<div class="wdd">' +
             '<div class="wdd-head"><div class="wdd-hi">' + hi + who + ' 👋</div><div class="wdd-date">' + esc(dateStr) + '</div></div>' +
-
             '<div class="wdd-hero">' +
                 '<div class="wdd-hero-label">Today\'s sales</div>' +
                 '<div class="wdd-hero-amt" id="wdd-rev">₦0</div>' +
@@ -113,27 +105,20 @@ window.wdFullAccess = function () {
                     '<div><b id="wdd-count">0</b><span>Sales</span></div>' +
                 '</div>' +
             '</div>' +
-
             '<button class="wdd-cta" onclick="switchView(\'pos-view\')">🛒 Start New Sale</button>' +
-
             '<div class="wdd-tiles">' +
                 '<div class="wdd-tile"><small>This month</small><b id="wdd-month">₦0</b></div>' +
                 '<div class="wdd-tile"><small>Capital locked</small><b id="wdd-capital">₦0</b><em>in unsold stock</em></div>' +
             '</div>' +
-
             '<div class="wdd-actions">' +
                 '<button class="wdd-act" onclick="switchView(\'inventory-view\')"><span>📦</span>Manage Stock</button>' +
                 '<button class="wdd-act" onclick="wdpOpenQuickAddModal && wdpOpenQuickAddModal()"><span>📚</span>Common Materials</button>' +
                 '<button class="wdd-act" onclick="wdmShowWastageLog()"><span>🔨</span>Wastage Log</button>' +
                 '<button class="wdd-act" onclick="switchView(\'suppliers-view\')"><span>🚚</span>Suppliers</button>' +
             '</div>' +
-
             '<div class="wdd-card"><div class="wdd-card-h"><h3>Last 7 days</h3></div><div class="wdd-bars" id="wdd-bars"></div></div>' +
-
             '<div class="wdd-card"><div class="wdd-card-h"><h3>⚠️ Low stock</h3><span class="wdd-badge" id="wdd-low-badge">…</span></div><div id="wdd-low">Checking inventory...</div></div>' +
-
             '<div class="wdd-card"><div class="wdd-card-h"><h3>🧾 Recent sales</h3></div><div id="wdd-recent">Loading...</div></div>' +
-
             '<div class="wdd-card"><div class="wdd-card-h"><h3>🏆 Top sellers this week</h3></div><div id="wdd-top">Loading...</div></div>' +
         '</div>';
 
@@ -155,7 +140,6 @@ window.wdFullAccess = function () {
             var invByBranch = res[0].val() || {};
             var txSnap = res[1];
 
-            // inventory
             var items = [];
             Object.keys(invByBranch).forEach(function (b) {
                 Object.keys(invByBranch[b] || {}).forEach(function (id) {
@@ -189,7 +173,6 @@ window.wdFullAccess = function () {
                     return '<div class="wdd-row"><span>' + esc(p.name) + '</span><strong style="color:#b91c1c;">' + p.stock + ' ' + esc(p.unit) + '</strong></div>';
                 }).join(''));
 
-            // sales
             var todayKey = dayKey(new Date());
             var monthKey = todayKey.substring(0, 7);
             var todayRev = 0, todayProfit = 0, todayCount = 0, monthRev = 0;
@@ -240,14 +223,12 @@ window.wdFullAccess = function () {
             setText('wdd-count', String(todayCount));
             setText('wdd-month', money(monthRev));
 
-            // 7-day bars
             var max = Math.max.apply(null, last7.map(function (x) { return x.total; }).concat([1]));
             setHtml('wdd-bars', last7.map(function (x) {
                 var pct = Math.round((x.total / max) * 100);
                 return '<div class="wdd-bar' + (x.isToday ? ' today' : '') + '" title="' + esc(money(x.total)) + '"><i style="height:' + pct + '%"></i><small>' + esc(x.label) + '</small></div>';
             }).join(''));
 
-            // recent
             recent.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
             setHtml('wdd-recent', recent.length === 0
                 ? '<div class="wdd-empty">No sales yet.</div>'
@@ -256,7 +237,6 @@ window.wdFullAccess = function () {
                            '<div style="text-align:right;"><strong>' + money(r.total) + '</strong><span class="wdd-sub">' + new Date(r.date).toLocaleDateString() + '</span></div></div>';
                 }).join(''));
 
-            // top sellers
             var top = Object.keys(sellers).map(function (k) { return { name: k, qty: sellers[k].qty, rev: sellers[k].rev }; })
                 .sort(function (a, b) { return b.rev - a.rev; }).slice(0, 5);
             setHtml('wdd-top', top.length === 0
@@ -270,7 +250,7 @@ window.wdFullAccess = function () {
     }
 })();
 
-// ==================== MATERIALS SIDEBAR RESTYLE (v5) ====================
+// ==================== MATERIALS SIDEBAR RESTYLE (v7 - Uniform Navy Buttons) ====================
 (function () {
     function addSidebarStyles() {
         if (document.getElementById('wdd-sidebar-styles')) return;
@@ -279,23 +259,30 @@ window.wdFullAccess = function () {
         var S = 'body.wdd-mat #dashboard-main-wrapper .sidebar ';
         
         st.textContent =
-        // Base button (White background, Navy text)
-        S + '.menu-btn{background:#ffffff !important;color:#0b1b3a !important;border:1px solid #ffffff !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:800 !important;text-align:left !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;transition:all .2s;}' +
+        // 1. Sidebar Background: White
+        S + '{background:#ffffff !important; border-right:1px solid #e2e8f0 !important;}' +
         
-        // Hover state
-        S + '.menu-btn:hover{background:#f8fafc !important;color:#ea580c !important;border-color:#f8fafc !important;transform:translateY(-1px);}' +
+        // 2. Text Inside: Dark Navy
+        S + '#dashboard-store-title {color:#0b1b3a !important;font-weight:900 !important;}' +
+        S + '#user-role-label {color:#475569 !important;font-weight:700 !important;}' +
+        S + '#branch-badge-container span, ' + S + '#branch-badge-container select, ' + S + '#branch-badge-container label {background:#f1f5f9 !important;color:#0b1b3a !important;border:1px solid #cbd5e1 !important;font-weight:700 !important;}' +
         
-        // Active Dashboard Button (Orange)
-        S + '#wdm-sidebar-materials-btn{background:#ea580c !important;color:#ffffff !important;border-color:#ea580c !important;box-shadow:0 4px 12px rgba(234,88,12,.4) !important;}' +
-        S + '#wdm-sidebar-materials-btn:hover{background:#c2410c !important;color:#ffffff !important;}' +
+        // 3. Menu Buttons: Navy Blue Background, White Text (Uniform for ALL buttons)
+        S + '.menu-btn, ' + S + '.menu-btn.wds-on {background:#0b1b3a !important;color:#ffffff !important;border:1px solid #0b1b3a !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:800 !important;text-align:left !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;transition:background .2s;}' +
         
-        // Fix icon colors
-        S + '.menu-btn .wds-ic {filter: grayscale(1) brightness(0.2);}' +
-        S + '#wdm-sidebar-materials-btn .wds-ic {filter: none !important;}' +
+        // Hover State
+        S + '.menu-btn:hover {background:#1e3a8a !important;color:#ffffff !important;border-color:#1e3a8a !important;transform:translateY(-1px);}' +
         
-        // Logout Button
-        S + '.btn-logout{background:#ffffff !important;color:#b91c1c !important;border:1px solid #ffffff !important;border-radius:10px !important;font-weight:700 !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
-        S + '.btn-logout:hover{background:#fef2f2 !important;border-color:#fef2f2 !important;}' +
+        // 4. Force active buttons to stay Navy instead of Orange
+        S + '#wdm-sidebar-materials-btn, ' + S + '#wdm-sidebar-newsale-btn {background:#0b1b3a !important;color:#ffffff !important;border-color:#0b1b3a !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
+        S + '#wdm-sidebar-materials-btn:hover, ' + S + '#wdm-sidebar-newsale-btn:hover {background:#1e3a8a !important;color:#ffffff !important;}' +
+        
+        // 5. Icons: White inside the Navy buttons
+        S + '.menu-btn .wds-ic {filter: brightness(0) invert(1) !important;}' +
+        
+        // 6. Logout Button: White background with Red text
+        S + '.btn-logout {background:#ffffff !important;color:#b91c1c !important;border:1px solid #fecaca !important;box-shadow:none !important;}' +
+        S + '.btn-logout:hover {background:#fef2f2 !important;border-color:#fca5a5 !important;}' +
         
         // Phones: swipeable row
         '@media (max-width:767px){' +
@@ -335,200 +322,7 @@ window.wdFullAccess = function () {
     });
 })();
 
-// ==================== MATERIALS "ADD MATERIAL" FORM (part of v5) ====================
-(function () {
-    var STOCK_IN = 'bulk';
-    var CATS = ['Roofing', 'Nails & Screws', 'Boards', 'Doors', 'Cement & Blocks', 'Wire & Rods', 'Plumbing', 'Tiles & Ceramics', 'Wardrobe', 'Paint', 'Electrical', 'Tools', 'Other'];
-    var BASE = ['sheet', 'piece', 'kg', 'bag', 'roll', 'length', 'box', 'tin', 'drum', 'pack', 'metre'];
-    var BULK = ['bundle', 'bag', 'carton', 'pallet', 'roll', 'tonne', 'pack', 'tin'];
-
-    function esc(s) {
-        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    }
-    function num(n) { return Number(n) || 0; }
-    function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
-    function $(id) { return document.getElementById(id); }
-
-    function opts(list, sel) {
-        return list.map(function (x) { return '<option' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('');
-    }
-    var INP = 'width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;box-sizing:border-box;background:#fff;font-weight:600;color:#0b1b3a;';
-    var LBL = 'display:block;font-size:11px;font-weight:800;color:#475569;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.5px;';
-
-    window.wdmOpenAddMaterial = function () {
-        var m = $('wdd-add-modal'); if (m) m.remove();
-        m = document.createElement('div');
-        m.id = 'wdd-add-modal';
-        m.style.cssText = 'position:fixed;inset:0;background:rgba(11,27,58,.7);z-index:1800;display:flex;justify-content:center;align-items:flex-end;padding:0;';
-        m.innerHTML =
-        '<div style="background:#f8fafc;color:#0b1b3a;width:100%;max-width:520px;max-height:94vh;overflow-y:auto;border-radius:24px 24px 0 0;padding:20px 18px 24px;box-sizing:border-box;">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-            '<h3 style="margin:0;font-size:20px;font-weight:900;">🏗️ Add Material</h3>' +
-            '<button onclick="document.getElementById(\'wdd-add-modal\').remove()" style="border:none;background:#e2e8f0;border-radius:99px;width:34px;height:34px;font-size:16px;cursor:pointer;color:#0b1b3a;font-weight:bold;">✕</button>' +
-          '</div>' +
-          '<div style="font-size:13px;color:#64748b;font-weight:500;">Start typing a name — common materials fill the units for you.</div>' +
-
-          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
-            '<label style="' + LBL + '">Material name</label>' +
-            '<input id="wdd-a-name" list="wdd-a-names" placeholder="e.g. Roofing Sheet 4m" style="' + INP + '" oninput="wdmAddMatFill()">' +
-            '<datalist id="wdd-a-names">' + ((typeof WDP_COMMON_MATERIALS !== 'undefined' ? WDP_COMMON_MATERIALS : []).map(function (x) { return '<option value="' + esc(x.name) + '">'; }).join('')) + '</datalist>' +
-            '<label style="' + LBL + '">Category</label>' +
-            '<select id="wdd-a-cat" style="' + INP + '">' + opts(CATS) + '</select>' +
-          '</div>' +
-
-          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
-            '<label style="' + LBL + '">Sold by (single unit)</label>' +
-            '<input id="wdd-a-base" list="wdd-a-bases" placeholder="sheet, kg, piece…" style="' + INP + '" oninput="wdmAddMatLabels()">' +
-            '<datalist id="wdd-a-bases">' + BASE.map(function (x) { return '<option value="' + x + '">'; }).join('') + '</datalist>' +
-            '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;font-weight:700;">' +
-              '<input type="checkbox" id="wdd-a-single" onchange="wdmAddMatSingle()" style="width:18px;height:18px;margin:0;"> Sold only as single items (no bundle / bag)</label>' +
-            '<div id="wdd-a-bulkwrap">' +
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-                '<div><label style="' + LBL + '">Bundle / bag name</label><input id="wdd-a-bulk" list="wdd-a-bulks" placeholder="bundle, bag…" style="' + INP + '" oninput="wdmAddMatLabels()"></div>' +
-                '<div><label style="' + LBL + '"><span class="wdd-l-per">How many per bundle</span></label><input id="wdd-a-per" type="number" min="1" step="1" inputmode="numeric" placeholder="e.g. 10" style="' + INP + '"></div>' +
-              '</div>' +
-              '<datalist id="wdd-a-bulks">' + BULK.map(function (x) { return '<option value="' + x + '">'; }).join('') + '</datalist>' +
-            '</div>' +
-          '</div>' +
-
-          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
-            '<label style="' + LBL + '">Cost price <span class="wdd-l-bulk">(per bundle)</span></label>' +
-            '<input id="wdd-a-cost" type="number" min="0" inputmode="decimal" placeholder="₦" style="' + INP + '">' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-              '<div><label style="' + LBL + '">Retail <span class="wdd-l-bulk">(per bundle)</span></label><input id="wdd-a-retail" type="number" min="0" inputmode="decimal" placeholder="₦" style="' + INP + '"></div>' +
-              '<div><label style="' + LBL + '">Wholesale <span class="wdd-l-bulk">(per bundle)</span></label><input id="wdd-a-whole" type="number" min="0" inputmode="decimal" placeholder="₦" style="' + INP + '"></div>' +
-            '</div>' +
-            '<div id="wdd-a-piecewrap" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-              '<div><label style="' + LBL + '">Retail <span class="wdd-l-base">(per sheet)</span></label><input id="wdd-a-pretail" type="number" min="0" inputmode="decimal" placeholder="auto" style="' + INP + '"></div>' +
-              '<div><label style="' + LBL + '">Wholesale <span class="wdd-l-base">(per sheet)</span></label><input id="wdd-a-pwhole" type="number" min="0" inputmode="decimal" placeholder="auto" style="' + INP + '"></div>' +
-            '</div>' +
-            '<div style="font-size:11px;color:#94a3b8;margin-top:6px;font-weight:600;">Leave the single-unit prices blank to work them out from the bundle price.</div>' +
-          '</div>' +
-
-          '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:4px 16px 16px;margin-top:12px;box-shadow:0 2px 4px rgba(0,0,0,.02);">' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-              '<div><label style="' + LBL + '">Opening stock <span class="wdd-l-bulk">(bundles)</span></label><input id="wdd-a-stock" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" style="' + INP + '"></div>' +
-              '<div><label style="' + LBL + '">Alert when below</label><input id="wdd-a-low" type="number" min="0" inputmode="numeric" placeholder="5" style="' + INP + '"></div>' +
-            '</div>' +
-          '</div>' +
-
-          '<div id="wdd-a-err" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;font-size:13px;margin-top:12px;font-weight:600;"></div>' +
-          '<button onclick="wdmSaveAddMaterial()" style="width:100%;margin-top:16px;padding:16px;border:none;border-radius:14px;font-size:16px;font-weight:900;color:#fff;background:#ea580c;box-shadow:0 8px 18px rgba(234,88,12,.3);cursor:pointer;">Save Material</button>' +
-        '</div>';
-        document.body.appendChild(m);
-        wdmAddMatLabels();
-    };
-
-    window.wdmAddMatFill = function () {
-        var list = (typeof WDP_COMMON_MATERIALS !== 'undefined') ? WDP_COMMON_MATERIALS : [];
-        var v = ($('wdd-a-name').value || '').toLowerCase().trim();
-        for (var i = 0; i < list.length; i++) {
-            if (list[i].name.toLowerCase() === v) {
-                $('wdd-a-cat').value = list[i].category;
-                $('wdd-a-base').value = list[i].baseUnit;
-                var single = list[i].piecesPerBulk === 1;
-                $('wdd-a-single').checked = single;
-                if (!single) { $('wdd-a-bulk').value = list[i].bulkUnit; $('wdd-a-per').value = list[i].piecesPerBulk; }
-                wdmAddMatSingle();
-                return;
-            }
-        }
-    };
-
-    window.wdmAddMatLabels = function () {
-        var base = ($('wdd-a-base').value || '').trim() || 'unit';
-        var single = $('wdd-a-single') && $('wdd-a-single').checked;
-        var bulk = single ? base : (($('wdd-a-bulk').value || '').trim() || 'bundle');
-        document.querySelectorAll('#wdd-add-modal .wdd-l-bulk').forEach(function (e) { e.textContent = '(per ' + bulk + ')'; });
-        document.querySelectorAll('#wdd-add-modal .wdd-l-base').forEach(function (e) { e.textContent = '(per ' + base + ')'; });
-        document.querySelectorAll('#wdd-add-modal .wdd-l-per').forEach(function (e) { e.textContent = 'How many ' + base + ' per ' + bulk; });
-        var st = document.querySelector('#wdd-add-modal #wdd-a-stock');
-        if (st && st.parentNode) { var sl = st.parentNode.querySelector('label span'); if (sl) sl.textContent = '(' + bulk + 's)'; }
-    };
-
-    window.wdmAddMatSingle = function () {
-        var single = $('wdd-a-single').checked;
-        $('wdd-a-bulkwrap').style.display = single ? 'none' : 'block';
-        $('wdd-a-piecewrap').style.display = single ? 'none' : 'grid';
-        wdmAddMatLabels();
-    };
-
-    window.wdmSaveAddMaterial = async function () {
-        var err = $('wdd-a-err'); err.style.display = 'none';
-        function fail(msg) { err.textContent = msg; err.style.display = 'block'; }
-
-        var name = ($('wdd-a-name').value || '').trim();
-        if (!name) return fail('Enter the material name.');
-        var base = ($('wdd-a-base').value || '').trim().toLowerCase();
-        if (!base) return fail('Enter how it is sold (sheet, kg, piece…).');
-
-        var single = $('wdd-a-single').checked;
-        var bulk = single ? 'pack' : ($('wdd-a-bulk').value || '').trim().toLowerCase();
-        var per = single ? 1 : Math.floor(num($('wdd-a-per').value));
-        if (!single && !bulk) return fail('Enter the bundle / bag name, or tick "Sold only as single items".');
-        if (!single && per < 1) return fail('Enter how many ' + base + ' come in one ' + bulk + '.');
-
-        var cost = num($('wdd-a-cost').value), retail = num($('wdd-a-retail').value), whole = num($('wdd-a-whole').value);
-        if (retail <= 0) return fail('Enter the retail price.');
-        var pretail = num($('wdd-a-pretail').value), pwhole = num($('wdd-a-pwhole').value);
-        if (!single) {
-            if (!pretail) pretail = Math.round(retail / per);
-            if (!pwhole) pwhole = whole ? Math.round(whole / per) : 0;
-        } else { pretail = 0; pwhole = 0; }
-
-        var openBulk = num($('wdd-a-stock').value);
-        var stock = (STOCK_IN === 'base') ? openBulk * per : openBulk;
-        var low = ($('wdd-a-low').value === '') ? 5 : num($('wdd-a-low').value);
-
-        var branchId = (typeof currentInventoryBranchFilter !== 'undefined' && currentInventoryBranchFilter && currentInventoryBranchFilter !== 'all')
-            ? currentInventoryBranchFilter : (typeof currentBranch !== 'undefined' && currentBranch ? currentBranch : 'main');
-
-        try {
-            var db = firebase.database();
-            var ref = db.ref('stores/' + currentStoreId + '/inventory/' + branchId);
-            var snap = await ref.once('value');
-            var ex = snap.val() || {};
-            var dup = Object.keys(ex).some(function (id) {
-                return ((ex[id].name || ex[id].productName || '').toLowerCase().trim()) === name.toLowerCase();
-            });
-            if (dup) return fail('"' + name + '" is already in this branch. Edit it from the stock list instead.');
-
-            var node = ref.push();
-            await node.set({
-                name: name, productName: name,
-                category: $('wdd-a-cat').value,
-                baseUnitName: base, bulkUnitName: bulk, unitsPerPack: per,
-                costPrice: cost,
-                price: retail, retailPrice: retail, wholesalePrice: whole,
-                piecePrice: pretail, pieceWholesalePrice: pwhole,
-                stock: stock, stockQty: stock,
-                lowStockThreshold: low,
-                expiry: '', expiryDate: '',
-                branchId: branchId,
-                createdAt: new Date().toISOString(),
-                createdBy: (typeof currentStaffName !== 'undefined' && currentStaffName) || 'Admin'
-            });
-            $('wdd-add-modal').remove();
-            alert('✅ ' + name + ' added.');
-            if (typeof loadInventoryTable === 'function') loadInventoryTable();
-        } catch (e) {
-            fail('Could not save: ' + (e.message || e));
-        }
-    };
-
-    document.addEventListener('click', function (ev) {
-        if (!isMat() || !window.wdFullAccess()) return;
-        var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
-        if (!b || b.closest('#wdd-add-modal') || b.closest('#wdp-quick-modal')) return;
-        if (!/add\s+(new\s+)?(product|item|material)/i.test(b.textContent || '')) return;
-        if (!b.closest('#inventory-view') && !b.closest('#workspace-content')) return;
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        wdmOpenAddMaterial();
-    }, true);
-})();
-
-// ==================== EXTRA SIDEBAR BUTTONS: Manage Stock + Common Materials ====================
+// ==================== EXTRA SIDEBAR BUTTONS ====================
 (function () {
     function $(id) { return document.getElementById(id); }
     function sid() { return (typeof currentStoreId !== 'undefined') ? currentStoreId : null; }
@@ -540,8 +334,9 @@ window.wdFullAccess = function () {
         var st = document.createElement('style');
         st.id = 'wdd-extra-side-css';
         st.textContent =
-            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:#ffffff !important;color:#0b1b3a !important;border:1px solid #ffffff !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
-            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:#f8fafc !important;color:#ea580c !important;border-color:#f8fafc !important;}';
+            // Match the new Navy Button style
+            S + '#wdd-sb-stock, ' + S + '#wdd-sb-common {background:#0b1b3a !important;color:#ffffff !important;border:1px solid #0b1b3a !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.1) !important;}' +
+            S + '#wdd-sb-stock:hover, ' + S + '#wdd-sb-common:hover {background:#1e3a8a !important;color:#ffffff !important;border-color:#1e3a8a !important;}';
         document.head.appendChild(st);
     }
 
@@ -577,19 +372,17 @@ window.wdFullAccess = function () {
     });
 })();
 
-// ==================== MANAGER LIMITS (materials stores) ====================
+// ==================== MANAGER LIMITS & STAFF RESTRICTIONS ====================
 (function () {
     function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
+    function isStaff() { return isMat() && !window.wdFullAccess(); }
     function isManager() {
         var r = (typeof currentUserRole !== 'undefined' && currentUserRole) ? String(currentUserRole).toLowerCase().trim() : '';
         return r === 'manager';
     }
-    window.wdIsManager = isManager;
     function limited() { return isManager() && isMat(); }
 
-    function info(b) {
-        return ((b.textContent || '') + ' ' + (b.getAttribute('onclick') || '') + ' ' + (b.getAttribute('title') || '') + ' ' + (b.getAttribute('aria-label') || '')).toLowerCase();
-    }
+    function info(b) { return ((b.textContent || '') + ' ' + (b.getAttribute('onclick') || '') + ' ' + (b.getAttribute('title') || '')).toLowerCase(); }
     function kind(b) {
         if (!b || b.closest('#wcq-modal, #wcr-modal, #wdd-add-modal, #wdp-quick-modal')) return null;
         var t = info(b);
@@ -598,10 +391,53 @@ window.wdFullAccess = function () {
         return null;
     }
 
+    // Restrict Sidebar for standard workers
+    function restrictSidebar() {
+        if (!isStaff()) return;
+        var side = document.querySelector('#dashboard-main-wrapper .sidebar');
+        if (!side) return;
+        side.querySelectorAll('.menu-btn').forEach(function (b) {
+            var t = (b.textContent || '').toLowerCase();
+            if (t.includes('new sale') || t.includes('pos') || b.classList.contains('btn-logout') || t.includes('logout')) {
+                b.style.setProperty('display', '', 'important'); // Show
+            } else {
+                b.style.setProperty('display', 'none', 'important'); // Hide
+            }
+        });
+    }
+
+    // Hide button logic for managers
     function sweep() {
         if (!limited()) return;
         document.querySelectorAll('button, .menu-btn').forEach(function (b) {
             if (kind(b)) b.style.setProperty('display', 'none', 'important');
+        });
+    }
+
+    // Redirect staff away from dashboard
+    var originalShowDash = window.wdmShowMaterialsDashboard;
+    window.wdmShowMaterialsDashboard = function () {
+        if (isStaff()) {
+            if (typeof switchView === 'function') switchView('pos-view');
+            return;
+        }
+        if (originalShowDash) originalShowDash.apply(this, arguments);
+    };
+
+    // Filter POS sales to show only the staff member's own sales
+    function filterSalesRows() {
+        if (!isStaff()) return;
+        var staffName = (typeof currentStaffName !== 'undefined' && currentStaffName) ? String(currentStaffName).toLowerCase().trim() : '';
+        if (!staffName) return;
+        var posView = document.getElementById('pos-view');
+        if (!posView) return;
+        posView.querySelectorAll('table tr, .history-item, .receipt-row').forEach(function (row) {
+            if (row.querySelector('th')) return;
+            var txt = (row.textContent || '').toLowerCase();
+            if (txt.includes('staff:') || txt.includes('sold by:')) {
+                if (!txt.includes(staffName)) row.style.setProperty('display', 'none', 'important');
+                else row.style.setProperty('display', '', 'important');
+            }
         });
     }
 
@@ -616,105 +452,22 @@ window.wdFullAccess = function () {
     }, true);
 
     window.addEventListener('load', function () {
+        if (isStaff()) {
+            setTimeout(function () { if (typeof switchView === 'function') switchView('pos-view'); }, 800);
+        }
         setTimeout(sweep, 1200);
+
         var busy = false;
         var obs = new MutationObserver(function () {
             if (busy) return; busy = true;
-            setTimeout(function () { busy = false; try { sweep(); } catch (e) {} }, 150);
-        });
-        if (document.body) obs.observe(document.body, { childList: true, subtree: true });
-    });
-})();
-
-// ==================== STANDARD WORKER RESTRICTIONS ====================
-// Hides the dashboard, redirects to POS, hides all sidebar buttons except POS and Logout,
-// and filters transaction tables so workers only see their own sales.
-(function () {
-    function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
-    function isStaff() { return isMat() && !window.wdFullAccess(); }
-
-    // 1. Hide Sidebar Buttons (Keep POS and Logout only)
-    function restrictSidebar() {
-        if (!isStaff()) return;
-        var side = document.querySelector('#dashboard-main-wrapper .sidebar');
-        if (!side) return;
-
-        side.querySelectorAll('.menu-btn').forEach(function (b) {
-            var t = (b.textContent || '').toLowerCase();
-            // Allow New Sale (POS) and Logout
-            if (t.includes('new sale') || t.includes('pos') || b.classList.contains('btn-logout') || t.includes('logout')) {
-                b.style.setProperty('display', '', 'important'); // Show
-            } else {
-                b.style.setProperty('display', 'none', 'important'); // Hide
-            }
-        });
-    }
-
-    // 2. Redirect to POS if they somehow land on Dashboard
-    var originalShowDash = window.wdmShowMaterialsDashboard;
-    window.wdmShowMaterialsDashboard = function () {
-        if (isStaff()) {
-            if (typeof switchView === 'function') switchView('pos-view');
-            return;
-        }
-        if (originalShowDash) originalShowDash.apply(this, arguments);
-    };
-
-    // 3. Filter POS Sales History / Receipts so staff only see their own
-    function filterSalesRows() {
-        if (!isStaff()) return;
-        var staffName = (typeof currentStaffName !== 'undefined' && currentStaffName) ? String(currentStaffName).toLowerCase().trim() : '';
-        if (!staffName) return;
-
-        // Look for tables or lists in the POS view
-        var posView = document.getElementById('pos-view');
-        if (!posView) return;
-
-        // Find rows in tables or list items that look like transactions
-        posView.querySelectorAll('table tr, .history-item, .receipt-row').forEach(function (row) {
-            // Skip headers
-            if (row.querySelector('th')) return;
-
-            var txt = (row.textContent || '').toLowerCase();
-            // If the row has a staff name or a transaction ID, and it DOESN'T match the logged-in staff,
-            // we hide it. (If we can't find a name, we leave it visible to be safe, but usually it shows).
-            if (txt.includes('staff:') || txt.includes('sold by:')) {
-                if (!txt.includes(staffName)) {
-                    row.style.setProperty('display', 'none', 'important');
-                } else {
-                    row.style.setProperty('display', '', 'important');
-                }
-            }
-        });
-    }
-
-    // Run on load and when views change
-    window.addEventListener('load', function () {
-        // Initial redirect
-        if (isStaff()) {
-            setTimeout(function () {
-                if (typeof switchView === 'function') switchView('pos-view');
-            }, 800);
-        }
-
-        // Observe for changes to keep enforcing the rules
-        var busy = false;
-        var obs = new MutationObserver(function () {
-            if (busy) return;
-            busy = true;
             setTimeout(function () {
                 busy = false;
-                try {
-                    restrictSidebar();
-                    filterSalesRows();
-                } catch (e) {}
-            }, 200);
+                try { restrictSidebar(); filterSalesRows(); sweep(); } catch (e) {}
+            }, 150);
         });
         if (document.body) obs.observe(document.body, { childList: true, subtree: true });
-        
-        // Run once immediately
+
         restrictSidebar();
         filterSalesRows();
     });
-
 })();
