@@ -1,8 +1,6 @@
-// ==================== WISE DECISION MATERIALS: SIMPLE PROFESSIONAL THEME (v2) ====================
-// Load LAST (after materials-dashboard-patch.js, sidebar-colors-patch.js, daily-summary-patch.js and the other patches).
-// Updated to match the clean, professional Indigo/Purple UI with bold typography.
+// ==================== WISE DECISION MATERIALS: SIMPLE PROFESSIONAL THEME (v4 - EMERALD) ====================
 
-console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
+console.log("Wise Decision materials-simple-theme-patch.js — v4 (Emerald) loaded");
 
 (function () {
     'use strict';
@@ -26,10 +24,9 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
     // STYLES
     // =====================================================================
     var NAVY = '#0f172a'; // Dark Slate for text
-    var BLUE = '#4f46e5'; // Indigo (Matching the image)
-    var PURPLE = '#7c3aed'; // Violet gradient end
+    var BLUE = '#059669'; // Emerald Green (Primary)
+    var PURPLE = '#0f766e'; // Deep Teal (Gradient end)
     var BG = '#f8fafc'; // Light background
-
 
     function globalCss() {
         var P = 'body.wdd-mat ', WS = P + '#workspace-content', MD = P + '[id$="-modal"]';
@@ -43,6 +40,7 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         
         return '' +
         P + '{--accent:' + BLUE + ';--primary:' + BLUE + ';--brand:' + BLUE + ';}' +
+        
         // Page background
         P + '.main-content-area,' + P + '.dashboard-layout{background:' + BG + ' !important;}' +
         
@@ -59,19 +57,24 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         WS + ' table td{border-bottom:1px solid #f1f5f9 !important;font-weight:600 !important; padding:12px;}' +
         WS + ' table tbody tr:hover td{background:#f8fafc !important;}' +
         
-        // Buttons (Pill shaped, matching the image)
+        // Buttons (Pill shaped)
         blueSel + '{background:' + BLUE + ' !important;border:1px solid ' + BLUE + ' !important;color:#fff !important;box-shadow:none !important;filter:none !important;border-radius:8px !important;font-weight:700 !important;}' +
-        blueHov + '{background:#4338ca !important;}' +
+        blueHov + '{background:#047857 !important;}' +
         both('.menu-btn.btn-logout') + '{background:#fff !important;border:1px solid #cbd5e1 !important;color:#334155 !important;box-shadow:none !important;border-radius:8px !important;font-weight:700 !important;}' +
         both('.menu-btn.btn-logout:hover') + '{background:#f1f5f9 !important;}' +
         
-        // POS toggles
-        WS + ' [style*="background: rgb(124, 58, 237)"],' + WS + ' [style*="background:#7c3aed"],' + WS + ' [style*="background: #7c3aed"],' +
-        WS + ' [style*="background: rgb(2, 132, 199)"],' + WS + ' [style*="background:#0284c7"],' + WS + ' [style*="background: #0284c7"]{background:' + BLUE + ' !important;color:#fff !important;}' +
-        
+        // =====================================================================
+        // AGGRESSIVE ORANGE KILLER (Fixes Credit Book & POS tabs)
+        // =====================================================================
+        WS + ' [style*="background: rgb(234, 88, 12)"],' + WS + ' [style*="background:#ea580c"],' + WS + ' [style*="background: #ea580c"],' +
+        WS + ' [style*="background: rgb(249, 115, 22)"],' + WS + ' [style*="background:#f97316"],' + WS + ' [style*="background: #f97316"],' +
+        WS + ' .btn-credit, ' + WS + ' .btn-orange, ' + WS + ' .credit-btn, ' + WS + ' .tab-active,' +
+        WS + ' [style*="background: rgb(79, 70, 229)"],' + WS + ' [style*="background:#4f46e5"] { ' +
+        'background: ' + BLUE + ' !important; border-color: ' + BLUE + ' !important; color: #fff !important; box-shadow: 0 4px 6px -1px rgba(5,150,105,.2) !important; }' +
+
         // Inputs
         fld + '{border:1px solid #cbd5e1 !important;border-radius:8px !important;background:#fff !important;color:' + NAVY + ' !important;font-weight:600 !important;}' +
-        fldF + '{border-color:' + BLUE + ' !important;box-shadow:0 0 0 3px rgba(79,70,229,.15) !important;outline:none !important;}' +
+        fldF + '{border-color:' + BLUE + ' !important;box-shadow:0 0 0 3px rgba(5,150,105,.15) !important;outline:none !important;}' +
         
         // Pop-ups
         MD + ' > div{border:none !important;border-radius:20px !important;box-shadow:0 20px 40px rgba(15,23,42,.2) !important;}' +
@@ -84,7 +87,7 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         var st = document.createElement('style');
         st.id = 'wds-css';
         st.textContent =
-        // ---------- Sidebar: WHITE & CLEAN (Matching Top Nav in image) ----------
+        // ---------- Sidebar: WHITE & CLEAN ----------
         W + ' .sidebar{background:#ffffff !important;border-right:1px solid #e2e8f0 !important;border-bottom-color:transparent !important;box-shadow:0 4px 6px -1px rgba(0,0,0,.02) !important;}' +
         W + ' .sidebar::-webkit-scrollbar-thumb{background:#cbd5e1 !important;}' +
         W + ' .sidebar #dashboard-store-title{color:' + NAVY + ' !important;font-weight:900 !important;letter-spacing:-.3px;}' +
@@ -94,7 +97,7 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         // Sidebar Buttons (Menu items)
         W + ' .sidebar .menu-btn{background:transparent !important;color:#475569 !important;border:none !important;border-radius:10px !important;font-weight:700 !important;margin-bottom:2px;box-shadow:none !important;filter:none !important;transform:none !important;transition:all .2s;}' +
         W + ' .sidebar .menu-btn:hover{background:#f8fafc !important;color:' + NAVY + ' !important;transform:none !important;}' +
-        W + ' .sidebar .menu-btn.wds-on{background:#eef2ff !important;color:' + BLUE + ' !important;}' +
+        W + ' .sidebar .menu-btn.wds-on{background:#ecfdf5 !important;color:' + BLUE + ' !important;}' +
         W + ' .sidebar .menu-btn .wds-ic{display:inline-block;margin-right:4px;filter:grayscale(1) opacity(0.7);}' +
         W + ' .sidebar .menu-btn.wds-on .wds-ic{filter:none;}' +
         
@@ -111,13 +114,13 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         '.wds-btn{border:1px solid #cbd5e1;background:#fff;color:' + NAVY + ';border-radius:10px;padding:10px 16px;font-weight:800;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;}' +
         '.wds-btn:hover{background:#f8fafc;}' +
         '.wds-btn.pri{background:' + BLUE + ';border-color:' + BLUE + ';color:#fff;}' +
-        '.wds-btn.pri:hover{background:#4338ca;box-shadow:0 4px 12px rgba(79,70,229,.3);}' +
+        '.wds-btn.pri:hover{background:#047857;box-shadow:0 4px 12px rgba(5,150,105,.3);}' +
         
-        // Hero Banner (Matches Estimated Net Worth)
+        // Hero Banner
         '.wds-spin{display:inline-block;}' +
         '.wds-busy .wds-spin{animation:wds-rot .8s linear infinite;}' +
         '@keyframes wds-rot{to{transform:rotate(360deg);}}' +
-        '.wds-hero{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center;background:linear-gradient(135deg,' + BLUE + ' 0%,' + PURPLE + ' 100%);color:#fff;border-radius:20px;padding:30px 36px;box-shadow:0 10px 25px -5px rgba(79,70,229,.4);margin-bottom:16px;}' +
+        '.wds-hero{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center;background:linear-gradient(135deg,' + PURPLE + ' 0%,' + BLUE + ' 100%);color:#fff;border-radius:20px;padding:30px 36px;box-shadow:0 10px 25px -5px rgba(5,150,105,.4);margin-bottom:16px;}' +
         '.wds-hl{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.8);}' +
         '.wds-ha{font-size:48px;font-weight:900;line-height:1.1;margin:6px 0 8px;letter-spacing:-1.5px;}' +
         '.wds-hs{font-size:14px;color:rgba(255,255,255,0.9);font-weight:600;}' +
@@ -127,10 +130,10 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         '.wds-bar.t i{background:#fff;}' +
         '.wds-bar small{font-size:11px;color:rgba(255,255,255,0.8);margin-top:6px;font-weight:700;}' +
         
-        // Stat Tiles (Matches the 4 white cards in image)
+        // Stat Tiles
         '.wds-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px;}' +
         '.wds-tile{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;cursor:pointer;transition:all .2s;box-shadow:0 2px 4px rgba(15,23,42,.02);}' +
-        '.wds-tile:hover{border-color:#a5b4fc;box-shadow:0 10px 20px -5px rgba(79,70,229,.1);transform:translateY(-2px);}' +
+        '.wds-tile:hover{border-color:#6ee7b7;box-shadow:0 10px 20px -5px rgba(5,150,105,.1);transform:translateY(-2px);}' +
         '.wds-tl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#64748b;}' +
         '.wds-tv{font-size:32px;font-weight:900;margin-top:8px;color:' + NAVY + ';letter-spacing:-.5px;}' +
         '.wds-ts{font-size:12px;color:#64748b;margin-top:4px;font-weight:600;}' +
@@ -142,7 +145,7 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
         '.wds-link{background:none;border:none;color:' + BLUE + ';font-weight:800;font-size:13px;cursor:pointer;padding:0;}' +
         '.wds-row{display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid #f1f5f9;cursor:pointer;}' +
         '.wds-row:hover .wds-rt{color:' + BLUE + ';}' +
-        '.wds-ic2{width:44px;height:44px;border-radius:12px;background:#eef2ff;color:' + BLUE + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;flex-shrink:0;}' +
+        '.wds-ic2{width:44px;height:44px;border-radius:12px;background:#ecfdf5;color:' + BLUE + ';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;flex-shrink:0;}' +
         '.wds-rm{flex:1;min-width:0;}' +
         '.wds-rt{font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:' + NAVY + ';transition:color 0.2s;}' +
         '.wds-rs{font-size:13px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500;}' +
@@ -203,18 +206,15 @@ console.log("Wise Decision materials-simple-theme-patch.js — v2 loaded");
                 '<button class="wds-btn" id="wds-refresh" onclick="wdsRefresh()"><span class="wds-spin">↻</span> Refresh</button>' +
                 '<button class="wds-btn pri" onclick="switchView(\'pos-view\')">+ New Sale</button></div></div>' +
             
-            // HERO BANNER (Matches the big purple box)
             '<div class="wds-hero"><div><div class="wds-hl">Total sales today</div><div class="wds-ha" id="wds-today">₦0</div><div class="wds-hs" id="wds-today-sub">Loading…</div></div>' +
                 '<div class="wds-bars" id="wds-bars"></div></div>' +
             
-            // WHITE STAT CARDS
             '<div class="wds-tiles">' +
                 '<div class="wds-tile" onclick="switchView(\'reports-view\')"><div class="wds-tl">This month</div><div class="wds-tv" id="wds-month">₦0</div><div class="wds-ts">Sales so far this month</div></div>' +
                 '<div class="wds-tile" onclick="wdsOpenOwed()"><div class="wds-tl">Owed to you</div><div class="wds-tv" id="wds-owed">₦0</div><div class="wds-ts" id="wds-owed-s">Credit book</div></div>' +
                 '<div class="wds-tile" onclick="wdsOpenLow()"><div class="wds-tl">Low stock</div><div class="wds-tv" id="wds-low">0</div><div class="wds-ts">Items to reorder</div></div>' +
             '</div>' +
             
-            // RECENT SALES LIST
             '<div class="wds-card"><div class="wds-ch"><h3>Recent sales</h3><button class="wds-link" onclick="switchView(\'reports-view\')">View all ›</button></div><div id="wds-recent"><div class="wds-empty">Loading…</div></div></div>' +
         '</div>';
         setActive($('wdm-sidebar-materials-btn'));
