@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v167'; // Bumped to add trial-lock-patch.js
+const CACHE = 'wd-shell-v168'; // Bumped to add materials-modern-patch.js
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -57,6 +57,7 @@ const PRECACHE = [
     './materials-credit-patch.js',
     './materials-quote-patch.js',
     './materials-reorder-patch.js',
+    './materials-modern-patch.js',
     './electronics-patch.js', 
     './trial-lock-patch.js',
     './daily-summary-patch.js',
