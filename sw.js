@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v171'; // Bumped to add materials-modern-patch.js
+const CACHE = 'wd-shell-v172'; // Bumped to add materials-modern-patch.js
 const PRECACHE = [
     './app.html',
     './verify.html',
