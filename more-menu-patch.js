@@ -26,7 +26,7 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
     'use strict';
 
     // Put your support WhatsApp number here, e.g. '2348012345678' (country code, no + or spaces). Empty = hidden.
-    var WM_SUPPORT_PHONE = '2349168140710';
+    var WM_SUPPORT_PHONE = '';
 
     // Sidebar buttons that are tucked away into More (owner / manager only). Matching is by the words on the button,
     // lower case. Add or remove words to change what moves. A moved button still works exactly as before.
@@ -51,6 +51,12 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
     }
     function isMat() { return (typeof wdmIsMaterialsStore === 'function') && wdmIsMaterialsStore(); }
     function phone() { return window.innerWidth <= 767; }
+    function isLogout(b) {
+        var t = (b.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return t.length < 24 && /log\s?out|sign\s?out/.test(t);
+    }
+    var ITEM_SEL = 'button, .menu-btn';   // some patches build their sidebar items as <div>/<a class="menu-btn">, not <button>
+    function sideItems(side) { return Array.prototype.slice.call(side.querySelectorAll(ITEM_SEL)); }
     var reduce = false;
     try { reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { /* ignore */ }
 
@@ -201,48 +207,37 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
     var listNow = [];   // what the open panel is showing
     var EMOJI = /^((?:\p{Extended_Pictographic}[\uFE0F\u200D]*)+)\s*(.*)$/u;
 
-    function holder() {
-        var h = $('wm-moved');
-        if (!h) { h = document.createElement('div'); h.id = 'wm-moved'; h.style.display = 'none'; document.body.appendChild(h); }
-        return h;
+    // Buttons are hidden IN PLACE (never moved out of the sidebar). Other patches check that their own button is still
+    // there; when we moved it away they kept adding a fresh copy, which flickered under "Customer Orders".
+    function hideEl(b) {
+        if (!b.classList.contains('wm-moved')) b.classList.add('wm-moved');
+        if (b.style.getPropertyValue('display') !== 'none' || b.style.getPropertyPriority('display') !== 'important') b.style.setProperty('display', 'none', 'important');
     }
+    function showEl(b) { b.classList.remove('wm-moved'); b.style.removeProperty('display'); }
     function descFor(label) {
         var k = Object.keys(MOVED_DESC).filter(function (d) { return label.indexOf(d) !== -1; })[0];
         return k ? MOVED_DESC[k] : 'Open';
     }
     function sweepMoved() {
         var side = document.querySelector('#dashboard-main-wrapper .sidebar');
-        if (!side || !MOVE_TO_MORE.length) return;
-        var all = Array.prototype.slice.call(side.children);   // original positions, so buttons can go back where they were
-        Array.prototype.slice.call(side.querySelectorAll('button')).forEach(function (b) {
-            if (b.id === 'wm-more-btn' || b.classList.contains('btn-logout')) return;
-            if (window.getComputedStyle(b).display === 'none') return;   // hidden on purpose (plan / store type): leave it alone
+        if (!side) return;
+        if (!MOVE_TO_MORE.length) { restoreMoved(); return; }
+        sideItems(side).forEach(function (b) {
+            if (b.id === 'wm-more-btn' || isLogout(b)) return;
+            var ours = b.classList.contains('wm-moved');
+            if (!ours && window.getComputedStyle(b).display === 'none') return;   // hidden on purpose by another patch: leave it alone
             var text = (b.textContent || '').replace(/\s+/g, ' ').trim();
             var low = text.toLowerCase();
-            if (!MOVE_TO_MORE.some(function (k) { return low.indexOf(k) !== -1; })) return;
+            if (!MOVE_TO_MORE.some(function (k) { return low.indexOf(k) !== -1; })) { if (ours) showEl(b); return; }
             var m = EMOJI.exec(text);
             var label = m ? m[2] : text, icon = m ? m[1] : '📌';
-            var key = label.toLowerCase();
-            var old = moved[key];
-            // a patch that re-creates its button: keep only the newest copy
-            if (old && old.el && old.el !== b && old.el.parentNode) old.el.parentNode.removeChild(old.el);
-            moved[key] = { el: b, icon: icon, label: label, desc: descFor(key), idx: all.indexOf(b) };
-            holder().appendChild(b);
+            moved[label.toLowerCase()] = { el: b, icon: icon, label: label, desc: descFor(label.toLowerCase()) };
+            hideEl(b);
         });
     }
     function restoreMoved() {
-        var keys = Object.keys(moved);
-        if (!keys.length) return;
         var side = document.querySelector('#dashboard-main-wrapper .sidebar');
-        var anchor = $('wm-more-btn') || (side && side.querySelector('.btn-logout'));
-        keys.sort(function (x, y) { return moved[x].idx - moved[y].idx; });
-        keys.forEach(function (k) {
-            var m = moved[k];
-            if (!m.el || !side) return;
-            var ref = (m.idx >= 0 && side.children[m.idx]) ? side.children[m.idx] : null;
-            if (!ref || ref === m.el) ref = (anchor && anchor.parentNode === side) ? anchor : null;
-            side.insertBefore(m.el, ref);
-        });
+        if (side) sideItems(side).forEach(function (b) { if (b.classList.contains('wm-moved')) showEl(b); });
         moved = {};
     }
     function movedItems() {
@@ -319,15 +314,27 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
         if (base && full()) sweepMoved(); else restoreMoved();   // owner / manager: tuck rarely-used buttons into More
         var allowed = base && visible().length > 0;
         if (!allowed) { restoreMoved(); if (btn) btn.remove(); if (open) closeMore(); return; }
-        if (btn) return;
+        if (btn) { keepLast(side, btn); return; }
         btn = document.createElement('button');
         btn.id = 'wm-more-btn';
         btn.className = 'menu-btn btn-sec';
         btn.setAttribute('aria-expanded', 'false');
         btn.textContent = '🧰 More';
         btn.onclick = function () { window.wmToggleMore(); };
-        var logout = side.querySelector('.btn-logout');
+        var logout = sideItems(side).filter(isLogout)[0];
         if (logout) logout.parentNode.insertBefore(btn, logout); else side.appendChild(btn);
+        keepLast(side, btn);
+    }
+    // Other patches keep adding their own buttons before Logout. CSS "order" keeps More and Logout at the very bottom
+    // whatever order the buttons are in; if the sidebar is not a flex box, fall back to moving More in the page itself.
+    function keepLast(side, more) {
+        var logout = sideItems(side).filter(isLogout)[0];
+        more.style.order = '9998';
+        if (logout) logout.style.order = '9999';
+        var d = window.getComputedStyle(side).display;
+        if (d !== 'flex' && d !== 'inline-flex' && d !== 'none' && logout && more.nextElementSibling !== logout && logout.parentNode) {
+            logout.parentNode.insertBefore(more, logout);
+        }
     }
 
     // ---------- CSS ----------
@@ -336,6 +343,7 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
         var css =
         // beats the "hide everything except these buttons" rules some store types use
         'body #dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper .sidebar #wm-more-btn{display:flex !important;}' +
+        'body #dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper .sidebar .wm-moved{display:none !important;}' +
         '#wm-more-back{position:fixed;inset:0;z-index:2390;background:rgba(15,23,42,.28);animation:wmm-f .18s ease-out both;}' +
         '#wm-more-back.closing{opacity:0;transition:opacity .18s;}' +
         '#wm-more-panel{position:fixed;z-index:2400;background:var(--wx-surf,#fff);color:var(--wx-ink,#0f172a);border:1px solid var(--wx-line,#e2e8f0);box-shadow:0 24px 60px rgba(15,23,42,.3);overflow-y:auto;box-sizing:border-box;}' +
