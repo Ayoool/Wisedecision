@@ -26,7 +26,7 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
     'use strict';
 
     // Put your support WhatsApp number here, e.g. '2348012345678' (country code, no + or spaces). Empty = hidden.
-    var WM_SUPPORT_PHONE = '';
+    var WM_SUPPORT_PHONE = '2349168140710';
 
     // Sidebar buttons that are tucked away into More (owner / manager only). Matching is by the words on the button,
     // lower case. Add or remove words to change what moves. A moved button still works exactly as before.
