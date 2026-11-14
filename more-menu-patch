@@ -213,8 +213,10 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
     function sweepMoved() {
         var side = document.querySelector('#dashboard-main-wrapper .sidebar');
         if (!side || !MOVE_TO_MORE.length) return;
+        var all = Array.prototype.slice.call(side.children);   // original positions, so buttons can go back where they were
         Array.prototype.slice.call(side.querySelectorAll('button')).forEach(function (b) {
             if (b.id === 'wm-more-btn' || b.classList.contains('btn-logout')) return;
+            if (window.getComputedStyle(b).display === 'none') return;   // hidden on purpose (plan / store type): leave it alone
             var text = (b.textContent || '').replace(/\s+/g, ' ').trim();
             var low = text.toLowerCase();
             if (!MOVE_TO_MORE.some(function (k) { return low.indexOf(k) !== -1; })) return;
@@ -224,7 +226,7 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
             var old = moved[key];
             // a patch that re-creates its button: keep only the newest copy
             if (old && old.el && old.el !== b && old.el.parentNode) old.el.parentNode.removeChild(old.el);
-            moved[key] = { el: b, icon: icon, label: label, desc: descFor(key) };
+            moved[key] = { el: b, icon: icon, label: label, desc: descFor(key), idx: all.indexOf(b) };
             holder().appendChild(b);
         });
     }
@@ -233,9 +235,13 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
         if (!keys.length) return;
         var side = document.querySelector('#dashboard-main-wrapper .sidebar');
         var anchor = $('wm-more-btn') || (side && side.querySelector('.btn-logout'));
+        keys.sort(function (x, y) { return moved[x].idx - moved[y].idx; });
         keys.forEach(function (k) {
             var m = moved[k];
-            if (m.el && side) side.insertBefore(m.el, (anchor && anchor.parentNode === side) ? anchor : null);
+            if (!m.el || !side) return;
+            var ref = (m.idx >= 0 && side.children[m.idx]) ? side.children[m.idx] : null;
+            if (!ref || ref === m.el) ref = (anchor && anchor.parentNode === side) ? anchor : null;
+            side.insertBefore(m.el, ref);
         });
         moved = {};
     }
@@ -329,10 +335,10 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
         if ($('wm-more-css')) return;
         var css =
         // beats the "hide everything except these buttons" rules some store types use
-        'body #dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper .sidebar #wm-more-btn{display:block !important;}' +
-        '#wm-more-back{position:fixed;inset:0;z-index:1940;background:rgba(15,23,42,.28);animation:wmm-f .18s ease-out both;}' +
+        'body #dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper .sidebar #wm-more-btn{display:flex !important;}' +
+        '#wm-more-back{position:fixed;inset:0;z-index:2390;background:rgba(15,23,42,.28);animation:wmm-f .18s ease-out both;}' +
         '#wm-more-back.closing{opacity:0;transition:opacity .18s;}' +
-        '#wm-more-panel{position:fixed;z-index:1950;background:var(--wx-surf,#fff);color:var(--wx-ink,#0f172a);border:1px solid var(--wx-line,#e2e8f0);box-shadow:0 24px 60px rgba(15,23,42,.3);overflow-y:auto;box-sizing:border-box;}' +
+        '#wm-more-panel{position:fixed;z-index:2400;background:var(--wx-surf,#fff);color:var(--wx-ink,#0f172a);border:1px solid var(--wx-line,#e2e8f0);box-shadow:0 24px 60px rgba(15,23,42,.3);overflow-y:auto;box-sizing:border-box;}' +
         '#wm-more-panel *{box-sizing:border-box;}' +
         '#wm-more-panel.fly{width:340px;max-height:80vh;border-radius:22px;padding:16px;animation:wmm-p .2s ease-out both;transform-origin:left top;}' +
         '#wm-more-panel.sheet{left:0;right:0;bottom:0;max-height:82vh;border-radius:24px 24px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);animation:wmm-s .24s ease-out both;}' +
@@ -350,7 +356,7 @@ console.log("Wise Decision more-menu-patch.js — v1 loaded");
         '.wm-tx{flex:1;min-width:0;}.wm-tx b{display:block;font-size:14px;font-weight:800;}.wm-tx small{display:block;font-size:12px;color:var(--wx-mut,#64748b);font-weight:600;margin-top:1px;}' +
         '.wm-ch{color:var(--wx-mut,#94a3b8);font-size:20px;}' +
         // calculator
-        '#wm-calc{position:fixed;inset:0;z-index:2100;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;}' +
+        '#wm-calc{position:fixed;inset:0;z-index:2500;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;}' +
         '.wm-calc-box{width:100%;max-width:320px;background:var(--wx-surf,#fff);color:var(--wx-ink,#0f172a);border-radius:24px;padding:16px;box-shadow:0 24px 60px rgba(15,23,42,.4);}' +
         '.wm-calc-top{display:flex;justify-content:space-between;align-items:center;font-size:16px;margin-bottom:6px;}' +
         '.wm-calc-e{min-height:18px;text-align:right;font-size:13px;color:var(--wx-mut,#64748b);font-weight:700;}' +
