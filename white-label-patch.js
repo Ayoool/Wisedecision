@@ -13,6 +13,7 @@
 // WHERE THE CUSTOMER'S DETAILS COME FROM
 //   1. Firebase  brands/<id>   <- you add customers from Super Admin (button "Brand a customer"); no code editing.
 //   2. The CLIENTS list below  <- backup that always works, even offline or before the Firebase rule is added.
+// A customer can also have a BACKGROUND PICTURE behind the login card (field  bg  = a picture link or file name).
 // Details are kept on his phone after the first visit, so the next login screen is instant.
 //
 // LOAD THIS EARLY: in the <head> of app.html right after the style.css line, with NO "defer".
@@ -39,6 +40,10 @@
     function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase(); }
     function clean(id) { return String(id || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30); }
     function color(c) { return /^#[0-9a-f]{3,8}$/i.test(String(c || '')) ? String(c) : null; }
+    function bgUrl(v) {                         // a data:image..., https://... or a file in this site; anything else is dropped
+        v = String(v || '').replace(/[^A-Za-z0-9\-._~:\/?#@!$&+,=%;]/g, '');   // keeps only characters a web address needs
+        return /^(data:image\/|https:\/\/|[a-z0-9_\-\/.]+$)/i.test(v) ? v : '';
+    }
     function list(v) { return Array.isArray(v) ? v : (v && typeof v === 'object' ? Object.keys(v).map(function (k) { return v[k]; }) : []); }
     function full(c) {
         var hide = list(c.hide).map(norm).filter(Boolean);
@@ -46,6 +51,7 @@
             name: String(c.name || '').trim() || 'My Business',
             tagline: String(c.tagline || '').trim() || 'Staff & Admin Login',
             logo: String(c.logo || ''),
+            bg: bgUrl(c.bg),
             color: color(c.color) || '#0f766e',
             color2: color(c.color2) || '#134e4a',
             hide: hide.length ? hide : DEFAULT_HIDE
@@ -83,8 +89,12 @@
     // ---------- look ----------
     function buildCss() {
         if (!st) { st = document.createElement('style'); st.id = 'wl-css'; (document.head || root).appendChild(st); }
+        var bgRule = C.bg
+            ? 'background:linear-gradient(rgba(0,0,0,.38),rgba(0,0,0,.38)),var(--wl-bg) center/cover no-repeat ' + C.color2 + ' !important;'
+            : 'background:linear-gradient(135deg,' + C.color2 + ' 0%,' + C.color + ' 100%) !important;background-image:linear-gradient(135deg,' + C.color2 + ' 0%,' + C.color + ' 100%) !important;';
         st.textContent =
-            'html.wl-on.wl-login body,html.wl-on.wl-login .app-container,html.wl-on #login-view,html.wl-on #login-view .auth-wrapper{background:linear-gradient(135deg,' + C.color2 + ' 0%,' + C.color + ' 100%) !important;background-image:linear-gradient(135deg,' + C.color2 + ' 0%,' + C.color + ' 100%) !important;}' +
+            (C.bg ? 'html.wl-on{--wl-bg:url("' + C.bg + '");}' : '') +
+            'html.wl-on.wl-login body,html.wl-on.wl-login .app-container,html.wl-on #login-view,html.wl-on #login-view .auth-wrapper{' + bgRule + '}' +
             'html.wl-on #login-view .auth-card{border-top-color:' + C.color + ' !important;}' +
             'html.wl-on #login-view .auth-card .brand-title{font-size:26px !important;font-weight:900 !important;height:auto !important;line-height:1.15 !important;background-image:none !important;margin:6px 0 4px !important;text-align:center !important;color:' + C.color2 + ' !important;}' +
             'html.wl-on #login-view .auth-card .brand-title *{display:inline !important;}' +
@@ -171,10 +181,10 @@
     }
 
     // ---------- details from Firebase (public read of brands/<id>) ----------
-    function fetchCfg(cb) {                      // cb(ok, data)
+    function fetchCfg(cb, wait) {                // cb(ok, data)
         if (!window.fetch) { cb(false, null); return; }
         var done = false;
-        var t = setTimeout(function () { if (!done) { done = true; cb(false, null); } }, 4000);
+        var t = setTimeout(function () { if (!done) { done = true; cb(false, null); } }, wait || 4000);
         window.fetch(DB + '/brands/' + encodeURIComponent(id) + '.json')
             .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
             .then(function (j) { if (!done) { done = true; clearTimeout(t); cb(true, (j && typeof j === 'object') ? j : null); } })
@@ -202,6 +212,6 @@
             root.classList.remove('wl-pending');
             if (data) { remember(data); C = full(data); boot(); apply(); }
             else lsDel(KEY);                      // unknown link: stay completely normal
-        });
+        }, 9000);                                 // first visit: allow a slow connection time to fetch the picture
     }
 })();
