@@ -36,23 +36,28 @@ console.log("Wise Decision white-label-admin-patch.js — v1 loaded");
         return '#' + [f((n >> 16) & 255), f((n >> 8) & 255), f(n & 255)].map(function (v) { return ('0' + v.toString(16)).slice(-2); }).join('');
     }
     function linkFor(id) { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'app.html?brand=' + id; }
-    window.__wlbTest = { validId: validId, cleanId: cleanId, suggestId: suggestId, shade: shade };
+    window.__wlbTest = { validId: validId, cleanId: cleanId, suggestId: suggestId, shade: shade, readImage: function () { return readImage.apply(null, arguments); }, readBg: function () { return readBg.apply(null, arguments); } };
 
     function ref(p) { return firebase.database().ref(p); }
     function msg(t, bad) { var m = $('wlb-msg'); if (!m) return; m.textContent = t || ''; m.style.display = t ? 'block' : 'none'; m.style.background = bad ? '#fef2f2' : '#f0fdf4'; m.style.color = bad ? '#991b1b' : '#166534'; m.style.borderColor = bad ? '#fecaca' : '#bbf7d0'; }
 
-    // shrink a picked logo so it stays small enough to keep in Firebase
-    function readLogo(file, cb) {
+    // shrink a picked picture so it stays small enough to keep in Firebase and to load fast on a phone
+    function readImage(file, o, cb) {
         var fr = new FileReader();
         fr.onload = function () {
             var img = new Image();
             img.onload = function () {
-                var k = Math.min(1, 240 / Math.max(img.width, img.height));
-                var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-                var out = c.toDataURL('image/png');
-                if (out.length > 70000) out = c.toDataURL('image/jpeg', 0.85);
-                cb(out.length > 120000 ? null : out);
+                function draw(maxSide) {
+                    var k = Math.min(1, maxSide / Math.max(img.width, img.height));
+                    var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    return c;
+                }
+                var c = draw(o.max);
+                var out = o.png ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', o.q);
+                if (o.png && out.length > o.limit) out = c.toDataURL('image/jpeg', 0.85);                      // heavy PNG logo: use JPEG instead
+                if (!o.png && out.length > o.limit) out = draw(Math.round(o.max * 0.8)).toDataURL('image/jpeg', 0.55);   // heavy photo: smaller + lighter
+                cb(out.length > o.limit * 1.4 ? null : out);
             };
             img.onerror = function () { cb(null); };
             img.src = fr.result;
@@ -60,15 +65,17 @@ console.log("Wise Decision white-label-admin-patch.js — v1 loaded");
         fr.onerror = function () { cb(null); };
         fr.readAsDataURL(file);
     }
+    function readLogo(file, cb) { readImage(file, { png: true, max: 240, limit: 90000 }, cb); }
+    function readBg(file, cb) { readImage(file, { png: false, max: 1000, q: 0.72, limit: 200000 }, cb); }
 
     // ---------- the sheet ----------
-    var logoData = '', editing = null, rows = {};
+    var logoData = '', bgData = '', editing = null, rows = {};
     var IN = 'width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;box-sizing:border-box;background:#fff;color:#0f172a;';
     var LB = 'display:block;font-size:11px;font-weight:800;color:#334155;margin:12px 0 5px;text-transform:uppercase;letter-spacing:.4px;';
 
     window.wlbOpen = function () {
         var m = $('wlb-modal'); if (m) m.remove();
-        logoData = ''; editing = null;
+        logoData = ''; bgData = ''; editing = null;
         m = document.createElement('div');
         m.id = 'wlb-modal';
         m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:2600;display:flex;justify-content:center;align-items:flex-end;';
@@ -83,6 +90,9 @@ console.log("Wise Decision white-label-admin-patch.js — v1 loaded");
                     '<div style="display:grid;grid-template-columns:90px 1fr;gap:12px;align-items:end;"><div><label style="' + LB + '">Colour</label><input id="wlb-color" type="color" value="#ea580c" style="width:100%;height:46px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;padding:3px;"></div>' +
                     '<div><label style="' + LB + '">Logo (optional)</label><input id="wlb-logo" type="file" accept="image/*" onchange="wlbLogo(this)" style="font-size:13px;width:100%;"></div></div>' +
                     '<div id="wlb-logo-note" style="font-size:11px;color:#64748b;margin-top:6px;"></div>' +
+                    '<label style="' + LB + '">Background picture (optional)</label><input id="wlb-bg" type="file" accept="image/*" onchange="wlbBg(this)" style="font-size:13px;width:100%;">' +
+                    '<div id="wlb-bg-note" style="font-size:11px;color:#64748b;margin-top:6px;">A shop or product photo works well. It sits behind the login card.</div>' +
+                    '<label id="wlb-bg-clear-row" style="display:none;font-size:13px;margin-top:8px;"><input id="wlb-bg-clear" type="checkbox" style="margin-right:6px;">Remove his current background picture</label>' +
                 '</div>' +
                 '<div id="wlb-msg" style="display:none;border:1px solid;border-radius:10px;padding:10px;font-size:13px;margin-top:12px;"></div>' +
                 '<button id="wlb-save" onclick="wlbSave()" style="width:100%;margin-top:14px;padding:15px;border:none;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:#ea580c;cursor:pointer;">Save and get his link</button>' +
@@ -106,13 +116,23 @@ console.log("Wise Decision white-label-admin-patch.js — v1 loaded");
         });
     };
 
+    window.wlbBg = function (inp) {
+        var f = inp.files && inp.files[0]; var note = $('wlb-bg-note');
+        if (!f) { bgData = ''; if (note) note.textContent = 'A shop or product photo works well. It sits behind the login card.'; return; }
+        if (note) note.textContent = 'Preparing the picture…';
+        readBg(f, function (d) {
+            if (!d) { bgData = ''; if (note) note.textContent = 'That picture could not be used. Try a smaller or different one.'; return; }
+            bgData = d; if (note) note.innerHTML = 'Picture ready (' + Math.round(d.length / 1024) + ' KB): <img src="' + d + '" style="height:36px;vertical-align:middle;border-radius:6px;margin-left:6px;">';
+        });
+    };
+
     window.wlbSave = function () {
         var name = ($('wlb-name').value || '').trim();
         var id = cleanId($('wlb-id').value);
         if (!name) return msg('Type the business name.', true);
         if (!validId(id)) return msg('The link id needs 2 to 30 letters or numbers.', true);
         var color = $('wlb-color').value || '#ea580c';
-        var rec = { name: name, tagline: ($('wlb-tag').value || '').trim() || 'Staff & Admin Login', logo: logoData || (rows[id] && rows[id].logo) || '', color: color, color2: shade(color, -0.4), hide: HIDE, updatedAt: new Date().toISOString() };
+        var rec = { name: name, tagline: ($('wlb-tag').value || '').trim() || 'Staff & Admin Login', logo: logoData || (rows[id] && rows[id].logo) || '', bg: (($('wlb-bg-clear') && $('wlb-bg-clear').checked) ? '' : (bgData || (rows[id] && rows[id].bg) || '')), color: color, color2: shade(color, -0.4), hide: HIDE, updatedAt: new Date().toISOString() };
         var btn = $('wlb-save'); btn.disabled = true; btn.textContent = 'Saving…';
         ref('brands/' + id).set(rec).then(function () {
             rows[id] = rec; msg('');
@@ -143,10 +163,12 @@ console.log("Wise Decision white-label-admin-patch.js — v1 loaded");
     };
     window.wlbEdit = function (id) {
         var r = rows[id]; if (!r) return;
-        editing = id; logoData = '';
+        editing = id; logoData = ''; bgData = '';
         $('wlb-name').value = r.name || ''; $('wlb-id').value = id; $('wlb-id').setAttribute('data-touched', '1'); $('wlb-id').readOnly = true;
         $('wlb-tag').value = r.tagline || ''; $('wlb-color').value = /^#[0-9a-f]{6}$/i.test(r.color || '') ? r.color : '#ea580c';
         $('wlb-logo-note').textContent = r.logo ? 'Keeps his current logo unless you pick a new one.' : '';
+        $('wlb-bg-clear-row').style.display = r.bg ? 'block' : 'none'; if ($('wlb-bg-clear')) $('wlb-bg-clear').checked = false;
+        $('wlb-bg-note').textContent = r.bg ? 'He has a background picture. Pick a new one to replace it, or tick the box below to remove it.' : 'A shop or product photo works well. It sits behind the login card.';
         $('wlb-done').innerHTML = ''; msg('Editing ' + id + '. Tap Save when done.');
         $('wlb-name').scrollIntoView && $('wlb-name').scrollIntoView({ block: 'center' });
     };
