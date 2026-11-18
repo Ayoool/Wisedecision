@@ -16,6 +16,10 @@
 // A customer can also have a BACKGROUND PICTURE behind the login card (field  bg  = a picture link or file name).
 // Details are kept on his phone after the first visit, so the next login screen is instant.
 //
+// HOME-SCREEN ICON: on a branded phone the page gets its own web-app manifest whose start address is
+// his branded link, so the saved icon opens HIS login screen (a home-screen app keeps separate storage and
+// otherwise would not know which customer it belongs to).
+//
 // LOAD THIS EARLY: in the <head> of app.html right after the style.css line, with NO "defer".
 
 (function () {
@@ -164,11 +168,47 @@
         (window.requestAnimationFrame || setTimeout)(function () { queued = false; apply(); });
     }
 
+    // ---------- home-screen app: start at his branded link ----------
+    var manVer = -1, manUrl = null;
+    function brandManifest() {
+        if (manVer === version) return;
+        manVer = version;
+        try {
+            var link = document.querySelector('link[rel="manifest"]');
+            var here = location.origin + location.pathname.replace(/[^/]*$/, '');
+            var orig = (link && link.getAttribute('data-wl-orig')) || (link && link.href) || (here + 'manifest.json');
+            if (link && !link.getAttribute('data-wl-orig')) link.setAttribute('data-wl-orig', orig);
+            var go = function (m) {
+                var start = here + 'app.html?brand=' + id;
+                m = m && typeof m === 'object' ? m : {};
+                var out = {};
+                Object.keys(m).forEach(function (k) { out[k] = m[k]; });
+                out.name = C.name; out.short_name = C.name.slice(0, 12);
+                out.start_url = start; out.id = start; out.scope = here;
+                out.display = out.display || 'standalone';
+                out.background_color = C.color2; out.theme_color = C.color2;
+                if (Array.isArray(out.icons)) out.icons = out.icons.map(function (ic) {          // a blob manifest cannot use relative paths
+                    var c2 = {}; Object.keys(ic).forEach(function (k) { c2[k] = ic[k]; });
+                    try { c2.src = new URL(ic.src, orig).href; } catch (e) { /* ignore */ }
+                    return c2;
+                });
+                if (/^https:\/\//i.test(C.logo)) out.icons = [{ src: C.logo, sizes: '512x512', type: 'image/png', purpose: 'any' }];
+                var blob = new Blob([JSON.stringify(out)], { type: 'application/manifest+json' });
+                if (manUrl) { try { URL.revokeObjectURL(manUrl); } catch (e) { /* ignore */ } }
+                manUrl = URL.createObjectURL(blob);
+                var l = document.querySelector('link[rel="manifest"]');
+                if (!l) { l = document.createElement('link'); l.setAttribute('rel', 'manifest'); document.head.appendChild(l); }
+                l.setAttribute('href', manUrl);
+            };
+            window.fetch(orig).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; }).then(go);
+        } catch (e) { /* ignore */ }
+    }
+
     function boot() {
         if (booted) return;
         booted = true;
         root.classList.add('wl-on');
-        buildCss(); setMeta();
+        buildCss(); setMeta(); brandManifest();
         new MutationObserver(schedule).observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
         if (document.readyState !== 'loading') apply();
         document.addEventListener('DOMContentLoaded', function () { setMeta(); apply(); });
@@ -177,7 +217,7 @@
     function refresh(cfg) {                      // newer details arrived from Firebase
         C = full(cfg); version++;
         if (!booted) return;
-        buildCss(); setMeta(); apply();
+        buildCss(); setMeta(); brandManifest(); apply();
     }
 
     // ---------- details from Firebase (public read of brands/<id>) ----------
