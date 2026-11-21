@@ -43,7 +43,6 @@ const PRECACHE = [
     './login-analytics-patch.js',
     './auto-lock-patch.js',
     './payments-auto-patch.js',
-    './impersonate-store-patch.js',
     './demo-dashboard-patch.js',
     './vertical-first-patch.js',
     './cart-unit-toggle-patch.js',
@@ -69,7 +68,7 @@ const PRECACHE = [
     './more-menu-patch.js',
     './modern-polish-patch.js',
     './white-label-patch.js',
-    './white-label-admin-patch.js' 
+    './white-label-admin-patch.js',
     'https://js.paystack.co/v2/inline.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
     'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
