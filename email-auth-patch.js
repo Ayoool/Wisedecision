@@ -1,16 +1,26 @@
-// ==================== WISE DECISION EMAIL AUTH PATCH (v6) ====================
+// ==================== WISE DECISION EMAIL AUTH PATCH (v7) ====================
 // Load LAST, after auth-patch.js (defer).
 //
+// v7: FAST LOGIN.
+//     - Store name is read from stores/<id>/businessName only (v6 downloaded the whole store just for the name).
+//     - admins/ + userIndex/ reads run together; every store's reads run together.
+//     - The store list is remembered on the device after a successful login, so the next login goes straight in
+//       and the list is re-checked in the background (if access was removed, the person is signed out).
+//     - The subscription checks (locked / overdue) now run at the same time as the branch list loads, instead of
+//       one after the other. If they are slow (> 1.5 s) the dashboard opens anyway and the check finishes behind it;
+//       a locked store is then signed out with the same message as before.
+//     - No fixed 400 ms / 300 ms waits. userIndex is only written when it actually changed.
+//     - Login-analytics (IP lookup + log write) is delayed 3 s so it never competes with the dashboard data.
+//     - The login card is built once (v6 rebuilt it again on page load, wiping anything already typed).
 // v6: Overdue check at sign-in. A store that is more than "Grace days" (Billing settings, default 3) past its due date
 //     is set to locked in the database and turned away with a pointer to "Renew or pay subscription". The Super Admin
 //     is never blocked. If the due date cannot be read (offline, slow), the sign-in continues.
 // v5: A suspended (locked) store can no longer sign in; it is told to use "Renew or pay subscription" instead.
-// v4: Removed the "First time? Set up email login" button from the login screen (every store is on email login now,
-//     and the database no longer lets signed-out visitors read the PINs it needed).
+// v4: Removed the "First time? Set up email login" button from the login screen.
 // v3: Calls wdlaRecordLogin (from login-analytics-patch.js) on every successful sign-in.
 // v2: Reads store membership via userIndex/{uid} instead of scanning the entire stores/ tree.
 
-console.log("Wise Decision email-auth-patch.js v6 loaded");
+console.log("Wise Decision email-auth-patch.js v7 loaded");
 
 var WDAE_FAKE_DOMAIN = 'wd.invalid';
 var WDAE_SUPER_EMAIL_KEY = 'wd_super_email';
@@ -45,6 +55,26 @@ async function wdaeDerivedCreds(storeId, who, pin) {
     const idHash = await wdaeSha256Hex('wd-auth-id-v1|' + storeId + '|' + who + '|' + pin);
     const pwHash = await wdaeSha256Hex('wd-auth-pw-v1|' + storeId + '|' + who + '|' + pin);
     return { email: 'wd.' + idHash.slice(0, 40) + '@' + WDAE_FAKE_DOMAIN, password: pwHash };
+}
+function wdaeWithTimeout(p, ms) {
+    return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, ms); })]);
+}
+
+// ---------- Remembered store list (v7) ----------
+function wdaeCacheKey(uid) { return 'wdae_mem_' + uid; }
+function wdaeReadCache(uid) {
+    try {
+        const a = JSON.parse(localStorage.getItem(wdaeCacheKey(uid)) || 'null');
+        if (!Array.isArray(a) || a.length === 0) return null;
+        if (a.some(function (m) { return !m || m.kind !== 'member' || !m.storeId; })) return null;   // never trust a cached Super Admin
+        return a;
+    } catch (e) { return null; }
+}
+function wdaeWriteCache(uid, list) {
+    try { localStorage.setItem(wdaeCacheKey(uid), JSON.stringify(list)); } catch (e) {}
+}
+function wdaeClearCache(uid) {
+    try { localStorage.removeItem(wdaeCacheKey(uid)); } catch (e) {}
 }
 
 // =====================================================================
@@ -134,11 +164,19 @@ async function wdaeSignInWithEmail() {
             return;
         }
 
-        const memberships = await wdaeResolveAllMemberships(uid, email);
+        // Fast path: the store list remembered from the last login on this device (re-checked in the background).
+        let memberships = wdaeReadCache(uid);
+        const fromCache = !!memberships;
+        if (!fromCache) {
+            wdaeSetLoginMessage('Signing in... loading your store', true);
+            memberships = await wdaeResolveAllMemberships(uid, email);
+        }
 
         if (memberships.length === 0) {
             await firebase.auth().signOut();
-            wdaeSetLoginMessage('This account is not linked to a store yet. Ask your store owner to add you.', false);
+            wdaeSetLoginMessage(memberships.readFailed
+                ? 'Could not reach the server. Check your connection and try again.'
+                : 'This account is not linked to a store yet. Ask your store owner to add you.', false);
             return;
         }
 
@@ -148,8 +186,8 @@ async function wdaeSignInWithEmail() {
                 if (last && last.storeId && (Date.now() - last.at) < 24 * 60 * 60 * 1000) {
                     const remembered = memberships.find(function (m) { return (m.storeId || 'SUPER_ADMIN') === last.storeId; });
                     if (remembered) {
-                        wdaeSetLoginMessage('Welcome back!', true);
-                        setTimeout(function () { wdaeCompleteLogin(remembered); }, 400);
+                        wdaeSetLoginMessage('Opening your store...', true);
+                        await wdaeCompleteLogin(remembered, { fromCache: fromCache });
                         return;
                     }
                 }
@@ -157,13 +195,13 @@ async function wdaeSignInWithEmail() {
         }
 
         if (memberships.length === 1) {
-            wdaeSetLoginMessage('Welcome!', true);
-            setTimeout(function () { wdaeCompleteLogin(memberships[0]); }, 400);
+            wdaeSetLoginMessage('Opening your store...', true);
+            await wdaeCompleteLogin(memberships[0], { fromCache: fromCache });
             return;
         }
 
         wdaeSetLoginMessage('Choose a store to continue.', true);
-        setTimeout(function () { wdaeChooseStore(memberships); }, 300);
+        wdaeChooseStore(memberships, fromCache);
     } catch (e) {
         const code = e && e.code || '';
         let msg = 'Sign in failed.';
@@ -221,51 +259,53 @@ function wdaeShowVerifyPanel(email) {
 // =====================================================================
 // MEMBERSHIPS
 // =====================================================================
+// v7: all reads run in parallel and only small fields are read. The result array carries a .readFailed flag
+// when a read failed for a reason other than "permission denied", so callers do not mistake a bad connection
+// for "no access".
 async function wdaeResolveAllMemberships(uid, email) {
     const db = firebase.database();
     const memberships = [];
+    let readFailed = false;
 
-    try {
-        const adminSnap = await db.ref('admins/' + uid).once('value');
-        if (adminSnap.val() === true) {
-            memberships.push({ kind: 'super', uid: uid, email: email });
-        }
-    } catch (e) { /* ignore */ }
+    const safeGet = function (path) {
+        return db.ref(path).once('value').catch(function (e) {
+            if (!(e && e.code === 'PERMISSION_DENIED')) readFailed = true;
+            return null;
+        });
+    };
 
-    var storeIds = [];
-    try {
-        const userIndexSnap = await db.ref('userIndex/' + uid).once('value');
-        const userIndex = userIndexSnap.val() || {};
-        storeIds = userIndex.storeIds || [];
-    } catch (e) { /* ignore */ }
+    const first = await Promise.all([safeGet('admins/' + uid), safeGet('userIndex/' + uid)]);
+    const isSuper = !!(first[0] && first[0].val() === true);
+    if (isSuper) memberships.push({ kind: 'super', uid: uid, email: email });
 
-    if (storeIds.length > 0) {
-        for (let i = 0; i < storeIds.length; i++) {
-            const storeId = storeIds[i];
-            try {
-                const memberSnap = await db.ref('stores/' + storeId + '/members/' + uid).once('value');
-                const m = memberSnap.val();
-                if (!m) continue;
-                var store = {};
-                try {
-                    const storeSnap = await db.ref('stores/' + storeId).once('value');
-                    store = storeSnap.val() || {};
-                } catch (e2) { /* ignore */ }
-                memberships.push({
-                    kind: 'member',
-                    uid: uid,
-                    email: email,
-                    storeId: storeId,
-                    storeName: store.businessName || storeId,
-                    role: m.role || 'Admin',
-                    branchId: m.branchId || 'main',
-                    name: m.name || ''
-                });
-            } catch (e) { /* skip this store, continue */ }
-        }
-    }
+    const userIndex = (first[1] && first[1].val()) || {};
+    const rawIds = userIndex.storeIds;
+    const storeIds = Array.isArray(rawIds) ? rawIds : (rawIds && typeof rawIds === 'object' ? Object.keys(rawIds).map(function (k) { return rawIds[k]; }) : []);
 
-    if (memberships.filter(function (m) { return m.kind === 'member'; }).length === 0) {
+    const rows = await Promise.all(storeIds.map(async function (storeId) {
+        const r = await Promise.all([
+            safeGet('stores/' + storeId + '/members/' + uid),
+            safeGet('stores/' + storeId + '/businessName')
+        ]);
+        const m = r[0] && r[0].val();
+        if (!m) return null;
+        const nm = r[1] && r[1].val();
+        return {
+            kind: 'member',
+            uid: uid,
+            email: email,
+            storeId: storeId,
+            storeName: nm || storeId,
+            role: m.role || 'Admin',
+            branchId: m.branchId || 'main',
+            name: m.name || ''
+        };
+    }));
+    rows.forEach(function (r) { if (r) memberships.push(r); });
+
+    // Old accounts with no userIndex entry: scan stores/ (only when nothing else was found, never for the Super Admin).
+    // With the locked rules this is refused at once; it is kept only for accounts created before userIndex existed.
+    if (!isSuper && !readFailed && memberships.filter(function (m) { return m.kind === 'member'; }).length === 0) {
         try {
             const storesSnap = await db.ref('stores').once('value');
             const stores = storesSnap.val() || {};
@@ -288,17 +328,22 @@ async function wdaeResolveAllMemberships(uid, email) {
         } catch (e) { /* fallback failed (rules tightened) — that's fine */ }
     }
 
+    // Only write userIndex when it really changed
     try {
-        var resolvedIds = memberships.filter(function (m) { return m.kind === 'member'; }).map(function (m) { return m.storeId; });
-        if (resolvedIds.length > 0) {
+        const resolvedIds = memberships.filter(function (m) { return m.kind === 'member'; }).map(function (m) { return m.storeId; });
+        const same = resolvedIds.length === storeIds.length && resolvedIds.every(function (id, i) { return id === storeIds[i]; });
+        if (resolvedIds.length > 0 && !same && !readFailed) {
             await db.ref('userIndex/' + uid).set({ storeIds: resolvedIds });
         }
     } catch (e) { /* ignore */ }
 
+    if (!isSuper && !readFailed && memberships.length > 0) wdaeWriteCache(uid, memberships);
+
+    memberships.readFailed = readFailed;
     return memberships;
 }
 
-function wdaeChooseStore(memberships) {
+function wdaeChooseStore(memberships, fromCache) {
     let m = document.getElementById('wdae-choose-store');
     if (m) m.remove();
     m = document.createElement('div');
@@ -334,7 +379,7 @@ function wdaeChooseStore(memberships) {
             try {
                 localStorage.setItem('wdae_last_store_' + mem.uid, JSON.stringify({ storeId: mem.storeId || 'SUPER_ADMIN', at: Date.now() }));
             } catch (e) {}
-            wdaeCompleteLogin(mem);
+            wdaeCompleteLogin(mem, { fromCache: !!fromCache });
         };
     });
     document.getElementById('wdae-choose-cancel').onclick = function () {
@@ -344,21 +389,12 @@ function wdaeChooseStore(memberships) {
     };
 }
 
-// ---------- Overdue check (v6) ----------
-function wdaeWithTimeout(p, ms) {
-    return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, ms); })]);
-}
-// Days past (due date + grace days). 0 = fine. Any read problem counts as fine, so a paying store is never locked out
-// by a bad connection.
-async function wdaeOverdueDays(storeId) {
-    const db = firebase.database();
-    const r = await wdaeWithTimeout(Promise.all([
-        db.ref('billing/' + storeId + '/dueDate').once('value'),
-        db.ref('billingSettings/graceDays').once('value')
-    ]), 6000);
-    const due = r[0].val();
+// =====================================================================
+// SUBSCRIPTION GATE (locked / overdue)
+// =====================================================================
+// Days past (due date + grace days). 0 = fine.
+function wdaeOverdueFrom(due, g) {
     if (typeof due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return 0;
-    const g = r[1].val();
     const grace = (g == null || isNaN(Number(g)) || Number(g) < 0) ? 3 : Number(g);
     const d = new Date();
     const today = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
@@ -366,44 +402,90 @@ async function wdaeOverdueDays(storeId) {
     const late = Math.round((today - Date.UTC(p[0], p[1] - 1, p[2])) / 86400000);
     return late > grace ? late : 0;
 }
-
-async function wdaeCompleteLogin(resolved) {
-    // A suspended (locked) store may not sign in. Turn it away with a pointer to the "Renew or pay subscription" link.
-    // The Super Admin is never blocked. If the status cannot be read, do not block the sign-in.
-    if (resolved.kind !== 'super') {
-        try {
-            const statusSnap = await firebase.database().ref('stores/' + resolved.storeId + '/status').once('value');
-            if (statusSnap.val() === 'suspended') {
-                try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
-                wdaeSetLoginMessage('This store is locked because its subscription is overdue. Tap "Renew or pay subscription" on this screen to pay and restore access.', false);
-                return;
-            }
-        } catch (e) { /* could not read the status: let the sign-in continue */ }
-    }
-
-    // Overdue check (v6): past due date + grace days -> lock the store and turn the person away.
-    if (resolved.kind !== 'super') {
-        try {
-            const late = await wdaeOverdueDays(resolved.storeId);
-            if (late > 0) {
-                try { await firebase.database().ref('stores/' + resolved.storeId + '/status').set('suspended'); } catch (e) { /* still turn them away */ }
-                try { await firebase.auth().signOut(); } catch (e) { /* ignore */ }
-                wdaeSetLoginMessage('This store is locked because its subscription is ' + late + ' day' + (late === 1 ? '' : 's') + ' past due. Tap "Renew or pay subscription" on this screen to pay and restore access.', false);
-                return;
-            }
-        } catch (e) { /* could not check: let the sign-in continue */ }
-    }
-
-    // Record login for security analytics (Super Admin Security panel)
+// Kept for any other file that may call it. Any read problem counts as fine.
+async function wdaeOverdueDays(storeId) {
+    const db = firebase.database();
+    const r = await wdaeWithTimeout(Promise.all([
+        db.ref('billing/' + storeId + '/dueDate').once('value'),
+        db.ref('billingSettings/graceDays').once('value')
+    ]), 6000);
+    return wdaeOverdueFrom(r[0].val(), r[1].val());
+}
+// One round trip (three small reads in parallel). Fails open: a bad connection never locks a paying store out.
+async function wdaeGate(storeId) {
     try {
-        if (typeof window.wdlaRecordLogin === 'function') {
-            window.wdlaRecordLogin(
-                resolved.kind === 'super' ? 'SUPER_ADMIN' : resolved.storeId,
-                resolved.uid,
-                resolved.email
-            );
+        const db = firebase.database();
+        const get = function (p) { return db.ref(p).once('value').then(function (s) { return s.val(); }).catch(function () { return null; }); };
+        const r = await wdaeWithTimeout(Promise.all([
+            get('stores/' + storeId + '/status'),
+            get('billing/' + storeId + '/dueDate'),
+            get('billingSettings/graceDays')
+        ]), 6000);
+        if (r[0] === 'suspended') {
+            return { blocked: true, message: 'This store is locked because its subscription is overdue. Tap "Renew or pay subscription" on this screen to pay and restore access.' };
         }
-    } catch (e) { /* never block login */ }
+        const late = wdaeOverdueFrom(r[1], r[2]);
+        if (late > 0) {
+            try { db.ref('stores/' + storeId + '/status').set('suspended').catch(function () {}); } catch (e) {}
+            return { blocked: true, message: 'This store is locked because its subscription is ' + late + ' day' + (late === 1 ? '' : 's') + ' past due. Tap "Renew or pay subscription" on this screen to pay and restore access.' };
+        }
+    } catch (e) { /* could not check: let the sign-in continue */ }
+    return { blocked: false };
+}
+
+// Sign the person out and return to the login screen with a message.
+function wdaeKickOut(message) {
+    try {
+        if (typeof window.logout === 'function') window.logout();
+        else { currentStoreId = ''; currentUserRole = ''; }
+    } catch (e) {}
+    try { firebase.auth().signOut().catch(function () {}); } catch (e) {}
+    try { switchView('login-view'); } catch (e) {}
+    setTimeout(function () { wdaeSetLoginMessage(message, false); }, 60);
+}
+
+// Background re-check of the remembered store list (only used after a fast, cached login).
+async function wdaeRefreshMemberships(resolved) {
+    try {
+        const fresh = await wdaeResolveAllMemberships(resolved.uid, resolved.email);
+        if (currentStoreId !== resolved.storeId) return;               // already logged out / switched
+        if (fresh.length === 0) {
+            if (fresh.readFailed) return;                              // bad connection: change nothing
+            wdaeClearCache(resolved.uid);
+            wdaeKickOut('This account is not linked to a store any more. Ask your store owner to add you.');
+            return;
+        }
+        const same = fresh.find(function (m) { return m.kind === 'member' && m.storeId === resolved.storeId; });
+        if (!same) {
+            wdaeKickOut('You no longer have access to this store.');
+            return;
+        }
+        if (same.role !== currentUserRole || (same.branchId || 'main') !== currentBranch) {
+            currentUserRole = same.role;
+            currentBranch = same.branchId || 'main';
+            try { if (typeof adjustSidebarForRole === 'function') adjustSidebarForRole(same.role); } catch (e) {}
+        }
+    } catch (e) { /* never disturb a working session */ }
+}
+
+// =====================================================================
+// COMPLETE LOGIN
+// =====================================================================
+async function wdaeCompleteLogin(resolved, opts) {
+    opts = opts || {};
+
+    // Record login for security analytics (Super Admin Security panel) — delayed so the dashboard data goes first
+    setTimeout(function () {
+        try {
+            if (typeof window.wdlaRecordLogin === 'function') {
+                window.wdlaRecordLogin(
+                    resolved.kind === 'super' ? 'SUPER_ADMIN' : resolved.storeId,
+                    resolved.uid,
+                    resolved.email
+                );
+            }
+        } catch (e) { /* never block login */ }
+    }, 3000);
 
     if (resolved.kind === 'super') {
         currentStoreId = 'SUPER_ADMIN';
@@ -420,6 +502,9 @@ async function wdaeCompleteLogin(resolved) {
         return;
     }
 
+    // Start the subscription check straight away; it runs while everything below loads.
+    const gateP = wdaeGate(resolved.storeId);
+
     currentStoreId = resolved.storeId;
     currentUserRole = resolved.role;
     currentBranch = resolved.branchId || 'main';
@@ -434,19 +519,42 @@ async function wdaeCompleteLogin(resolved) {
 
     if (typeof adjustSidebarForRole === 'function') adjustSidebarForRole(resolved.role);
 
-    try {
-        if (typeof loadBranchesCache === 'function') loadBranchesCache(function () {
-            if (resolved.role === 'Accountant' || resolved.role === 'Cashier') switchView('accountant-view');
-            else if (resolved.role === 'Standard Worker') switchView('pos-view');
-            else switchView('main-dashboard-view');
-        });
-    } catch (e) { switchView('pos-view'); }
-
+    // Start every data loader now (none of them waits for the others)
+    const branchesReady = new Promise(function (resolve) {
+        let done = false;
+        const fin = function () { if (!done) { done = true; resolve(); } };
+        try {
+            if (typeof loadBranchesCache === 'function') loadBranchesCache(fin); else fin();
+        } catch (e) { fin(); }
+        setTimeout(fin, 2500);                                         // safety net: never hang on the branch list
+    });
     try { if (typeof syncOfflineQueueToFirebase === 'function') syncOfflineQueueToFirebase(); } catch (e) {}
     try { if (typeof subscribeCustomersCache === 'function') subscribeCustomersCache(); } catch (e) {}
     try { if (typeof subscribeSuppliersCache === 'function') subscribeSuppliersCache(); } catch (e) {}
     try { if (typeof loadSuppliersCache === 'function') loadSuppliersCache(); } catch (e) {}
     try { if (typeof resetIdleTimer === 'function') resetIdleTimer(); } catch (e) {}
+
+    // Open the dashboard when the branch list is ready AND the subscription check is done — but never wait
+    // more than 1.5 s for the check; it then finishes behind the dashboard.
+    const gateEarly = Promise.race([gateP, new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]);
+    const parts = await Promise.all([branchesReady, gateEarly]);
+    const g = parts[1];
+
+    if (g && g.blocked) { wdaeKickOut(g.message); return; }
+    if (currentStoreId !== resolved.storeId) return;                   // logged out in the meantime
+
+    try {
+        if (resolved.role === 'Accountant' || resolved.role === 'Cashier') switchView('accountant-view');
+        else if (resolved.role === 'Standard Worker') switchView('pos-view');
+        else switchView('main-dashboard-view');
+    } catch (e) { try { switchView('pos-view'); } catch (e2) {} }
+
+    if (!g) {
+        gateP.then(function (late) {
+            if (late && late.blocked && currentStoreId === resolved.storeId) wdaeKickOut(late.message);
+        });
+    }
+    if (opts.fromCache) wdaeRefreshMemberships(resolved);
 }
 
 // =====================================================================
@@ -871,7 +979,8 @@ function wdaeInstallStaffHooks() {
 // =====================================================================
 function wdaeInstall() {
     if (wdaeOff()) { console.log('[email-auth-patch] disabled on this device'); return; }
-    wdaeBuildLoginScreen();
+    // v7: build the card once. On page load only rebuild it if another file replaced it (so typing is never wiped).
+    if (!document.getElementById('wdae-email')) wdaeBuildLoginScreen();
     wdaeInstallStaffHooks();
     console.log('[email-auth-patch] email login active');
 }
