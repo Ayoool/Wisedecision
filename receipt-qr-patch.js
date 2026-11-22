@@ -1,6 +1,8 @@
-// ==================== WISE DECISION RECEIPT QR CODE PATCH (v8.1) ====================
+// ==================== WISE DECISION RECEIPT QR CODE PATCH (v8.2) ====================
 // Load AFTER store-logo-patch.js.
 //
+// v8.2: QR made smaller (about 70px) using whole-pixel modules so it stays sharp
+//       and scannable. Size is set by WDQ_CELL / WDQ_MARGIN below.
 // v8.1: QR made smaller (100px) with tighter spacing to save paper.
 // v8:   Respects a per-store flag stores/{storeId}/showQR set from the Super Admin
 //       dashboard. When OFF, no QR appears on that store's receipts.
@@ -8,7 +10,14 @@
 // v7:   Store name/address/phone fetched from Firebase (not the receipt DOM).
 // v6:   QR library loads eagerly at page start with 3 CDN fallbacks.
 
-console.log("Wise Decision receipt-qr-patch.js — v8.1 loaded");
+console.log("Wise Decision receipt-qr-patch.js — v8.2 loaded");
+
+// ---------- QR size ----------
+// Each QR square (module) is WDQ_CELL pixels. Keep it a whole number so the
+// code prints sharp. 2 = small (about 70px), 3 = larger and easier to scan (about 105px).
+// WDQ_MARGIN is the blank border (in squares) inside the image; the white paper adds more.
+var WDQ_CELL = 2;
+var WDQ_MARGIN = 1;
 
 // ---------- QR library (eager + multi-CDN fallback) ----------
 var wdqLibReady = null;
@@ -192,12 +201,13 @@ function wdqRenderQR(holder, url) {
             var qr = qrFactory(0, 'M');
             qr.addData(url);
             qr.make();
-            var dataUrl = qr.createDataURL(4, 2);
+            var dataUrl = qr.createDataURL(WDQ_CELL, WDQ_MARGIN);
+            var px = (qr.getModuleCount() + 2 * WDQ_MARGIN) * WDQ_CELL;
             holder.innerHTML = '';
             var img = document.createElement('img');
             img.src = dataUrl;
             img.alt = '';
-            img.style.cssText = 'display:block; margin:0 auto; width:100px; height:100px; image-rendering:pixelated;';
+            img.style.cssText = 'display:block; margin:0 auto; width:' + px + 'px; height:' + px + 'px; image-rendering:pixelated;';
             holder.appendChild(img);
         } catch (e) {
             console.error('[qr] render failed:', e);
@@ -268,7 +278,7 @@ function wdqInject(containerId) {
             var holderId = 'wdq-qr-' + containerId;
             wrap.innerHTML =
                 '<div style="font-size:9px; color:#555; letter-spacing:0.5px; margin-bottom:4px;">SCAN TO VERIFY</div>' +
-                '<div id="' + holderId + '" style="display:inline-block; padding:2px; background:#fff; min-width:100px; min-height:100px;"></div>' +
+                '<div id="' + holderId + '" style="display:inline-block; padding:2px; background:#fff; min-width:70px; min-height:70px;"></div>' +
                 '<div style="font-size:9px; color:#888; margin-top:4px;">' + data.receiptId + '</div>';
 
             container.appendChild(wrap);
