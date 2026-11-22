@@ -1,13 +1,14 @@
-// ==================== WISE DECISION RECEIPT QR CODE PATCH (v8) ====================
+// ==================== WISE DECISION RECEIPT QR CODE PATCH (v8.1) ====================
 // Load AFTER store-logo-patch.js.
 //
-// v8: Respects a per-store flag stores/{storeId}/showQR set from the Super Admin
-//     dashboard. When OFF, no QR appears on that store's receipts.
-//     Default = ON, so existing stores keep QR until explicitly disabled.
-// v7: Store name/address/phone fetched from Firebase (not the receipt DOM).
-// v6: QR library loads eagerly at page start with 3 CDN fallbacks.
+// v8.1: QR made smaller (100px) with tighter spacing to save paper.
+// v8:   Respects a per-store flag stores/{storeId}/showQR set from the Super Admin
+//       dashboard. When OFF, no QR appears on that store's receipts.
+//       Default = ON, so existing stores keep QR until explicitly disabled.
+// v7:   Store name/address/phone fetched from Firebase (not the receipt DOM).
+// v6:   QR library loads eagerly at page start with 3 CDN fallbacks.
 
-console.log("Wise Decision receipt-qr-patch.js — v8 loaded");
+console.log("Wise Decision receipt-qr-patch.js — v8.1 loaded");
 
 // ---------- QR library (eager + multi-CDN fallback) ----------
 var wdqLibReady = null;
@@ -196,7 +197,7 @@ function wdqRenderQR(holder, url) {
             var img = document.createElement('img');
             img.src = dataUrl;
             img.alt = '';
-            img.style.cssText = 'display:block; margin:0 auto; width:140px; height:140px; image-rendering:pixelated;';
+            img.style.cssText = 'display:block; margin:0 auto; width:100px; height:100px; image-rendering:pixelated;';
             holder.appendChild(img);
         } catch (e) {
             console.error('[qr] render failed:', e);
@@ -262,12 +263,12 @@ function wdqInject(containerId) {
             var wrap = document.createElement('div');
             wrap.className = 'wdq-qr-wrap';
             wrap.style.cssText =
-                'text-align:center; margin-top:12px; padding-top:8px; ' +
+                'text-align:center; margin-top:6px; padding-top:6px; ' +
                 'border-top:1px dashed #ccc; font-family:monospace;';
             var holderId = 'wdq-qr-' + containerId;
             wrap.innerHTML =
                 '<div style="font-size:9px; color:#555; letter-spacing:0.5px; margin-bottom:4px;">SCAN TO VERIFY</div>' +
-                '<div id="' + holderId + '" style="display:inline-block; padding:3px; background:#fff; min-width:140px; min-height:140px;"></div>' +
+                '<div id="' + holderId + '" style="display:inline-block; padding:2px; background:#fff; min-width:100px; min-height:100px;"></div>' +
                 '<div style="font-size:9px; color:#888; margin-top:4px;">' + data.receiptId + '</div>';
 
             container.appendChild(wrap);
