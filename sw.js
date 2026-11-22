@@ -2,7 +2,7 @@
 // Files are fetched from the network first (so you always get your latest deploy while
 // online) and only fall back to the saved copy when the network is down or very slow.
 
-const CACHE = 'wd-shell-v185'; // Bumped to add materials-modern-patch.js
+const CACHE = 'wd-shell-v186'; // Bumped to add materials-modern-patch.js
 const PRECACHE = [
     './app.html',
     './verify.html',
@@ -71,6 +71,7 @@ const PRECACHE = [
     './payment-quick-patch.js',
     './white-label-patch.js',
     './white-label-admin-patch.js',
+    './pos-laptop-patch.js',
     'https://js.paystack.co/v2/inline.js',
     'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
     'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js',
