@@ -1,11 +1,12 @@
-// ==================== WISE DECISION STORE LOGO PATCH (v2) ====================
+// ==================== WISE DECISION STORE LOGO PATCH (v2.1) ====================
 // Load AFTER all other patches, just before </body>.
 //
-// v2: Added a per-store "Show logo on receipts" toggle. Each store owner can
-//     keep their logo uploaded but hide it from printed receipts.
-//     Default = ON, so existing stores keep their logos.
+// v2:   Added a per-store "Show logo on receipts" toggle. Each store owner can
+//       keep their logo uploaded but hide it from printed receipts.
+//       Default = ON, so existing stores keep their logos.
+// v2.1: Receipt logo made smaller (max 60 x 30 px) to save paper.
 
-console.log("Wise Decision store-logo-patch.js — v2 loaded");
+console.log("Wise Decision store-logo-patch.js — v2.1 loaded");
 
 // ---------- CONFIG ----------
 var WDL_MAX_DIM = 400;
@@ -267,7 +268,7 @@ function wdLogoInjectIntoReceipts() {
 
             var img = document.createElement('img');
             img.className = 'wd-receipt-logo';
-            img.style.cssText = 'display:block; margin: 0 auto 10px auto; max-width: 140px; max-height: 80px; object-fit: contain;';
+            img.style.cssText = 'display:block; margin: 0 auto 3px auto; max-width: 60px; max-height: 30px; object-fit: contain;';
             img.alt = '';
 
             if (t.anchor && wdlEl(t.anchor)) {
