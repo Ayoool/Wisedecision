@@ -1,4 +1,4 @@
-// ==================== WISE DECISION BARCODE SCANNING PATCH (v1) ====================
+// ==================== WISE DECISION BARCODE SCANNING PATCH (v2) ====================
 // Load LAST in app.html (after modern-polish-patch.js).
 //
 // For the normal POS Sales + Inventory screens (pharmacy / retail / grocery):
@@ -14,7 +14,7 @@
     'use strict';
     if (window.__wdsBarcodeLoaded) return;
     window.__wdsBarcodeLoaded = true;
-    console.log('Wise Decision barcode-patch.js — v1 loaded');
+    console.log('Wise Decision barcode-patch.js — v2 loaded');
 
     // ---------- small helpers ----------
     function q(sel) { return document.querySelector(sel); }
@@ -380,19 +380,63 @@
         cam.overlay = null; cam.video = null;
     }
 
-    function startCamera(video, onRaw) {
+    function zxHints() {
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+            ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF, ZXing.BarcodeFormat.QR_CODE
+        ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        return hints;
+    }
+
+    // Read a barcode from a still photo (taken with the iPhone's own camera = sharp + well focused)
+    function decodePhoto(file) {
+        return new Promise(function (resolve, reject) {
+            var url = URL.createObjectURL(file);
+            var img = new Image();
+            img.onload = function () {
+                URL.revokeObjectURL(url);
+                var w = img.naturalWidth, h = img.naturalHeight, sc = Math.min(1, 1800 / Math.max(w, h));
+                var c = document.createElement('canvas');
+                c.width = Math.round(w * sc); c.height = Math.round(h * sc);
+                c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                function viaZXing() {
+                    return loadZXing().then(function () {
+                        var reader = new ZXing.BrowserMultiFormatReader(zxHints());
+                        return reader.decodeFromImageUrl(c.toDataURL('image/jpeg', 0.95)).then(function (r) { return r.getText(); });
+                    });
+                }
+                if ('BarcodeDetector' in window) {
+                    new window.BarcodeDetector().detect(c).then(function (r) {
+                        if (r && r.length) resolve(r[0].rawValue); else viaZXing().then(resolve, reject);
+                    }).catch(function () { viaZXing().then(resolve, reject); });
+                } else {
+                    viaZXing().then(resolve, reject);
+                }
+            };
+            img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not open that photo')); };
+            img.src = url;
+        });
+    }
+
+    function startCamera(video, onRaw, stage) {
+        var HD = { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } };
+
         if ('BarcodeDetector' in window) {
             // Android / Chrome: built-in detector (fast)
+            stage('Starting camera…');
             return Promise.resolve().then(function () {
                 return window.BarcodeDetector.getSupportedFormats ? window.BarcodeDetector.getSupportedFormats() : [];
             }).then(function (supported) {
                 var wanted = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code'].filter(function (f) { return !supported.length || supported.indexOf(f) !== -1; });
                 var detector = new window.BarcodeDetector(wanted.length ? { formats: wanted } : undefined);
-                return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(function (stream) {
+                return navigator.mediaDevices.getUserMedia({ video: HD, audio: false }).then(function (stream) {
                     cam.stream = stream;
                     video.srcObject = stream;
                     return video.play();
                 }).then(function () {
+                    stage('Looking for barcode…\nHold it 15–20 cm away, flat and steady');
                     var busy = false;
                     cam.timer = setInterval(function () {
                         if (busy || video.readyState < 2) return;
@@ -407,20 +451,18 @@
         }
 
         // iPhone / Safari: ZXing library
+        stage('Loading scanner…');
         return loadZXing().then(function () {
-            var hints = new Map();
-            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-                ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-                ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF, ZXing.BarcodeFormat.QR_CODE
-            ]);
-            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-            var reader = new ZXing.BrowserMultiFormatReader(hints, 200);
+            stage('Starting camera…');
+            var reader = new ZXing.BrowserMultiFormatReader(zxHints(), 150);
             cam.reader = reader;
             var cb = function (result) { if (result) onRaw(result.getText()); };
             if (typeof reader.decodeFromConstraints === 'function') {
-                return reader.decodeFromConstraints({ video: { facingMode: 'environment' }, audio: false }, video, cb);
+                return reader.decodeFromConstraints({ video: HD, audio: false }, video, cb);
             }
             return reader.decodeFromVideoDevice(undefined, video, cb);
+        }).then(function () {
+            stage('Looking for barcode…\nHold it 15–20 cm away, flat and steady');
         });
     }
 
@@ -428,8 +470,7 @@
     function openCamera(opts) {
         closeCamera();
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            toast('This browser cannot open the camera here.', true);
-            return;
+            toast('This browser cannot open the camera here. Use Take photo or type the number.', true);
         }
 
         var ov = mk('div', 'position:fixed; inset:0; background:#000; z-index:3000; display:flex; flex-direction:column;');
@@ -446,14 +487,26 @@
         bar.appendChild(done);
         ov.appendChild(bar);
 
-        var frame = mk('div', 'position:absolute; z-index:1; left:50%; top:45%; width:78%; max-width:360px; height:150px; transform:translate(-50%,-50%); border:3px solid #22c55e; border-radius:14px; box-shadow:0 0 0 9999px rgba(0,0,0,0.35);');
+        var frame = mk('div', 'position:absolute; z-index:1; left:50%; top:42%; width:84%; max-width:380px; height:130px; transform:translate(-50%,-50%); border:3px solid #22c55e; border-radius:14px; box-shadow:0 0 0 9999px rgba(0,0,0,0.35);');
         ov.appendChild(frame);
 
-        var status = mk('div', 'position:absolute; z-index:2; left:0; right:0; bottom:0; padding:16px; padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px)); background:linear-gradient(#0000, #000c); color:#fff; text-align:center; font-size:14px; font-weight:bold;', 'Point the camera at the barcode');
-        ov.appendChild(status);
+        var foot = mk('div', 'position:absolute; z-index:3; left:0; right:0; bottom:0; padding:12px 16px; padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); background:linear-gradient(#0000, #000d); color:#fff; text-align:center;');
+        var status = mk('div', 'font-size:14px; font-weight:bold; white-space:pre-line; margin-bottom:10px; color:#e2e8f0;', 'Starting…');
+        foot.appendChild(status);
+        var tools = mk('div', 'display:flex; gap:8px; justify-content:center;');
+        var btnCss = 'flex:1; max-width:180px; padding:11px 8px; border:none; border-radius:10px; background:#fff; color:#0f172a; font-weight:bold; font-size:13px;';
+        var photoBtn = mk('button', btnCss, '📸 Take photo');
+        var typeBtn = mk('button', btnCss, '⌨ Type number');
+        var file = mk('input', 'display:none;');
+        file.type = 'file'; file.accept = 'image/*'; file.setAttribute('capture', 'environment');
+        tools.appendChild(photoBtn); tools.appendChild(typeBtn); tools.appendChild(file);
+        foot.appendChild(tools);
+        ov.appendChild(foot);
 
         document.body.appendChild(ov);
         cam.overlay = ov; cam.video = video;
+
+        var last = null, lastSeen = 0, gotAny = false;
 
         function setStatus(msg, bad) {
             var extra = '';
@@ -461,17 +514,17 @@
                 var total = currentCart.reduce(function (s, l) { return s + (Number(l.total) || 0); }, 0);
                 extra = '\nCart: ' + currentCart.length + ' line(s) · ₦' + total.toLocaleString();
             }
-            status.style.whiteSpace = 'pre-line';
             status.style.color = bad ? '#fca5a5' : '#86efac';
             status.textContent = msg + extra;
         }
+        function stage(msg) { if (cam.overlay && !gotAny) { status.style.color = '#e2e8f0'; status.textContent = msg; } }
 
-        var last = null, lastSeen = 0;
-        function onRaw(code) {
+        function onRaw(code, force) {
             if (!cam.overlay) return;
             var now = Date.now();
             // holding the same barcode in view must not add it again and again
-            if (code === last && now - lastSeen < 800) { lastSeen = now; return; }
+            if (!force && code === last && now - lastSeen < 800) { lastSeen = now; return; }
+            gotAny = true;
             last = code; lastSeen = now;
             var res = opts.onCode(code) || {};
             if (cam.overlay) setStatus(res.msg || code, res.ok === false);
@@ -479,10 +532,33 @@
             if (!opts.continuous && res.ok !== false) closeCamera();
         }
 
-        startCamera(video, onRaw).catch(function (err) {
+        photoBtn.onclick = function () { file.click(); };
+        file.onchange = function () {
+            var f = file.files && file.files[0];
+            if (!f) return;
+            gotAny = true;
+            setStatus('Reading the photo…');
+            decodePhoto(f).then(function (code) { onRaw(code, true); })
+                .catch(function () { setStatus('No barcode found in that photo. Retake it closer, flat, in good light.', true); });
+            file.value = '';
+        };
+        typeBtn.onclick = function () {
+            var v = prompt('Type the number printed under the barcode:');
+            if (v && v.trim()) onRaw(v.trim(), true);
+        };
+
+        setTimeout(function () {
+            if (cam.overlay && !gotAny) {
+                status.style.color = '#fde68a';
+                status.textContent = 'Still looking…\nMove a little closer or further, avoid glare, or use 📸 Take photo / ⌨ Type number.';
+            }
+        }, 8000);
+
+        startCamera(video, onRaw, stage).catch(function (err) {
+            gotAny = true;
             var m = (err && err.name === 'NotAllowedError')
-                ? 'Camera blocked. Allow camera access for this site in your phone settings, then try again.'
-                : ('Camera error: ' + ((err && err.message) || err));
+                ? 'Camera blocked. Allow camera access for this site in iPhone Settings, then try again.\n(You can still use 📸 Take photo or ⌨ Type number.)'
+                : ('Camera could not start: ' + ((err && err.message) || err) + '\n(You can still use 📸 Take photo or ⌨ Type number.)');
             if (cam.overlay) setStatus(m, true);
         });
     }
