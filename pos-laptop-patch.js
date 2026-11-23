@@ -1,4 +1,4 @@
-// ==================== WISE DECISION POS LAYOUT + ONE-BOX PRODUCT SEARCH PATCH (v2.2) ====================
+// ==================== WISE DECISION POS LAYOUT + ONE-BOX PRODUCT SEARCH PATCH (v3) ====================
 // Load LAST in app.html (after payment-quick-patch.js).
 //
 // v2: "Search Product" and "Select Product" are now ONE box. You type, the matching products appear right
@@ -6,10 +6,13 @@
 //     still used behind the scenes, so cart, stock, prices and the barcode scanner work exactly as before.
 //
 // Laptops / desktops (screen 821px and wider) also get:
+//   - Tidy one-row toolbar (Retail/Wholesale and Pack/Piece toggles) and a slim one-line customer strip
 //   - Two columns: products on the left, the cart on the right (always visible)
 //   - Big Grand Total and a big Pay button
 //   - Keyboard (no function keys): up/down = choose, Enter = add to cart, Esc = clear search / close popup
 //   - Payment popup: wider, big total; Enter = accept, C = Cash, T = Transfer / POS, S = Split, Esc = cancel
+//
+// Also restyles: customer search list, Held Carts popup and the on-screen receipt to match the payment popup.
 //
 // Uses the store's own theme colours when there are any, plain blue otherwise.
 
@@ -17,7 +20,7 @@
     'use strict';
     if (window.__wdlLaptop) return;
     window.__wdlLaptop = true;
-    console.log('Wise Decision pos-laptop-patch.js — v2.2 loaded');
+    console.log('Wise Decision pos-laptop-patch.js — v3 loaded');
 
     var MIN = 821, MAXROWS = 60;
 
@@ -61,8 +64,34 @@
         '.wdl-more{padding:10px; text-align:center; color:' + MUT + '; font-size:12px; border-top:1px solid #f1f5f9;}' +
         '#wdl-hint kbd, #wdl-pay-hint kbd{background:#f1f5f9; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:5px; padding:0 6px; font:700 11px/1.6 inherit; color:#334155;}' +
 
+        /* ---- other POS screens: customer search list, Held Carts popup, receipt screen (all sizes) ---- */
+        '.wdl-seg{display:contents;}' +
+        '#pos-customer-results{border-radius:12px !important; box-shadow:0 14px 32px rgba(15,23,42,.14) !important; border-color:#e2e8f0 !important; overflow:hidden;}' +
+        '#pos-customer-results > div{padding:11px 14px !important; font-size:14px !important;}' +
+        '#pos-customer-results > div:hover{background:#f1f5f9;}' +
+        '#held-carts-modal > div{max-width:600px !important; padding:24px !important; border-radius:18px !important;}' +
+        '#held-carts-modal h3{font-size:20px !important;}' +
+        '#held-carts-modal th{font-size:11px !important; text-transform:uppercase; letter-spacing:.6px; color:' + MUT + ' !important; background:transparent !important; border-bottom:1px solid ' + LINE + ' !important;}' +
+        '#held-carts-modal td{padding:12px 10px !important;}' +
+        '#held-carts-modal .menu-btn{border-radius:10px !important; font-weight:800 !important; padding:8px 14px !important;}' +
+        'body.wdl-receipt #workspace-content div:has(> button[onclick="window.print()"]){gap:10px !important; margin-bottom:18px !important;}' +
+        'body.wdl-receipt #workspace-content div:has(> button[onclick="window.print()"]) > button{padding:12px 18px !important; border-radius:12px !important; font-size:14px !important; font-weight:800 !important;}' +
+        'body.wdl-receipt #printable-receipt-box, body.wdl-receipt #printable-refund-receipt-box, body.wdl-receipt #printable-debt-receipt-box{max-width:360px !important; padding:26px 24px !important; border:none !important; border-radius:12px !important; box-shadow:0 12px 32px rgba(15,23,42,.14);}' +
+
         /* ---- laptop layout ---- */
         '@media (min-width:' + MIN + 'px){' +
+        ' body.wdl-pos .wdl-lbl{display:none !important;}' +
+        ' body.wdl-pos .wdl-bar{display:flex !important; flex-wrap:wrap; align-items:center; gap:8px 10px !important; margin:10px 0 12px 0 !important;}' +
+        ' body.wdl-pos .wdl-bar > *{margin:0 !important; font-size:13px !important;}' +
+        ' body.wdl-pos .wdl-bar > :not(.wdl-seg):not(.wdl-lbl){padding:8px 12px !important; border-radius:10px !important; white-space:nowrap; width:auto !important;}' +
+        ' body.wdl-pos .wdl-bar > .wdl-right{margin-left:auto !important;}' +
+        ' body.wdl-pos .wdl-seg{display:inline-flex; background:#e2e8f0; border-radius:12px; padding:3px; gap:2px;}' +
+        ' body.wdl-pos .wdl-seg > button{margin:0 !important; border:none !important; border-radius:9px !important; padding:8px 16px !important; font-size:13px !important; box-shadow:none !important; width:auto !important; white-space:nowrap;}' +
+        ' body.wdl-pos .wdl-cust{display:flex !important; align-items:center; flex-wrap:wrap; gap:8px 16px; padding:10px 16px !important; margin-bottom:12px !important;}' +
+        ' body.wdl-pos .wdl-cust > label{margin:0 !important; font-size:13px !important; white-space:nowrap;}' +
+        ' body.wdl-pos .wdl-cust > div:nth-of-type(1){flex:0 1 360px; min-width:220px; margin:0 !important;}' +
+        ' body.wdl-pos .wdl-cust #pos-customer-search{padding:9px 12px !important; font-size:14px !important; width:100% !important; max-width:none !important;}' +
+        ' body.wdl-pos .wdl-cust #pos-selected-customer-badge{margin:0 0 0 auto !important; font-size:14px !important;}' +
         ' body.wdl-pos #workspace-content h2{font-size:24px !important; margin-bottom:4px !important;}' +
         ' body.wdl-pos .pos-grid{display:grid !important; grid-template-columns:minmax(0,1.3fr) minmax(380px,0.8fr) !important; gap:18px !important; align-items:start !important; margin-top:12px !important;}' +
         ' body.wdl-pos .pos-grid > div:nth-child(2){position:sticky; top:12px; display:flex !important; flex-direction:column; max-height:calc(100vh - 30px); box-sizing:border-box;}' +
@@ -236,6 +265,28 @@
         anchorGroup.parentNode.insertBefore(h, anchorGroup.nextSibling);
     }
 
+    // toolbar: Retail/Wholesale and Pack/Piece become two neat toggles; customer card becomes one slim strip
+    function layoutPos() {
+        var retail = ws('#btn-type-retail'), wholesale = ws('#btn-type-wholesale'), pack = ws('#btn-unit-pack'), piece = ws('#btn-unit-piece');
+        if (retail && wholesale && pack && piece && retail.parentNode && pack.parentNode && !retail.parentNode.classList.contains('wdl-seg')) {
+            var bar = retail.parentNode;
+            bar.classList.add('wdl-bar');
+            [retail.previousElementSibling, pack.previousElementSibling].forEach(function (lb) {
+                if (lb && lb.tagName === 'SPAN' && /tier|sell by/i.test(lb.textContent || '')) lb.classList.add('wdl-lbl');
+            });
+            var s1 = mk('div', 'wdl-seg'), s2 = mk('div', 'wdl-seg');
+            retail.parentNode.insertBefore(s1, retail); s1.appendChild(retail); s1.appendChild(wholesale);
+            pack.parentNode.insertBefore(s2, pack); s2.appendChild(pack); s2.appendChild(piece);
+            retail.title = 'Retail prices'; wholesale.title = 'Wholesale prices';
+            pack.title = 'Sell whole packs'; piece.title = 'Sell single pieces';
+            var bl = ws('#pos-branch-label');
+            if (bl && bl.parentElement && bl.parentElement.parentNode === bar) bl.parentElement.classList.add('wdl-right');
+        }
+        var cs = ws('#pos-customer-search');
+        var card = cs && cs.parentNode && cs.parentNode.parentNode;
+        if (card && !card.classList.contains('wdl-cust')) card.classList.add('wdl-cust');
+    }
+
     function tick() {
         try {
             if (!document.body) return;
@@ -252,7 +303,9 @@
 
             var sel = posSel();
             document.body.classList.toggle('wdl-pos', !!sel);
+            document.body.classList.toggle('wdl-receipt', !!(ws('#printable-receipt-box') || ws('#printable-refund-receipt-box') || ws('#printable-debt-receipt-box')));
             if (!sel) { wasPos = false; return; }
+            layoutPos();
 
             var search = ws('#pos-search-input');
             if (!search) return;
