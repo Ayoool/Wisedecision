@@ -1,4 +1,4 @@
-// ==================== WISE DECISION POS LAYOUT + ONE-BOX PRODUCT SEARCH PATCH (v3) ====================
+// ==================== WISE DECISION POS LAYOUT + ONE-BOX PRODUCT SEARCH PATCH (v3.1) ====================
 // Load LAST in app.html (after payment-quick-patch.js).
 //
 // v2: "Search Product" and "Select Product" are now ONE box. You type, the matching products appear right
@@ -12,7 +12,7 @@
 //   - Keyboard (no function keys): up/down = choose, Enter = add to cart, Esc = clear search / close popup
 //   - Payment popup: wider, big total; Enter = accept, C = Cash, T = Transfer / POS, S = Split, Esc = cancel
 //
-// Also restyles: customer search list, Held Carts popup and the on-screen receipt to match the payment popup.
+// Also restyles: customer search list and Held Carts popup to match the payment popup. (The receipt screen is left as it was.)
 //
 // Uses the store's own theme colours when there are any, plain blue otherwise.
 
@@ -20,7 +20,7 @@
     'use strict';
     if (window.__wdlLaptop) return;
     window.__wdlLaptop = true;
-    console.log('Wise Decision pos-laptop-patch.js — v3 loaded');
+    console.log('Wise Decision pos-laptop-patch.js — v3.1 loaded');
 
     var MIN = 821, MAXROWS = 60;
 
@@ -64,7 +64,7 @@
         '.wdl-more{padding:10px; text-align:center; color:' + MUT + '; font-size:12px; border-top:1px solid #f1f5f9;}' +
         '#wdl-hint kbd, #wdl-pay-hint kbd{background:#f1f5f9; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:5px; padding:0 6px; font:700 11px/1.6 inherit; color:#334155;}' +
 
-        /* ---- other POS screens: customer search list, Held Carts popup, receipt screen (all sizes) ---- */
+        /* ---- other POS screens: customer search list, Held Carts popup (all sizes) ---- */
         '.wdl-seg{display:contents;}' +
         '#pos-customer-results{border-radius:12px !important; box-shadow:0 14px 32px rgba(15,23,42,.14) !important; border-color:#e2e8f0 !important; overflow:hidden;}' +
         '#pos-customer-results > div{padding:11px 14px !important; font-size:14px !important;}' +
@@ -74,9 +74,6 @@
         '#held-carts-modal th{font-size:11px !important; text-transform:uppercase; letter-spacing:.6px; color:' + MUT + ' !important; background:transparent !important; border-bottom:1px solid ' + LINE + ' !important;}' +
         '#held-carts-modal td{padding:12px 10px !important;}' +
         '#held-carts-modal .menu-btn{border-radius:10px !important; font-weight:800 !important; padding:8px 14px !important;}' +
-        'body.wdl-receipt #workspace-content div:has(> button[onclick="window.print()"]){gap:10px !important; margin-bottom:18px !important;}' +
-        'body.wdl-receipt #workspace-content div:has(> button[onclick="window.print()"]) > button{padding:12px 18px !important; border-radius:12px !important; font-size:14px !important; font-weight:800 !important;}' +
-        'body.wdl-receipt #printable-receipt-box, body.wdl-receipt #printable-refund-receipt-box, body.wdl-receipt #printable-debt-receipt-box{max-width:360px !important; padding:26px 24px !important; border:none !important; border-radius:12px !important; box-shadow:0 12px 32px rgba(15,23,42,.14);}' +
 
         /* ---- laptop layout ---- */
         '@media (min-width:' + MIN + 'px){' +
@@ -303,7 +300,6 @@
 
             var sel = posSel();
             document.body.classList.toggle('wdl-pos', !!sel);
-            document.body.classList.toggle('wdl-receipt', !!(ws('#printable-receipt-box') || ws('#printable-refund-receipt-box') || ws('#printable-debt-receipt-box')));
             if (!sel) { wasPos = false; return; }
             layoutPos();
 
