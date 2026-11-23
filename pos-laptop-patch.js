@@ -1,8 +1,8 @@
-// ==================== WISE DECISION POS LAYOUT + ONE-BOX PRODUCT SEARCH PATCH (v2.1) ====================
+// ==================== WISE DECISION POS LAYOUT + ONE-BOX PRODUCT SEARCH PATCH (v2.2) ====================
 // Load LAST in app.html (after payment-quick-patch.js).
 //
 // v2: "Search Product" and "Select Product" are now ONE box. You type, the matching products appear right
-//     under the box, tap/click one to pick it. (Works on phones AND laptops.) The old dropdown is hidden but
+//     under the box, tap/click one to pick it. Nothing is listed until you type. (Works on phones AND laptops.) The old dropdown is hidden but
 //     still used behind the scenes, so cart, stock, prices and the barcode scanner work exactly as before.
 //
 // Laptops / desktops (screen 821px and wider) also get:
@@ -17,7 +17,7 @@
     'use strict';
     if (window.__wdlLaptop) return;
     window.__wdlLaptop = true;
-    console.log('Wise Decision pos-laptop-patch.js — v2.1 loaded');
+    console.log('Wise Decision pos-laptop-patch.js — v2.2 loaded');
 
     var MIN = 821, MAXROWS = 60;
 
@@ -45,7 +45,7 @@
         '#wdl-hint, #wdl-pay-hint{display:none;}' +
 
         /* ---- one-box product search (all screen sizes) ---- */
-        'body.wdl-pos #pos-search-input{border-radius:12px 12px 0 0 !important; margin-bottom:0 !important;}' +
+        'body.wdl-pos #pos-search-input.wdl-open{border-radius:12px 12px 0 0 !important; margin-bottom:0 !important;}' +
         '#wdl-results{border:1px solid ' + LINE + '; border-top:none; border-radius:0 0 12px 12px; max-height:min(46vh,380px); overflow-y:auto; background:#fff; -webkit-overflow-scrolling:touch; margin-bottom:12px;}' +
         '.wdl-row{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 14px; cursor:pointer; border-top:1px solid #f1f5f9; color:#0f172a;}' +
         '.wdl-row:first-child{border-top:none;}' +
@@ -113,10 +113,13 @@
         try { return typeof formatStockLabel === 'function' ? formatStockLabel(it) : String(stockNum(it)); } catch (e) { return String(stockNum(it)); }
     }
 
-    function selectId(id, keepFocus) {
+    var collapsed = false;   // after you pick a product the list shrinks to just that product
+
+    function selectId(id, collapse) {
         var sel = posSel();
         if (!sel) return;
         sel.value = id;
+        collapsed = !!collapse;
         if (typeof onPosProductChange === 'function') onPosProductChange();
         render(true);
         var on = el('wdl-results') && el('wdl-results').querySelector('.wdl-row.on');
@@ -146,31 +149,49 @@
             list.id = 'wdl-results';
             list.addEventListener('click', function (e) {
                 var row = e.target.closest ? e.target.closest('.wdl-row') : null;
-                if (row) selectId(row.getAttribute('data-id'));
+                if (row) selectId(row.getAttribute('data-id'), true);
             });
             list.addEventListener('dblclick', function (e) {
                 var row = e.target.closest ? e.target.closest('.wdl-row') : null;
-                if (row) { selectId(row.getAttribute('data-id')); addCurrent(); }
+                if (row) { selectId(row.getAttribute('data-id'), true); addCurrent(); }
             });
             search.insertAdjacentElement('afterend', list);
         }
+
+        var q = search.value.trim();
+        var chosen = sel.value;
         var opts = options(sel);
-        var shown = opts.slice(0, MAXROWS);
+        var rows;
+        if (!q || (collapsed && chosen)) {
+            // nothing typed (or already picked): show only the picked product, never the whole inventory
+            rows = chosen ? opts.filter(function (o) { return o.value === chosen; }) : [];
+        } else {
+            rows = opts.slice(0, MAXROWS);
+        }
+
         var type = (typeof currentCustomerType !== 'undefined') ? currentCustomerType : '';
         var unit = (typeof currentSaleUnit !== 'undefined') ? currentSaleUnit : '';
-        var sig = type + '|' + unit + '|' + sel.value + '|' + search.value + '|' + opts.length + '|' +
-            shown.map(function (o) { var it = invItem(o.value); return o.value + ':' + (it ? stockNum(it) + ':' + priceOf(it) : o.textContent.length); }).join(',');
+        var sig = type + '|' + unit + '|' + chosen + '|' + q + '|' + collapsed + '|' + opts.length + '|' +
+            rows.map(function (o) { var it = invItem(o.value); return o.value + ':' + (it ? stockNum(it) + ':' + priceOf(it) : o.textContent.length); }).join(',');
         if (!force && sig === lastSig && list.parentNode) return;
         lastSig = sig;
 
         list.innerHTML = '';
-        if (!opts.length) {
-            list.appendChild(mk('div', 'wdl-empty', search.value ? 'No product matches “' + search.value + '”' : 'Loading products…'));
+        if (!q && !rows.length) {            // nothing typed, nothing picked: no list at all
+            list.style.display = 'none';
+            search.classList.remove('wdl-open');
             return;
         }
-        shown.forEach(function (o) {
+        list.style.display = '';
+        search.classList.add('wdl-open');
+
+        if (!rows.length) {
+            list.appendChild(mk('div', 'wdl-empty', opts.length ? '' : 'No product matches “' + search.value + '”'));
+            return;
+        }
+        rows.forEach(function (o) {
             var it = invItem(o.value);
-            var row = mk('div', 'wdl-row' + (sel.value === o.value ? ' on' : ''));
+            var row = mk('div', 'wdl-row' + (chosen === o.value ? ' on' : ''));
             row.setAttribute('data-id', o.value);
             var left = mk('div');
             var name = it ? (it.name || it.productName || 'Unnamed Item') : o.textContent.split(' (Stock')[0];
@@ -181,10 +202,12 @@
             row.appendChild(mk('div', 'wdl-p', it ? '₦' + Number(priceOf(it)).toLocaleString() : ''));
             list.appendChild(row);
         });
-        if (opts.length > MAXROWS) list.appendChild(mk('div', 'wdl-more', 'Showing the first ' + MAXROWS + ' — type more letters to narrow it down'));
+        if (q && !(collapsed && chosen) && opts.length > MAXROWS) {
+            list.appendChild(mk('div', 'wdl-more', 'Showing the first ' + MAXROWS + ' — type more letters to narrow it down'));
+        }
 
         // exactly one match and nothing chosen yet: choose it (so Enter / Add to Cart works straight away)
-        if (opts.length === 1 && !sel.value && search.value.trim()) {
+        if (q && opts.length === 1 && !chosen) {
             sel.value = opts[0].value;
             if (typeof onPosProductChange === 'function') onPosProductChange();
             lastSig = '';
@@ -263,7 +286,10 @@
     }
 
     document.addEventListener('input', function (e) {
-        if (e.target && e.target.id === 'pos-search-input') render(false);   // the app has already filtered the hidden dropdown
+        if (e.target && e.target.id === 'pos-search-input') { collapsed = false; render(false); }   // the app has already filtered the hidden dropdown
+    });
+    document.addEventListener('focusin', function (e) {
+        if (e.target && e.target.id === 'pos-search-input' && collapsed) { collapsed = false; render(false); }
     });
 
     // ---------- keyboard ----------
