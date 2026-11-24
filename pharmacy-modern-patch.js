@@ -1,4 +1,4 @@
-// ==================== WISE DECISION PHARMACY MODERN REDESIGN (v1) ====================
+// ==================== WISE DECISION PHARMACY MODERN REDESIGN (v2) ====================
 // Load LAST (after batch-expiry-patch.js and every other patch).  Pharmacy stores only.
 //
 // A store is treated as a pharmacy when EITHER
@@ -7,18 +7,22 @@
 // Setting modernUI does not change anything else about the store.
 //
 // What it does
-//   1. New look: dark sidebar with a bright accent, light page, rounded cards, 4 palettes (default Emerald).
+//   1. New look: dark sidebar with a bright accent (each button in its own rectangle), light page,
+//      rounded cards, 4 palettes (default Emerald).
 //   2. Logo + business name at the top of the sidebar and on the Store Overview (stores/{id}/logo, businessName).
 //   3. Store Overview: big sales card; the Inventory Health Alerts table becomes cards on phones
 //      (the "Alert Warning Status" column is no longer cut off).
 //   4. Categories: add / remove them (Categories page). They show in the product form's category field
 //      and as filter chips on Inventory (the chips drive the app's own Category filter).
 //   5. Inventory, POS, Settings, forms: same colours, rounded cards, fields and buttons.
+//   6. NEW: the Add / Edit product form has a new look. Every field is a soft tile with its label on top,
+//      laid out in two columns on a laptop (one column on a phone). Only the look and layout change:
+//      field ids, values, saving and every other patch work exactly as before.
 //
 // Data: stores/{id}/matCategories/{id} = { name } and stores/{id}/matTheme = 'emerald'|'amber'|'cobalt'|'mono'.
 // Nothing existing is changed or deleted.
 
-console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
+console.log("Wise Decision pharmacy-modern-patch.js — v2 loaded");
 
 (function () {
     'use strict';
@@ -254,6 +258,44 @@ console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
         }
     }
 
+    // ---------- product form: new look (layout only, nothing is renamed or removed) ----------
+    var FIELD_SEL = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=button]):not([type=submit]):not([type=image]), select, textarea';
+    function enhanceProductForm() {
+        var m = $('product-form-modal');
+        if (!m) { var c = $('inv-category'); if (c && c.closest) m = c.closest('[id$="-modal"]'); }
+        if (!m) return;
+        if (!m.classList.contains('wmp-pf')) m.classList.add('wmp-pf');
+        Array.prototype.forEach.call(m.querySelectorAll(FIELD_SEL), function (c) {
+            if (c.closest('.wmp-f') || c.closest('table') || c.closest('.wmp-chips')) return;
+            var par = c.parentNode; if (!par || par === m) return;
+            var label = null, p = c.previousElementSibling;
+            if (p && p.tagName === 'LABEL') label = p;
+            else if (c.id) {
+                var l = m.querySelector('label[for="' + c.id + '"]');
+                if (l && l.parentNode === par) label = l;
+            }
+            var holder;
+            var inside = par.querySelectorAll(FIELD_SEL).length;
+            if (par.tagName === 'DIV' && inside === 1 && par.children.length <= 5 && !par.querySelector('h1,h2,h3,table,form') && par.parentNode && par.parentNode.children.length > 1) {
+                holder = par;   // the field already has its own box: just restyle it
+            } else {
+                holder = document.createElement('div');
+                var first = label || c;
+                par.insertBefore(holder, first);
+                if (label) holder.appendChild(label);
+                holder.appendChild(c);
+                var nx = holder.nextElementSibling;
+                while (nx && (nx.tagName === 'SMALL' || nx.classList.contains('wmp-newcat') || nx.classList.contains('hint') || nx.classList.contains('help-text'))) {
+                    var after = nx.nextElementSibling; holder.appendChild(nx); nx = after;
+                }
+            }
+            holder.classList.add('wmp-f');
+            var lt = label ? (label.textContent || '') : (holder.querySelector('label') ? holder.querySelector('label').textContent : '');
+            if (c.tagName === 'TEXTAREA' || /name|description|note|remark|supplier/i.test(lt)) holder.classList.add('wide');
+            if (holder.parentNode) holder.parentNode.classList.add('wmp-g');
+        });
+    }
+
     // inventory chips: drive the app's own Category filter
     function injectInvBar() {
         var v = $('inventory-view'); if (!v || catsFor !== sid()) return;
@@ -309,6 +351,7 @@ console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
         var WS = P + '#workspace-content#workspace-content';
         var MD = P + '[id$="-modal"]';
         var SB = P + '#dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper .sidebar';
+        var PF = P + ':is(#product-form-modal,.wmp-pf)';   // :is() takes the id's weight, so these rules beat the general field rules
         var both = function (r) { return WS + ' ' + r + ',' + MD + ' ' + r; };
         var BTN = ['btn-action-primary', 'btn-dash', 'btn-pos', 'btn-inv', 'btn-acc', 'btn-rep', 'btn-exp', 'btn-staff', 'btn-cust', 'btn-supplier', 'btn-transfer', 'btn-branch', 'btn-sec', 'btn-subscription'];
         var prim = BTN.map(function (c) { return both('.menu-btn.' + c); }).join(',');
@@ -316,6 +359,8 @@ console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
         var TXT = ['input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([readonly])', 'select', 'textarea'];
         var fld = TXT.map(function (t) { return both(t); }).join(',');
         var fldF = TXT.map(function (t) { return both(t + ':focus'); }).join(',');
+        var pfCtl = ['input', 'select', 'textarea'].map(function (t) { return PF + ' .wmp-f ' + t; }).join(',');
+        var pfCtlF = ['input', 'select', 'textarea'].map(function (t) { return PF + ' .wmp-f ' + t + ':focus'; }).join(',');
 
         var css =
         // palettes
@@ -324,15 +369,17 @@ console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
         'body.wmp[data-wmp-theme=amber]{--wx-side:#15171c;--wx-side-acc:#f5b301;--wx-acc:#f5b301;--wx-acc-ink:#1a1300;--wx-soft:#fff4cc;--wx-bg:#f4f3ef;--wx-ink:#14161a;--wx-line:#e7e4dc;--wx-hero:linear-gradient(135deg,#15171c 0%,#2b2f38 100%);}' +
         'body.wmp[data-wmp-theme=mono]{--wx-side:#0a0a0a;--wx-side-acc:#ffffff;--wx-acc:#111111;--wx-soft:#ececec;--wx-bg:#f5f5f5;--wx-ink:#0a0a0a;--wx-line:#e4e4e4;--wx-hero:linear-gradient(135deg,#0a0a0a 0%,#2a2a2a 100%);}' +
 
-        // sidebar (also the phone drawer)
+        // sidebar (also the phone drawer) - each button is its own rectangle
         SB + '{background:var(--wx-side) !important;border-right:none !important;box-shadow:none !important;}' +
         SB + ' #dashboard-store-title{color:#fff !important;font-weight:900 !important;}' +
         SB + ' #user-role-label{color:#9aa1ad !important;font-weight:600 !important;}' +
         SB + ' #branch-badge-container span,' + SB + ' #branch-badge-container select{background:rgba(255,255,255,.08) !important;color:var(--wx-side-ink) !important;border:1px solid rgba(255,255,255,.14) !important;border-radius:10px !important;}' +
-        SB + ' .menu-btn{background:transparent !important;color:var(--wx-side-ink) !important;border:none !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 4px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:none !important;transform:none !important;}' +
-        SB + ' .menu-btn:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;}' +
-        SB + ' .menu-btn.wds-on,' + SB + ' .menu-btn.active{background:rgba(255,255,255,.1) !important;color:#fff !important;box-shadow:inset 3px 0 0 var(--wx-side-acc) !important;}' +
+        SB + ' .menu-btn{display:block !important;width:100% !important;box-sizing:border-box !important;background:rgba(255,255,255,.05) !important;color:var(--wx-side-ink) !important;border:1px solid rgba(255,255,255,.16) !important;border-radius:8px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:none !important;transform:none !important;}' +
+        SB + ' .menu-btn:hover{background:rgba(255,255,255,.1) !important;color:#fff !important;border:1px solid var(--wx-side-acc) !important;}' +
+        SB + ' .menu-btn.wds-on,' + SB + ' .menu-btn.active{background:rgba(255,255,255,.12) !important;color:#fff !important;border:1px solid var(--wx-side-acc) !important;box-shadow:inset 3px 0 0 var(--wx-side-acc) !important;}' +
+        SB + ' .menu-btn.wm-moved{display:none !important;}' +
         SB + ' .btn-logout{background:transparent !important;color:#fca5a5 !important;border:1px solid rgba(252,165,165,.3) !important;margin-top:10px !important;}' +
+        SB + ' .btn-logout:hover{background:rgba(252,165,165,.12) !important;border:1px solid rgba(252,165,165,.6) !important;}' +
         '#wmp-side-logo{display:block;width:46px;height:46px;border-radius:14px;object-fit:cover;background:#fff;margin:0 0 8px 0;}' +
         '#wmp-side-logo.ph{display:flex;align-items:center;justify-content:center;background:var(--wx-side-acc);color:var(--wx-side);font-weight:900;font-size:20px;}' +
 
@@ -349,6 +396,26 @@ console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
         fld + '{border:1px solid var(--wx-line) !important;border-radius:12px !important;background:var(--wx-surf) !important;color:var(--wx-ink) !important;font-weight:600 !important;}' +
         fldF + '{border-color:var(--wx-acc) !important;box-shadow:0 0 0 3px var(--wx-soft) !important;outline:none !important;}' +
         MD + ' > div{border:none !important;border-radius:22px !important;box-shadow:0 24px 60px rgba(10,12,16,.35) !important;}' +
+
+        // ----- Add / Edit product form: soft tiles, two columns on a laptop -----
+        PF + ' > div{width:min(780px,94vw) !important;max-width:94vw !important;max-height:92vh !important;overflow-y:auto !important;padding:28px !important;border-radius:26px !important;box-sizing:border-box !important;}' +
+        PF + ' h1,' + PF + ' h2,' + PF + ' h3{font-size:24px !important;font-weight:900 !important;letter-spacing:-.6px !important;margin:0 0 16px !important;color:var(--wx-ink) !important;}' +
+        PF + ' .wmp-g{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 14px;align-items:start;}' +
+        PF + ' .wmp-g > *:not(.wmp-f){grid-column:1/-1;}' +
+        PF + ' .wmp-g > .wmp-f.wide{grid-column:1/-1;}' +
+        PF + ' .wmp-f{background:var(--wx-bg) !important;border:1.5px solid var(--wx-line) !important;border-radius:16px !important;padding:10px 14px 9px !important;margin:0 !important;box-sizing:border-box !important;width:auto !important;transition:border-color .15s,box-shadow .15s,background .15s;}' +
+        PF + ' .wmp-f:focus-within{border-color:var(--wx-acc) !important;background:var(--wx-surf) !important;box-shadow:0 0 0 4px var(--wx-soft);}' +
+        PF + ' .wmp-f label{display:block !important;margin:0 0 3px !important;padding:0 !important;font-size:10px !important;font-weight:800 !important;letter-spacing:.9px !important;text-transform:uppercase !important;color:var(--wx-mut) !important;}' +
+        pfCtl + '{display:block;width:100% !important;max-width:100% !important;min-height:28px;border:none !important;border-radius:0 !important;background:transparent !important;box-shadow:none !important;outline:none !important;padding:3px 0 2px !important;margin:0 !important;font-size:16px !important;font-weight:700 !important;color:var(--wx-ink) !important;box-sizing:border-box !important;}' +
+        pfCtlF + '{border:none !important;box-shadow:none !important;outline:none !important;background:transparent !important;}' +
+        PF + ' .wmp-f textarea{min-height:72px;resize:vertical;}' +
+        PF + ' .wmp-f ::placeholder{color:#a3acb8;font-weight:600;}' +
+        PF + ' .wmp-f small,' + PF + ' .wmp-f .hint{display:block;margin-top:3px;font-size:11px;color:var(--wx-mut);font-weight:600;}' +
+        PF + ' .wmp-f .wmp-newcat{margin:6px 0 2px;}' +
+        '@media (max-width:640px){' +
+            PF + ' > div{padding:18px !important;border-radius:22px !important;}' +
+            PF + ' .wmp-g{grid-template-columns:1fr !important;}' +
+        '}' +
 
         // printed receipts / waybills keep their original look
         ['#printable-receipt-box', '#printable-debt-receipt-box', '#printable-refund-receipt-box', '#printable-waybill-box'].map(function (b) { return WS + ' ' + b + ' table th'; }).join(',') +
@@ -449,7 +516,7 @@ console.log("Wise Decision pharmacy-modern-patch.js — v1 loaded");
                 catsLoading = true;
                 loadCats().catch(function () { catsFor = s; }).then(function () { catsLoading = false; tick(); });
             }
-            injectInvBar(); hookCategoryField();
+            injectInvBar(); hookCategoryField(); enhanceProductForm();
         } catch (e) { console.warn('[pharmacy-modern]', e); }
     }
     var pending = false;
