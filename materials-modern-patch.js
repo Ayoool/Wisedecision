@@ -544,20 +544,20 @@ console.log("Wise Decision materials-modern-patch.js — v1 loaded");
         // ----- remove Common Materials -----
         '#wdd-sb-common,#wdp-quick-sale-btn,#wdp-quick-modal{display:none !important;}' +
 
-        // ----- sidebar -----
+        // ----- sidebar (each button is its own rectangle) -----
         SB + '{background:var(--wx-side) !important;border-right:none !important;box-shadow:none !important;}' +
         SB + ' #dashboard-store-title{color:#fff !important;font-weight:900 !important;letter-spacing:.2px;}' +
         SB + ' #user-role-label{color:#9aa1ad !important;font-weight:600 !important;}' +
         SB + ' #branch-badge-container span,' + SB + ' #branch-badge-container select,' + SB + ' #branch-badge-container label{background:rgba(255,255,255,.07) !important;color:var(--wx-side-ink) !important;border:1px solid rgba(255,255,255,.12) !important;border-radius:10px !important;}' +
-        SB + ' .menu-btn,' + SB + ' .menu-btn.wds-on{background:transparent !important;color:var(--wx-side-ink) !important;border:none !important;border-radius:12px !important;padding:12px 14px !important;margin:0 0 4px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:none !important;transform:none !important;}' +
-        SB + ' .menu-btn:hover{background:rgba(255,255,255,.08) !important;color:#fff !important;border:none !important;}' +
-        SB + ' .menu-btn.wds-on{background:rgba(255,255,255,.1) !important;color:#fff !important;box-shadow:inset 3px 0 0 var(--wx-side-acc) !important;}' +
+        SB + ' .menu-btn,' + SB + ' .menu-btn.wds-on{display:block !important;width:100% !important;box-sizing:border-box !important;background:rgba(255,255,255,.05) !important;color:var(--wx-side-ink) !important;border:1px solid rgba(255,255,255,.16) !important;border-radius:8px !important;padding:12px 14px !important;margin:0 0 8px 0 !important;font-size:14px !important;font-weight:700 !important;text-align:left !important;box-shadow:none !important;transform:none !important;}' +
+        SB + ' .menu-btn:hover{background:rgba(255,255,255,.1) !important;color:#fff !important;border:1px solid var(--wx-side-acc) !important;}' +
+        SB + ' .menu-btn.wds-on{background:rgba(255,255,255,.12) !important;color:#fff !important;border:1px solid var(--wx-side-acc) !important;box-shadow:inset 3px 0 0 var(--wx-side-acc) !important;}' +
         SB + ' .menu-btn .wds-ic{filter:brightness(0) invert(1) !important;opacity:.85;}' +
         SB + ' .btn-logout{background:transparent !important;color:#fca5a5 !important;border:1px solid rgba(252,165,165,.3) !important;margin-top:10px !important;}' +
-        SB + ' .btn-logout:hover{background:rgba(252,165,165,.12) !important;}' +
+        SB + ' .btn-logout:hover{background:rgba(252,165,165,.12) !important;border:1px solid rgba(252,165,165,.6) !important;}' +
         '#wmx-side-logo{display:block;width:46px;height:46px;border-radius:14px;object-fit:cover;background:#fff;margin:0 0 8px 0;flex-shrink:0;}' +
         '#wmx-side-logo.ph{display:flex;align-items:center;justify-content:center;background:var(--wx-side-acc);color:var(--wx-side);font-weight:900;font-size:20px;}' +
-        '@media (max-width:767px){' + SB + '{border-bottom:1px solid rgba(255,255,255,.08) !important;}#wmx-side-logo{width:34px;height:34px;margin:0;border-radius:10px;font-size:15px;}' + SB + ' .menu-btn{margin:0 !important;white-space:nowrap !important;}' + SB + ' .menu-btn.wds-on{box-shadow:inset 0 -3px 0 var(--wx-side-acc) !important;}}' +
+        '@media (max-width:767px){' + SB + '{border-bottom:1px solid rgba(255,255,255,.08) !important;}#wmx-side-logo{width:34px;height:34px;margin:0;border-radius:10px;font-size:15px;}' + SB + ' .menu-btn{width:auto !important;margin:0 6px 0 0 !important;padding:10px 14px !important;white-space:nowrap !important;}' + SB + ' .menu-btn.wds-on{box-shadow:none !important;}}' +
 
         // ----- page surface, headings, cards, tables, buttons, fields -----
         P + '.main-content-area,' + P + '.dashboard-layout{background:var(--wx-bg) !important;}' +
