@@ -1,4 +1,4 @@
-// ==================== WISE DECISION PHARMACY MODERN REDESIGN (v2) ====================
+// ==================== WISE DECISION PHARMACY MODERN REDESIGN (v3) ====================
 // Load LAST (after batch-expiry-patch.js and every other patch).  Pharmacy stores only.
 //
 // A store is treated as a pharmacy when EITHER
@@ -18,11 +18,17 @@
 //   6. NEW: the Add / Edit product form has a new look. Every field is a soft tile with its label on top,
 //      laid out in two columns on a laptop (one column on a phone). Only the look and layout change:
 //      field ids, values, saving and every other patch work exactly as before.
+//   7. NEW: Inventory screen - search/filter bar, table in a rounded card, bigger rows, and colour cues:
+//      red left edge + red number for out of stock, amber for low stock (5 or fewer), red / amber dates for expired /
+//      expiring within 60 days (read from the Stock and Expiry columns by their headings).
+//   8. NEW: POS screen - rounded cart card, larger fields with a clear focus ring, bolder totals, taller pay button.
+//   9. NEW: no "kg" for pharmacies - the kg choice is removed from every unit list (product form, POS) and any kg
+//      button is hidden. Products already saved with kg are not changed.
 //
 // Data: stores/{id}/matCategories/{id} = { name } and stores/{id}/matTheme = 'emerald'|'amber'|'cobalt'|'mono'.
 // Nothing existing is changed or deleted.
 
-console.log("Wise Decision pharmacy-modern-patch.js — v2 loaded");
+console.log("Wise Decision pharmacy-modern-patch.js — v3 loaded");
 
 (function () {
     'use strict';
@@ -327,6 +333,69 @@ console.log("Wise Decision pharmacy-modern-patch.js — v2 loaded");
         injectInvBar();
     };
 
+    // ---------- pharmacy has no kg: take it out of every unit choice ----------
+    var KG = /^\s*(kg|kgs|kilo|kilos|kilogram|kilograms)\b/i;
+    var UNITISH = /^\s*(piece|pieces|pcs|pc|pack|packs|packet|box|boxes|bottle|bottles|carton|sachet|tablet|tablets|capsule|capsules|strip|unit|units|tube|vial|ampoule)\b/i;
+    function dropKg() {
+        Array.prototype.forEach.call(document.querySelectorAll('select'), function (sel) {
+            var opts = Array.prototype.slice.call(sel.options);
+            var kgs = opts.filter(function (o) { return KG.test(o.textContent) || KG.test(o.value); });
+            if (!kgs.length) return;
+            if (!opts.some(function (o) { return UNITISH.test(o.textContent) || UNITISH.test(o.value); })) return;   // not a unit list
+            var keep = opts.filter(function (o) { return kgs.indexOf(o) === -1; });
+            kgs.forEach(function (o) {
+                if (o.selected && keep.length) {
+                    var pick = keep.filter(function (k) { return k.value !== ''; })[0] || keep[0];
+                    sel.value = pick.value;
+                    try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* ignore */ }
+                }
+                o.remove();
+            });
+        });
+        ['product-form-modal', 'pos-view', 'inventory-view'].forEach(function (id) {
+            var r = $(id); if (!r) return;
+            Array.prototype.forEach.call(r.querySelectorAll('button, label, .chip, [role=button]'), function (el) {
+                if (/^(kg|kgs|kilogram|kilograms)$/i.test((el.textContent || '').trim()) && el.style.display !== 'none') el.style.display = 'none';
+            });
+        });
+    }
+
+    // ---------- inventory table: colour cues from the Stock and Expiry columns ----------
+    function tagInventory() {
+        var v = $('inventory-view'); if (!v) return;
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        Array.prototype.forEach.call(v.querySelectorAll('table'), function (t) {
+            var ths = t.querySelectorAll('thead th'); if (!ths.length) return;
+            var si = -1, ei = -1;
+            Array.prototype.forEach.call(ths, function (th, i) {
+                var x = (th.textContent || '').toLowerCase();
+                if (si < 0 && /stock|qty|quantity/.test(x)) si = i;
+                if (ei < 0 && /expir/.test(x)) ei = i;
+            });
+            if (si < 0 && ei < 0) return;
+            Array.prototype.forEach.call(t.querySelectorAll('tbody tr'), function (tr) {
+                var tds = tr.children, bad = false;
+                if (si >= 0 && tds[si] && tds.length > si) {
+                    var mm = String(tds[si].textContent).replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+                    var n = mm ? parseFloat(mm[0]) : NaN;
+                    var out = !isNaN(n) && n <= 0, low = !isNaN(n) && n > 0 && n <= 5;
+                    tds[si].classList.toggle('wmp-out', out);
+                    tds[si].classList.toggle('wmp-low', low);
+                    if (out || low) bad = true;
+                }
+                if (ei >= 0 && tds[ei] && tds.length > ei) {
+                    var d = new Date(String(tds[ei].textContent).trim());
+                    var days = isNaN(d) ? null : Math.round((d - today) / 86400000);
+                    var past = days !== null && days < 0, soon = days !== null && days >= 0 && days <= 60;
+                    tds[ei].classList.toggle('wmp-exp-past', past);
+                    tds[ei].classList.toggle('wmp-exp-soon', soon);
+                    if (past) bad = true;
+                }
+                tr.classList.toggle('wmp-row-alert', bad);
+            });
+        });
+    }
+
     // ---------- sidebar buttons ----------
     function injectSidebarBtns() {
         var side = document.querySelector('#dashboard-main-wrapper .sidebar'); if (!side) return;
@@ -351,6 +420,8 @@ console.log("Wise Decision pharmacy-modern-patch.js — v2 loaded");
         var WS = P + '#workspace-content#workspace-content';
         var MD = P + '[id$="-modal"]';
         var SB = P + '#dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper#dashboard-main-wrapper .sidebar';
+        var IV = P + '#inventory-view#inventory-view';
+        var PV = P + '#pos-view#pos-view';
         var PF = P + ':is(#product-form-modal,.wmp-pf)';   // :is() takes the id's weight, so these rules beat the general field rules
         var both = function (r) { return WS + ' ' + r + ',' + MD + ' ' + r; };
         var BTN = ['btn-action-primary', 'btn-dash', 'btn-pos', 'btn-inv', 'btn-acc', 'btn-rep', 'btn-exp', 'btn-staff', 'btn-cust', 'btn-supplier', 'btn-transfer', 'btn-branch', 'btn-sec', 'btn-subscription'];
@@ -428,6 +499,33 @@ console.log("Wise Decision pharmacy-modern-patch.js — v2 loaded");
         P + '#pos-view input:not([type=checkbox]):not([type=radio]),' + P + '#pos-view select{border:1px solid var(--wx-line) !important;border-radius:14px !important;background:var(--wx-surf) !important;padding:12px 14px !important;font-size:15px !important;}' +
         P + '#pos-view button{border-radius:14px !important;font-weight:800 !important;}' +
         P + '#pos-view .btn-action-primary{background:var(--wx-acc) !important;color:var(--wx-acc-ink) !important;border:none !important;box-shadow:0 8px 20px -8px var(--wx-acc) !important;padding-top:15px !important;padding-bottom:15px !important;}' +
+
+
+        // ----- Inventory screen -----
+        IV + ' input:not([type=checkbox]):not([type=radio]):not([type=file]),' + IV + ' select{min-height:46px;border:1px solid var(--wx-line) !important;border-radius:14px !important;background:var(--wx-surf) !important;padding:0 14px !important;font-size:15px !important;font-weight:600 !important;}' +
+        IV + ' input:focus,' + IV + ' select:focus{border-color:var(--wx-acc) !important;box-shadow:0 0 0 4px var(--wx-soft) !important;outline:none !important;}' +
+        IV + ' table{width:100% !important;border-collapse:separate !important;border-spacing:0 !important;background:var(--wx-surf);border:1px solid var(--wx-line);border-radius:20px;overflow:hidden;}' +
+        IV + ' thead th{background:var(--wx-bg) !important;padding:14px 16px !important;border-bottom:1px solid var(--wx-line) !important;white-space:nowrap;}' +
+        IV + ' tbody td{padding:15px 16px !important;vertical-align:middle;}' +
+        IV + ' tbody tr:last-child td{border-bottom:none !important;}' +
+        IV + ' tbody td:first-child{font-size:15px;font-weight:800 !important;color:var(--wx-ink);}' +
+        IV + ' tbody td button,' + IV + ' tbody td .menu-btn{border-radius:10px !important;padding:7px 12px !important;font-size:12px !important;font-weight:800 !important;margin:0 4px 0 0 !important;}' +
+        IV + ' tbody td.wmp-out{color:#b91c1c !important;font-weight:900 !important;}' +
+        IV + ' tbody td.wmp-low{color:#b45309 !important;font-weight:900 !important;}' +
+        IV + ' tbody td.wmp-exp-past{color:#b91c1c !important;font-weight:900 !important;}' +
+        IV + ' tbody td.wmp-exp-soon{color:#b45309 !important;font-weight:800 !important;}' +
+        IV + ' tbody tr.wmp-row-alert td:first-child{box-shadow:inset 4px 0 0 #ef4444;}' +
+        '@media (max-width:767px){' + IV + ' table{background:transparent;border:none;border-radius:0;overflow:visible;}}' +
+
+        // ----- POS screen -----
+        PV + ' input:focus,' + PV + ' select:focus{border-color:var(--wx-acc) !important;box-shadow:0 0 0 4px var(--wx-soft) !important;outline:none !important;}' +
+        PV + ' input:not([type=checkbox]):not([type=radio]),' + PV + ' select{min-height:48px;}' +
+        PV + ' table{width:100% !important;border-collapse:separate !important;border-spacing:0 !important;background:var(--wx-surf);border:1px solid var(--wx-line);border-radius:18px;overflow:hidden;}' +
+        PV + ' thead th{background:var(--wx-bg) !important;padding:12px 14px !important;border-bottom:1px solid var(--wx-line) !important;}' +
+        PV + ' tbody td{padding:12px 14px !important;vertical-align:middle;}' +
+        PV + ' tbody tr:last-child td{border-bottom:none !important;}' +
+        PV + ' [id*="total"]{font-weight:900 !important;color:var(--wx-ink) !important;letter-spacing:-.5px;}' +
+        PV + ' .btn-action-primary,' + PV + ' button[id*="pay"],' + PV + ' button[id*="checkout"]{min-height:54px;font-size:17px !important;border-radius:16px !important;}' +
 
         // Store Overview
         '.wmp-hero{background:var(--wx-hero) !important;border:none !important;border-radius:26px !important;padding:24px !important;box-shadow:none !important;}' +
@@ -516,7 +614,7 @@ console.log("Wise Decision pharmacy-modern-patch.js — v2 loaded");
                 catsLoading = true;
                 loadCats().catch(function () { catsFor = s; }).then(function () { catsLoading = false; tick(); });
             }
-            injectInvBar(); hookCategoryField(); enhanceProductForm();
+            injectInvBar(); hookCategoryField(); enhanceProductForm(); dropKg(); tagInventory();
         } catch (e) { console.warn('[pharmacy-modern]', e); }
     }
     var pending = false;
