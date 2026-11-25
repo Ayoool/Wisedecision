@@ -1,7 +1,9 @@
-// ==================== WISE DECISION PERFORMANCE PATCH (v24.3) ====================
+// ==================== WISE DECISION PERFORMANCE PATCH (v24.4) ====================
 // Load this AFTER script.js (both with `defer`). It replaces the slow functions in
 // script.js with faster versions and adds a loading spinner for login.
 //
+// v24.4: Receipt and POS cart now show   Item | Qty | Price | Amount
+//        (Price = price of ONE unit, Amount = line total). The printed copy uses the same rows.
 // v24.3: Receipt footer restyled (centered, divided sections, clean spacing).
 // v24.2: Receipt footer changed (check items before leaving; no refund policy line).
 // v24.1: FIXED three corrupted lines in renderReceiptView that caused a syntax error
@@ -25,7 +27,7 @@
 // REQUIRED Firebase rules (".indexOn") or the date filters still download everything:
 //   transactions: ["date", "customerId"]   expenses: ["date"]   refunds: ["date"]
 
-console.log("Wise Decision perf-patch.js — v24.3 loaded (professional receipt footer)");
+console.log("Wise Decision perf-patch.js — v24.4 loaded (Item | Qty | Price | Amount)");
 
 // ---------- 0. Small helpers ----------
 function wdDebounce(fn, ms) {
@@ -87,6 +89,25 @@ function getStoreProfile() {
 // ---------- 3. Date helpers ----------
 function todayStartISO() { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); }
 function monthStartISO() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString(); }
+
+// ---------- 3b. Item tables: Item | Qty | Price | Amount ----------
+// Finds the money column (Price / Total / Amount), renames it "Amount" and puts a new "Price" column before it.
+function wdFourColumnHeader(table) {
+    if (!table) return;
+    const row = table.querySelector('thead tr') || table.querySelector('tr');
+    if (!row || row.querySelector('[data-wd-price]')) return;
+    const cells = Array.from(row.children).filter(c => c.tagName === 'TH' || c.tagName === 'TD');
+    const idx = cells.findIndex(c => /^(price|total|amount)\b/i.test((c.textContent || '').trim()));
+    if (idx < 1) return;
+    const money = cells[idx];
+    const priceTh = money.cloneNode(false);
+    priceTh.textContent = 'Price';
+    priceTh.setAttribute('data-wd-price', '1');
+    priceTh.style.textAlign = 'right';
+    money.textContent = 'Amount';
+    money.style.textAlign = 'right';
+    row.insertBefore(priceTh, money);
+}
 
 // ---------- 4. Login: spinner + only read the fields we need ----------
 let wdLoginBusy = false;
@@ -654,6 +675,8 @@ function renderCart() {
     const totalEl = document.getElementById('cart-total');
     if (!tbody || !totalEl) return;
 
+    wdFourColumnHeader(tbody.closest('table'));   // Item | Qty | Price | Amount
+
     let grandTotal = 0;
     let html = '';
 
@@ -671,14 +694,15 @@ function renderCart() {
                         <button class="menu-btn" style="padding: 2px 6px; font-size: 10px; width: auto;" onclick="increaseQty(${index})">+</button>
                     </div>
                 </td>
-                <td>₦${cartItem.total.toLocaleString()}</td>
+                <td style="text-align:right; white-space:nowrap;">₦${Number(cartItem.price || 0).toLocaleString()}</td>
+                <td style="text-align:right; white-space:nowrap;">₦${cartItem.total.toLocaleString()}</td>
                 <td><button class="menu-btn btn-logout" style="padding: 2px 6px; font-size: 10px; width:auto;" onclick="removeFromCart(${index})">X</button></td>
             </tr>
         `;
     });
 
     if (currentCart.length === 0) {
-        html = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Cart is empty</td></tr>`;
+        html = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Cart is empty</td></tr>`;
     }
 
     tbody.innerHTML = html;
@@ -842,12 +866,17 @@ function renderReceiptView(orderData, isReprint = false) {
             }
         }
 
+        // Item | Qty | Price | Amount   (Price = one unit, Amount = line total)
         const receiptItemsContainer = workspace.querySelector('#receipt-items-body');
+        if (receiptItemsContainer) wdFourColumnHeader(receiptItemsContainer.closest('table'));
         if (receiptItemsContainer && orderData.items) {
             let itemsHtml = '';
             orderData.items.forEach(item => {
                 const itemTotal = Number(item.total);
                 const safeItemTotal = !isNaN(itemTotal) ? itemTotal.toLocaleString() : '0';
+                const qtyNum = Number(item.qty) || 0;
+                const rawPrice = (item.price !== undefined && item.price !== null && item.price !== '') ? Number(item.price) : NaN;
+                const unitPrice = !isNaN(rawPrice) ? rawPrice : (qtyNum > 0 && !isNaN(itemTotal) ? Math.round((itemTotal / qtyNum) * 100) / 100 : 0);
                 const labels = getUnitLabels(item);
                 const unitLabel = item.saleUnit === 'Piece' ? labels.baseName.toLowerCase() : ((item.saleUnit === 'Kg' || item.saleUnit === 'g') ? item.saleUnit.toLowerCase() : (item.saleUnit === 'Pack' ? labels.bulkName.toLowerCase() : ''));
                 const qtyDisplay = unitLabel ? `${item.qty || 0} ${escapeHtml(unitLabel)}${(item.qty || 0) === 1 ? '' : 's'}` : (item.qty || 0);
@@ -856,7 +885,8 @@ function renderReceiptView(orderData, isReprint = false) {
                     <tr>
                         <td style="font-weight: bold;">${escapeHtml(item.name)}${refundedTag}</td>
                         <td>${qtyDisplay}</td>
-                        <td>₦${safeItemTotal}</td>
+                        <td style="text-align:right; white-space:nowrap;">₦${unitPrice.toLocaleString()}</td>
+                        <td style="text-align:right; white-space:nowrap;">₦${safeItemTotal}</td>
                     </tr>
                 `;
             });
